@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+// متغير عام لحفظ اسم البروفايل المؤقت للمستخدم المباشر
+String currentUserAccountName = 'مستخدم منصة القانون';
+bool isLoggedInGlobal = false;
+
 void main() {
   runApp(const MyApp());
 }
@@ -61,12 +65,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // الانتقال التلقائي بعد 3 ثوانٍ
+    // التوجيه: إذا كان قد سجل الدخول سابقاً يذهب للرئيسية مباشرة، وإلا لشاشة الدخول
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
+        Widget targetScreen = isLoggedInGlobal ? const HomeScreen() : const AuthScreen();
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const AuthScreen()),
+          MaterialPageRoute(builder: (context) => targetScreen),
         );
       }
     });
@@ -160,13 +165,18 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _submitAuth() {
     if (isLogin) {
-      // تسجيل الدخول
+      isLoggedInGlobal = true; // حفظ تسجيل الدخول لمرة واحدة
+      if (_emailController.text.isNotEmpty) {
+        currentUserAccountName = _emailController.text.split('@').first;
+      }
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
     } else {
-      // إرسال كود التحقق لإنشاء الحساب
+      if (_nameController.text.isNotEmpty) {
+        currentUserAccountName = _nameController.text;
+      }
       _showOtpDialog('تم إرسال رمز التأكيد (OTP) إلى إيميلك لإكمال التسجيل.');
     }
   }
@@ -239,6 +249,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
+                isLoggedInGlobal = true; // حفظ حالة تسجيل الدخول تلقائياً
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(isReset ? 'تم تغيير كلمة المرور بنجاح!' : 'تم تأكيد الحساب بنجاح!')),
                 );
@@ -343,7 +354,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 // ==========================================
-// 3. الشاشة الرئيسية وقسم المنشورات والتبليغات
+// 3. الشاشة الرئيسية مع التثبيت والتعليقات بالاسم
 // ==========================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -355,17 +366,34 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final List<Map<String, dynamic>> _posts = [
     {
+      'id': '1',
       'author': 'الإدارة الرسمية',
       'title': 'تبليغ رسمي بشأن تحديث القوانين',
       'content': 'تم نشر الجدول الجديد للتشريعات القانونية الصادرة هذا الشهر. يرجى المتابعة.',
       'type': 'تبليغ رسمى',
-      'mediaUrl': 'https://via.placeholder.com/400x200',
-      'mediaType': 'image',
       'likes': 12,
       'isLiked': false,
-      'comments': ['شكراً جزيلاً', 'تم الاطلاع'],
+      'isPinned': true,
+      'comments': [
+        {'userName': 'علي أحمد', 'text': 'شكراً جزيلاً'},
+        {'userName': 'سارة محمد', 'text': 'تم الاطلاع والتحميل'}
+      ],
     },
   ];
+
+  void _sortPosts() {
+    _posts.sort((a, b) {
+      if (a['isPinned'] == b['isPinned']) return 0;
+      return a['isPinned'] ? -1 : 1;
+    });
+  }
+
+  void _togglePin(int index) {
+    setState(() {
+      _posts[index]['isPinned'] = !_posts[index]['isPinned'];
+      _sortPosts();
+    });
+  }
 
   void _addPost() {
     showModalBottomSheet(
@@ -375,7 +403,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final titleController = TextEditingController();
         final contentController = TextEditingController();
         String selectedType = 'خبر';
-        String mediaType = 'صورة';
 
         return Padding(
           padding: EdgeInsets.only(
@@ -413,13 +440,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   IconButton(
                     icon: const Icon(Icons.add_a_photo),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الصورة بنجاح')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الصورة')));
                     },
                   ),
                   IconButton(
                     icon: const Icon(Icons.videocam),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الفيديو بنجاح')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الفيديو')));
                     },
                   ),
                 ],
@@ -431,19 +458,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (titleController.text.isNotEmpty) {
                     setState(() {
                       _posts.insert(0, {
-                        'author': 'سيدعباس عقيل',
+                        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                        'author': currentUserAccountName,
                         'title': titleController.text,
                         'content': contentController.text,
                         'type': selectedType,
-                        'mediaUrl': '',
-                        'mediaType': mediaType,
                         'likes': 0,
                         'isLiked': false,
+                        'isPinned': false,
                         'comments': [],
                       });
+                      _sortPosts();
                     });
                     Navigator.pop(context);
-                    // محاكاة إرسال الإشعار
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('🔔 إشعار هاتف للمستخدمين: منشور جديد "$selectedType"'),
@@ -465,48 +492,75 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showComments(int index) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         final commentController = TextEditingController();
-        return Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _posts[index]['comments'].length,
-                itemBuilder: (context, i) => ListTile(
-                  leading: const Icon(Icons.comment),
-                  title: Text(_posts[index]['comments'][i]),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                height: 400,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    const Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    Expanded(
+                      child: _posts[index]['comments'].isEmpty
+                          ? const Center(child: Text('لا توجد تعليقات بعد، كن أول المعلقين!'))
+                          : ListView.builder(
+                              itemCount: _posts[index]['comments'].length,
+                              itemBuilder: (context, i) {
+                                final comment = _posts[index]['comments'][i];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFF1A1A1A),
+                                    child: Text(
+                                      comment['userName'][0].toUpperCase(),
+                                      style: const TextStyle(color: Color(0xFFD4AF37)),
+                                    ),
+                                  ),
+                                  title: Text(comment['userName'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  subtitle: Text(comment['text']),
+                                );
+                              },
+                            ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: commentController,
+                            decoration: const InputDecoration(
+                              hintText: 'اكتب تعليقاً...',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.send, color: Color(0xFFD4AF37)),
+                          onPressed: () {
+                            if (commentController.text.trim().isNotEmpty) {
+                              setState(() {
+                                _posts[index]['comments'].add({
+                                  'userName': currentUserAccountName,
+                                  'text': commentController.text.trim(),
+                                });
+                              });
+                              setModalState(() {});
+                              commentController.clear();
+                            }
+                          },
+                        )
+                      ],
+                    )
+                  ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: commentController,
-                      decoration: const InputDecoration(hintText: 'اكتب تعليقاً...'),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () {
-                      if (commentController.text.isNotEmpty) {
-                        setState(() {
-                          _posts[index]['comments'].add(commentController.text);
-                        });
-                        Navigator.pop(context);
-                      }
-                    },
-                  )
-                ],
-              ),
-            )
-          ],
+            );
+          },
         );
       },
     );
@@ -514,6 +568,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _sortPosts();
     return Scaffold(
       appBar: AppBar(
         title: const Text('منصة القانون - الأخبار والتبليغات'),
@@ -534,19 +589,47 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: _posts.length,
               itemBuilder: (context, index) {
                 final post = _posts[index];
+                final isPinned = post['isPinned'] == true;
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: isPinned
+                        ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5)
+                        : BorderSide.none,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (isPinned)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'منشور مثبت في الأعلى',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFD4AF37),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         Row(
                           children: [
                             CircleAvatar(
                               backgroundColor: const Color(0xFF1A1A1A),
-                              child: Text(post['author'][0], style: const TextStyle(color: Color(0xFFD4AF37))),
+                              child: Text(
+                                post['author'][0].toUpperCase(),
+                                style: const TextStyle(color: Color(0xFFD4AF37)),
+                              ),
                             ),
                             const SizedBox(width: 10),
                             Column(
@@ -568,6 +651,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 )
                               ],
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(
+                                isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                                color: isPinned ? const Color(0xFFD4AF37) : Colors.grey,
+                              ),
+                              onPressed: () => _togglePin(index),
+                              tooltip: isPinned ? 'إلغاء التثبيت' : 'تثبيت المنشور',
                             ),
                           ],
                         ),
