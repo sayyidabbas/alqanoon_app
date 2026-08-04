@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-// متغير عام لحفظ اسم البروفايل المؤقت للمستخدم المباشر
-String currentUserAccountName = 'مستخدم منصة القانون';
+// متغيرات عامة لحفظ حالة الجلسة والبيانات
+String currentUserAccountName = 'سيدعباس عقيل';
+String currentUserEmail = 'abbas@law-platform.com';
 bool isLoggedInGlobal = false;
+List<Map<String, dynamic>> savedPostsList = [];
 
 void main() {
   runApp(const MyApp());
@@ -65,10 +67,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // التوجيه: إذا كان قد سجل الدخول سابقاً يذهب للرئيسية مباشرة، وإلا لشاشة الدخول
+    // التوجيه التلقائي بعد 3 ثوانٍ
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
-        Widget targetScreen = isLoggedInGlobal ? const HomeScreen() : const AuthScreen();
+        Widget targetScreen = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => targetScreen),
@@ -165,17 +167,21 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _submitAuth() {
     if (isLogin) {
-      isLoggedInGlobal = true; // حفظ تسجيل الدخول لمرة واحدة
+      isLoggedInGlobal = true;
       if (_emailController.text.isNotEmpty) {
+        currentUserEmail = _emailController.text;
         currentUserAccountName = _emailController.text.split('@').first;
       }
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
       );
     } else {
       if (_nameController.text.isNotEmpty) {
         currentUserAccountName = _nameController.text;
+      }
+      if (_emailController.text.isNotEmpty) {
+        currentUserEmail = _emailController.text;
       }
       _showOtpDialog('تم إرسال رمز التأكيد (OTP) إلى إيميلك لإكمال التسجيل.');
     }
@@ -249,14 +255,14 @@ class _AuthScreenState extends State<AuthScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                isLoggedInGlobal = true; // حفظ حالة تسجيل الدخول تلقائياً
+                isLoggedInGlobal = true;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(isReset ? 'تم تغيير كلمة المرور بنجاح!' : 'تم تأكيد الحساب بنجاح!')),
                 );
                 if (!isReset) {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
                   );
                 }
               },
@@ -354,8 +360,52 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 // ==========================================
-// 3. الشاشة الرئيسية مع التثبيت والتعليقات بالاسم
+// 3. أ) شريط التنقل السفلي وشاشة الرئيسية
 // ==========================================
+class MainNavigationHolder extends StatefulWidget {
+  const MainNavigationHolder({super.key});
+
+  @override
+  State<MainNavigationHolder> createState() => _MainNavigationHolderState();
+}
+
+class _MainNavigationHolderState extends State<MainNavigationHolder> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const ServicesScreen(),
+    const BooksScreen(),
+    const ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xFF1A1A1A),
+        selectedItemColor: const Color(0xFFD4AF37),
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'الرئيسية'),
+          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book_rounded), label: 'الكتب'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'حسابي'),
+        ],
+      ),
+    );
+  }
+}
+
+// ----------------- 1. شاشة الرئيسية (الأخبار والمنشورات) -----------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -374,9 +424,9 @@ class _HomeScreenState extends State<HomeScreen> {
       'likes': 12,
       'isLiked': false,
       'isPinned': true,
+      'isSaved': false,
       'comments': [
         {'userName': 'علي أحمد', 'text': 'شكراً جزيلاً'},
-        {'userName': 'سارة محمد', 'text': 'تم الاطلاع والتحميل'}
       ],
     },
   ];
@@ -392,6 +442,19 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _posts[index]['isPinned'] = !_posts[index]['isPinned'];
       _sortPosts();
+    });
+  }
+
+  void _toggleSave(int index) {
+    setState(() {
+      _posts[index]['isSaved'] = !_posts[index]['isSaved'];
+      if (_posts[index]['isSaved']) {
+        if (!savedPostsList.contains(_posts[index])) {
+          savedPostsList.add(_posts[index]);
+        }
+      } else {
+        savedPostsList.removeWhere((p) => p['id'] == _posts[index]['id']);
+      }
     });
   }
 
@@ -439,15 +502,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.add_a_photo),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الصورة')));
-                    },
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الصورة'))),
                   ),
                   IconButton(
                     icon: const Icon(Icons.videocam),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الفيديو')));
-                    },
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الفيديو'))),
                   ),
                 ],
               ),
@@ -466,6 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         'likes': 0,
                         'isLiked': false,
                         'isPinned': false,
+                        'isSaved': false,
                         'comments': [],
                       });
                       _sortPosts();
@@ -508,7 +568,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Divider(),
                     Expanded(
                       child: _posts[index]['comments'].isEmpty
-                          ? const Center(child: Text('لا توجد تعليقات بعد، كن أول المعلقين!'))
+                          ? const Center(child: Text('لا توجد تعليقات بعد'))
                           : ListView.builder(
                               itemCount: _posts[index]['comments'].length,
                               itemBuilder: (context, i) {
@@ -582,122 +642,316 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.add_alert_rounded),
         label: const Text('نشر جديد'),
       ),
-      body: _posts.isEmpty
-          ? const Center(child: Text('لا توجد منشورات حالياً'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _posts.length,
-              itemBuilder: (context, index) {
-                final post = _posts[index];
-                final isPinned = post['isPinned'] == true;
+      body: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _posts.length,
+        itemBuilder: (context, index) {
+          final post = _posts[index];
+          final isPinned = post['isPinned'] == true;
+          final isSaved = post['isSaved'] == true;
 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: isPinned
-                        ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5)
-                        : BorderSide.none,
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: isPinned ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5) : BorderSide.none,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isPinned)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
+                          SizedBox(width: 4),
+                          Text('منشور مثبت في الأعلى', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
+                        ],
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: const Color(0xFF1A1A1A),
+                        child: Text(post['author'][0].toUpperCase(), style: const TextStyle(color: Color(0xFFD4AF37))),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(post['type'], style: TextStyle(fontSize: 10, color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue)),
+                          )
+                        ],
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
+                        onPressed: () => _toggleSave(index),
+                      ),
+                      IconButton(
+                        icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: isPinned ? const Color(0xFFD4AF37) : Colors.grey),
+                        onPressed: () => _togglePin(index),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isPinned)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
-                                SizedBox(width: 4),
-                                Text(
-                                  'منشور مثبت في الأعلى',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFD4AF37),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: const Color(0xFF1A1A1A),
-                              child: Text(
-                                post['author'][0].toUpperCase(),
-                                style: const TextStyle(color: Color(0xFFD4AF37)),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    post['type'],
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue,
-                                    ),
-                                  ),
-                                )
-                              ],
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: Icon(
-                                isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-                                color: isPinned ? const Color(0xFFD4AF37) : Colors.grey,
-                              ),
-                              onPressed: () => _togglePin(index),
-                              tooltip: isPinned ? 'إلغاء التثبيت' : 'تثبيت المنشور',
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(post['content'], style: const TextStyle(fontSize: 14)),
-                        const SizedBox(height: 12),
-                        const Divider(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  post['isLiked'] = !post['isLiked'];
-                                  post['likes'] += post['isLiked'] ? 1 : -1;
-                                });
-                              },
-                              icon: Icon(
-                                post['isLiked'] ? Icons.favorite : Icons.favorite_border,
-                                color: post['isLiked'] ? Colors.red : Colors.grey,
-                              ),
-                              label: Text('${post['likes']} إعجاب'),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => _showComments(index),
-                              icon: const Icon(Icons.comment_outlined, color: Colors.grey),
-                              label: Text('${post['comments'].length} تعليق'),
-                            ),
-                          ],
-                        )
-                      ],
+                  const SizedBox(height: 12),
+                  Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text(post['content'], style: const TextStyle(fontSize: 14)),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            post['isLiked'] = !post['isLiked'];
+                            post['likes'] += post['isLiked'] ? 1 : -1;
+                          });
+                        },
+                        icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
+                        label: Text('${post['likes']} إعجاب'),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _showComments(index),
+                        icon: const Icon(Icons.comment_outlined, color: Colors.grey),
+                        label: Text('${post['comments'].length} تعليق'),
+                      ),
+                    ],
+                  )
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+// ==========================================
+// 3. ب) شاشة الخدمات، الكتب، والملف الشخصي
+// ==========================================
+
+// ----------------- 2. شاشة الخدمات -----------------
+class ServicesScreen extends StatelessWidget {
+  const ServicesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Map<String, dynamic>> services = [
+      {'title': 'المكتبة التشريعية والقوانين', 'icon': Icons.gavel, 'desc': 'تصفح النصوص والقوانين الرسمية'},
+      {'title': 'طلب استشارة قانونية', 'icon': Icons.support_agent, 'desc': 'تواصل مباشر مع المستشارين'},
+      {'title': 'حاسبة الرسوم القضائية', 'icon': Icons.calculate, 'desc': 'احتساب التكاليف والرسوم'},
+      {'title': 'نماذج وصيغ العقود', 'icon': Icons.description, 'desc': 'نماذج جاهزة للتحميل والاستخدام'},
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الخدمات القانونية'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: services.length,
+        itemBuilder: (context, index) {
+          final service = services[index];
+          return Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خدمة "${service['title']}" قيد التفعيل')));
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(service['icon'], size: 40, color: const Color(0xFFD4AF37)),
+                    const SizedBox(height: 10),
+                    Text(service['title'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(service['desc'], textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ----------------- 3. شاشة الكتب والـ PDF -----------------
+class BooksScreen extends StatelessWidget {
+  const BooksScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('مكتبة الكتب والمصادر'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: 3,
+        itemBuilder: (context, index) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 36),
+              title: Text('الكتاب القانوني رقم ${index + 1}'),
+              subtitle: const Text('شرح القوانين والأنظمة - صيغة PDF'),
+              trailing: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري فتح الكتاب...')));
+                },
+                child: const Text('قراءة', style: TextStyle(color: Color(0xFFD4AF37))),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ----------------- 4. شاشة حسابي (Profile Page) -----------------
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  void _changePassword() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final passController = TextEditingController();
+        return AlertDialog(
+          title: const Text('تغيير كلمة المرور'),
+          content: TextField(
+            controller: passController,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث كلمة المرور بنجاح')));
+              },
+              child: const Text('حفظ'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الملف الشخصي'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                CircleAvatar(
+                  radius: 50,
+                  backgroundColor: const Color(0xFF1A1A1A),
+                  child: Text(
+                    currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'U',
+                    style: const TextStyle(fontSize: 40, color: Color(0xFFD4AF37)),
+                  ),
+                ),
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFD4AF37),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.camera_alt, size: 16, color: Colors.black),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('إمكانية تغيير الصورة الشخصية')));
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(currentUserAccountName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(currentUserEmail, style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 24),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
+              title: const Text('المنشورات المحفوظة'),
+              trailing: Chip(label: Text('${savedPostsList.length}')),
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: savedPostsList.length,
+                    itemBuilder: (context, i) => ListTile(
+                      title: Text(savedPostsList[i]['title']),
+                      subtitle: Text(savedPostsList[i]['content']),
                     ),
                   ),
                 );
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
+              title: const Text('تغيير كلمة المرور'),
+              onTap: _changePassword,
+            ),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app, color: Colors.red),
+              title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                isLoggedInGlobal = false;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AuthScreen()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
