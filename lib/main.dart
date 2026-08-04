@@ -881,7 +881,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 4. عرض قائمة المنشورات والتبليغات المحدثة
+              // 4. عرض قائمة المنشورات والتبليغات مع زري الحفظ والـ 3 نقاط للتحكم
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(12),
@@ -927,6 +927,52 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 IconButton(
                                   icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
                                   onPressed: () => _toggleSave(index),
+                                ),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (val) {
+                                    if (val == 'edit') {
+                                      // فتح نافذة التعديل
+                                      final titleCtrl = TextEditingController(text: post['title']);
+                                      final contentCtrl = TextEditingController(text: post['content']);
+                                      showDialog(
+                                        context: context,
+                                        builder: (c) => AlertDialog(
+                                          title: const Text('تعديل المنشور'),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder())),
+                                              const SizedBox(height: 8),
+                                              TextField(controller: contentCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'المحتوى', border: OutlineInputBorder())),
+                                            ],
+                                          ),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  post['title'] = titleCtrl.text;
+                                                  post['content'] = contentCtrl.text;
+                                                });
+                                                Navigator.pop(c);
+                                              },
+                                              child: const Text('حفظ'),
+                                            )
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                    if (val == 'delete') {
+                                      setState(() {
+                                        _posts.removeWhere((p) => p['id'] == post['id']);
+                                      });
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 18), SizedBox(width: 6), Text('تعديل التبليغ')])),
+                                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 6), Text('حذف التبليغ')])),
+                                  ],
                                 ),
                               ],
                             ),
