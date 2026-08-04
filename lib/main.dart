@@ -6,26 +6,95 @@ String currentUserAccountName = 'سيدعباس عقيل';
 String currentUserEmail = 'abbas@law-platform.com';
 bool isLoggedInGlobal = false;
 bool notificationsEnabled = true;
+bool isDarkMode = false; // التحكم بالوضع الداكن
 List<Map<String, dynamic>> savedPostsList = [];
+
+// قائمة الإعلانات المتحركة القابلة للإدارة
+List<String> bannerAdsList = [
+  '📣 إعلان هام: جدول امتحانات الكورس الأول لكلية الحقوق',
+  '⚖️ خصم خاص على جميع الكتب الدراسية والمراجع في سوق الكتب',
+  '📌 متاح الآن ملخصات المادة القانونية للمراحل الأربع',
+];
+
+// هيكلية المواد الدراسية للمراحل الأربع
+Map<String, List<Map<String, dynamic>>> academicStagesData = {
+  'المرحلة الأولى': [
+    {
+      'title': 'المدخل لدراسة القانون',
+      'items': ['محاضرة 1 - التعريف بالقانون', 'ملخص نظرية الحق PDF']
+    },
+    {
+      'title': 'القانون الدستوري',
+      'items': ['أسئلة امتحانات سنوات سابقة']
+    },
+  ],
+  'المرحلة الثانية': [
+    {
+      'title': 'القانون المدني (الالتزامات)',
+      'items': ['شرح مصادر الالتزام']
+    },
+  ],
+  'المرحلة الثالثة': [
+    {
+      'title': 'قانون العقوبات الخاص',
+      'items': ['ملخص الجرائم الواقعة على الأشخاص']
+    },
+  ],
+  'المرحلة الرابعة': [
+    {
+      'title': 'القانون الدولي الخاص',
+      'items': ['مفهوم الجنسية والموطن']
+    },
+  ],
+};
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  void toggleTheme() {
+    setState(() {
+      isDarkMode = !isDarkMode;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'منصة القانون',
+      title: 'منصة القانون - كلية الحقوق',
       debugShowCheckedModeBanner: false,
+      themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(
+        brightness: Brightness.light,
         primaryColor: const Color(0xFF1A1A1A),
         scaffoldBackgroundColor: const Color(0xFFF8F9FA),
         colorScheme: ColorScheme.fromSeed(
+          brightness: Brightness.light,
           seedColor: const Color(0xFFD4AF37),
           primary: const Color(0xFF1A1A1A),
+          secondary: const Color(0xFFD4AF37),
+        ),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: const Color(0xFF121212),
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        colorScheme: ColorScheme.fromSeed(
+          brightness: Brightness.dark,
+          seedColor: const Color(0xFFD4AF37),
+          primary: const Color(0xFFD4AF37),
           secondary: const Color(0xFFD4AF37),
         ),
         useMaterial3: true,
@@ -36,7 +105,7 @@ class MyApp extends StatelessWidget {
 }
 
 // ==========================================
-// 1. الواجهة الترحيبية المتحركة (Splash Screen)
+// 1. الواجهة الترحيبية (Splash Screen)
 // ==========================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,33 +117,18 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
-
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
     _controller.forward();
 
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
         Widget targetScreen = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => targetScreen),
-        );
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => targetScreen));
       }
     });
   }
@@ -92,57 +146,27 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
-                  ),
-                  child: const Icon(
-                    Icons.gavel_rounded,
-                    size: 80,
-                    color: Color(0xFFD4AF37),
-                  ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 2),
                 ),
-                const SizedBox(height: 30),
-                const Text(
-                  'أهلاً بكم في',
-                  style: TextStyle(fontSize: 20, color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'منصة القانون',
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD4AF37).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'سيدعباس عقيل الحسيني',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFFD4AF37),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                child: const Icon(Icons.gavel_rounded, size: 80, color: Color(0xFFD4AF37)),
+              ),
+              const SizedBox(height: 30),
+              const Text('منصة القانون - كلية الحقوق', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFFD4AF37).withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                child: const Text('سيدعباس عقيل الحسيني', style: TextStyle(fontSize: 15, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
         ),
       ),
@@ -151,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 // ==========================================
-// 2. نظام تسجيل الدخول وإنشاء الحساب
+// 2. تسجيل الدخول
 // ==========================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -167,112 +191,10 @@ class _AuthScreenState extends State<AuthScreen> {
   final _nameController = TextEditingController();
 
   void _submitAuth() {
-    if (isLogin) {
-      isLoggedInGlobal = true;
-      if (_emailController.text.isNotEmpty) {
-        currentUserEmail = _emailController.text;
-        currentUserAccountName = _emailController.text.split('@').first;
-      }
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-      );
-    } else {
-      if (_nameController.text.isNotEmpty) {
-        currentUserAccountName = _nameController.text;
-      }
-      if (_emailController.text.isNotEmpty) {
-        currentUserEmail = _emailController.text;
-      }
-      _showOtpDialog('تم إرسال رمز التأكيد (OTP) إلى إيميلك لإكمال التسجيل.');
-    }
-  }
-
-  void _forgotPassword() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final resetEmailController = TextEditingController();
-        return AlertDialog(
-          title: const Text('نسيت كلمة المرور'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('أدخل بريدك الإلكتروني لإرسال رمز إعادة التعيين:'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: resetEmailController,
-                decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showOtpDialog('تم إرسال كود تعيين كلمة المرور الجديدة لبريدك الإلكتروني.', isReset: true);
-              },
-              child: const Text('إرسال الكود'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showOtpDialog(String message, {bool isReset = false}) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final otpController = TextEditingController();
-        final newPassController = TextEditingController();
-        return AlertDialog(
-          title: const Text('تأكيد الرمز'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(message),
-              const SizedBox(height: 10),
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'أدخل الكود (مثال: 1234)'),
-              ),
-              if (isReset) ...[
-                const SizedBox(height: 10),
-                TextField(
-                  controller: newPassController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة'),
-                ),
-              ]
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                isLoggedInGlobal = true;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(isReset ? 'تم تغيير كلمة المرور بنجاح!' : 'تم تأكيد الحساب بنجاح!')),
-                );
-                if (!isReset) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-                  );
-                }
-              },
-              child: const Text('تأكيد'),
-            ),
-          ],
-        );
-      },
-    );
+    isLoggedInGlobal = true;
+    if (_nameController.text.isNotEmpty) currentUserAccountName = _nameController.text;
+    if (_emailController.text.isNotEmpty) currentUserEmail = _emailController.text;
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainNavigationHolder()));
   }
 
   @override
@@ -287,71 +209,23 @@ class _AuthScreenState extends State<AuthScreen> {
               const SizedBox(height: 40),
               const Icon(Icons.gavel_rounded, size: 60, color: Color(0xFFD4AF37)),
               const SizedBox(height: 20),
-              Text(
-                isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
+              Text(isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد', textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
               const SizedBox(height: 30),
               if (!isLogin) ...[
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم الحساب',
-                    prefixIcon: Icon(Icons.person),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
+                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'اسم الحساب', border: OutlineInputBorder())),
                 const SizedBox(height: 16),
               ],
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'البريد الإلكتروني',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'البريد الإلكتروني', border: OutlineInputBorder())),
               const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'كلمة المرور',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (isLogin) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: _forgotPassword,
-                    child: const Text('نسيت كلمة المرور؟'),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 20),
+              TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور', border: OutlineInputBorder())),
+              const SizedBox(height: 24),
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    foregroundColor: const Color(0xFFD4AF37),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
                   onPressed: _submitAuth,
-                  child: Text(isLogin ? 'دخول' : 'إرسال كود التأكيد'),
+                  child: Text(isLogin ? 'دخول' : 'تسجيل'),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    isLogin = !isLogin;
-                  });
-                },
-                child: Text(isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل الدخول'),
               ),
             ],
           ),
@@ -361,7 +235,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 // ==========================================
-// 3. شريط التنقل السفلي والأقسام
+// 3. شريط التنقل السفلي والواجهة الرئيسية
 // ==========================================
 class MainNavigationHolder extends StatefulWidget {
   const MainNavigationHolder({super.key});
@@ -386,11 +260,7 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
         backgroundColor: const Color(0xFF1A1A1A),
         selectedItemColor: const Color(0xFFD4AF37),
@@ -406,7 +276,6 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
   }
 }
 
-// ----------------- 1. شاشة الرئيسية (الأخبار + الشريط الإعلاني) -----------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -419,25 +288,19 @@ class _HomeScreenState extends State<HomeScreen> {
   int _bannerIndex = 0;
   Timer? _bannerTimer;
 
-  final List<String> _ads = [
-    '📣 إعلان هام: فتح باب التسجيل للدورة القانونية الشاملة لهذا الشهر',
-    '⚖️ خصم خاص على جميع الكتب التشريعية بمناسبة تدشين المنصة',
-    '📌 التبليغات الرسمية تُحدث يومياً تلقائياً عبر منصة القانون',
-  ];
-
   final List<Map<String, dynamic>> _posts = [
     {
       'id': '1',
-      'author': 'الإدارة الرسمية',
-      'title': 'تبليغ رسمي بشأن تحديث القوانين',
-      'content': 'تم نشر الجدول الجديد للتشريعات القانونية الصادرة هذا الشهر. يرجى المتابعة.',
+      'author': 'عمادة كلية الحقوق',
+      'title': 'تبليغ رسمي بشأن تحديث القوانين والمناهج',
+      'content': 'تم نشر الجدول الجديد للتشريعات والمواد الدراسية الصادرة هذا الفصل.',
       'type': 'تبليغ رسمى',
-      'likes': 12,
+      'likes': 15,
       'isLiked': false,
       'isPinned': true,
       'isSaved': false,
       'comments': [
-        {'userName': 'علي أحمد', 'text': 'شكراً جزيلاً'},
+        {'userName': 'سيدعقيل', 'text': 'تم الاطلاع شكراً جزيلاً'},
       ],
     },
   ];
@@ -445,16 +308,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_bannerController.hasClients) {
-        _bannerIndex = (_bannerIndex + 1) % _ads.length;
-        _bannerController.animateToPage(
-          _bannerIndex,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
+    _startBannerTimer();
+  }
+
+  void _startBannerTimer() {
+    _bannerTimer?.cancel();
+    if (bannerAdsList.isNotEmpty) {
+      _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (_bannerController.hasClients && bannerAdsList.isNotEmpty) {
+          _bannerIndex = (_bannerIndex + 1) % bannerAdsList.length;
+          _bannerController.animateToPage(_bannerIndex, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+        }
+      });
+    }
   }
 
   @override
@@ -464,194 +330,102 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _sortPosts() {
-    _posts.sort((a, b) {
-      if (a['isPinned'] == b['isPinned']) return 0;
-      return a['isPinned'] ? -1 : 1;
-    });
-  }
-
-  void _togglePin(int index) {
-    setState(() {
-      _posts[index]['isPinned'] = !_posts[index]['isPinned'];
-      _sortPosts();
-    });
-  }
-
-  void _toggleSave(int index) {
-    setState(() {
-      _posts[index]['isSaved'] = !_posts[index]['isSaved'];
-      if (_posts[index]['isSaved']) {
-        if (!savedPostsList.contains(_posts[index])) {
-          savedPostsList.add(_posts[index]);
-        }
-      } else {
-        savedPostsList.removeWhere((p) => p['id'] == _posts[index]['id']);
-      }
-    });
-  }
-
-  void _addPost() {
-    showModalBottomSheet(
+  // نافذة إدارة الإعلانات للإدارة (إضافة، تعديل، حذف)
+  void _manageAdsDialog() {
+    showDialog(
       context: context,
-      isScrollControlled: true,
       builder: (context) {
-        final titleController = TextEditingController();
-        final contentController = TextEditingController();
-        String selectedType = 'خبر';
-
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 20,
-            left: 20,
-            right: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('نشر خبر / تبليغ جديد', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'العنوان'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: contentController,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'الوصف أو المحتوى النصي'),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Text('النوع: '),
-                  DropdownButton<String>(
-                    value: selectedType,
-                    items: ['خبر', 'تبليغ رسمى'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                    onChanged: (v) => setState(() => selectedType = v!),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.add_a_photo),
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الصورة'))),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.videocam),
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرفاق الفيديو'))),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                onPressed: () {
-                  if (titleController.text.isNotEmpty) {
-                    setState(() {
-                      _posts.insert(0, {
-                        'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                        'author': currentUserAccountName,
-                        'title': titleController.text,
-                        'content': contentController.text,
-                        'type': selectedType,
-                        'likes': 0,
-                        'isLiked': false,
-                        'isPinned': false,
-                        'isSaved': false,
-                        'comments': [],
-                      });
-                      _sortPosts();
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('🔔 إشعار هاتف للمستخدمين: منشور جديد "$selectedType"'),
-                        backgroundColor: const Color(0xFFD4AF37),
-                      ),
-                    );
-                  }
-                },
-                child: const Text('نشر وتنبيه المستخدمين', style: TextStyle(color: Colors.white)),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showComments(int index) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        final commentController = TextEditingController();
+        final newAdCtrl = TextEditingController();
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Container(
-                height: 400,
-                padding: const EdgeInsets.all(12),
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('إدارة الإعلانات المتحركة'),
+              content: SizedBox(
+                width: double.maxFinite,
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    Expanded(
-                      child: _posts[index]['comments'].isEmpty
-                          ? const Center(child: Text('لا توجد تعليقات بعد'))
-                          : ListView.builder(
-                              itemCount: _posts[index]['comments'].length,
-                              itemBuilder: (context, i) {
-                                final comment = _posts[index]['comments'][i];
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFF1A1A1A),
-                                    child: Text(
-                                      comment['userName'][0].toUpperCase(),
-                                      style: const TextStyle(color: Color(0xFFD4AF37)),
-                                    ),
-                                  ),
-                                  title: Text(comment['userName'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  subtitle: Text(comment['text']),
-                                );
-                              },
-                            ),
+                    TextField(
+                      controller: newAdCtrl,
+                      decoration: const InputDecoration(labelText: 'إضافة نص إعلان جديد', border: OutlineInputBorder()),
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: commentController,
-                            decoration: const InputDecoration(
-                              hintText: 'اكتب تعليقاً...',
-                              border: OutlineInputBorder(),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                      icon: const Icon(Icons.add),
+                      label: const Text('إضافة الإعلان'),
+                      onPressed: () {
+                        if (newAdCtrl.text.trim().isNotEmpty) {
+                          setState(() {
+                            bannerAdsList.add(newAdCtrl.text.trim());
+                          });
+                          setDialogState(() {});
+                          newAdCtrl.clear();
+                          _startBannerTimer();
+                        }
+                      },
+                    ),
+                    const Divider(height: 24),
+                    const Text('الإعلانات الحالية:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 180,
+                      child: bannerAdsList.isEmpty
+                          ? const Center(child: Text('لا توجد إعلانات حالياً'))
+                          : ListView.builder(
+                              itemCount: bannerAdsList.length,
+                              itemBuilder: (context, index) => ListTile(
+                                dense: true,
+                                title: Text(bannerAdsList[index], style: const TextStyle(fontSize: 12)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                      onPressed: () {
+                                        final editCtrl = TextEditingController(text: bannerAdsList[index]);
+                                        showDialog(
+                                          context: context,
+                                          builder: (c) => AlertDialog(
+                                            title: const Text('تعديل الإعلان'),
+                                            content: TextField(controller: editCtrl),
+                                            actions: [
+                                              ElevatedButton(
+                                                onPressed: () {
+                                                  setState(() {
+                                                    bannerAdsList[index] = editCtrl.text;
+                                                  });
+                                                  setDialogState(() {});
+                                                  Navigator.pop(c);
+                                                },
+                                                child: const Text('حفظ'),
+                                              )
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                                      onPressed: () {
+                                        setState(() {
+                                          bannerAdsList.removeAt(index);
+                                        });
+                                        setDialogState(() {});
+                                        _startBannerTimer();
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: Color(0xFFD4AF37)),
-                          onPressed: () {
-                            if (commentController.text.trim().isNotEmpty) {
-                              setState(() {
-                                _posts[index]['comments'].add({
-                                  'userName': currentUserAccountName,
-                                  'text': commentController.text.trim(),
-                                });
-                              });
-                              setModalState(() {});
-                              commentController.clear();
-                            }
-                          },
-                        )
-                      ],
                     )
                   ],
                 ),
               ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
+              ],
             );
           },
         );
@@ -661,353 +435,273 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    _sortPosts();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('منصة القانون - الأخبار والتبليغات'),
+        title: const Text('منصة القانون - التبليغات'),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFFD4AF37),
-        foregroundColor: Colors.black,
-        onPressed: _addPost,
-        icon: const Icon(Icons.add_alert_rounded),
-        label: const Text('نشر جديد'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.campaign, color: Color(0xFFD4AF37)),
+            tooltip: 'إدارة الإعلانات',
+            onPressed: _manageAdsDialog,
+          )
+        ],
       ),
       body: Column(
         children: [
-          // الشريط الإعلاني المتحرك
-          Container(
-            height: 60,
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF1A1A1A), Color(0xFF333333)]),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFD4AF37), width: 1),
-            ),
-            child: PageView.builder(
-              controller: _bannerController,
-              itemCount: _ads.length,
-              itemBuilder: (context, index) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Text(
-                      _ads[index],
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13),
+          if (bannerAdsList.isNotEmpty)
+            Container(
+              height: 55,
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD4AF37)),
+              ),
+              child: PageView.builder(
+                controller: _bannerController,
+                itemCount: bannerAdsList.length,
+                itemBuilder: (context, index) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(bannerAdsList[index], textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               itemCount: _posts.length,
               itemBuilder: (context, index) {
                 final post = _posts[index];
-                final isPinned = post['isPinned'] == true;
-                final isSaved = post['isSaved'] == true;
-
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: isPinned ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5) : BorderSide.none,
-                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (isPinned)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
-                                SizedBox(width: 4),
-                                Text('منشور مثبت في الأعلى', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
-                              ],
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: const Color(0xFF1A1A1A),
-                              child: Text(post['author'][0].toUpperCase(), style: const TextStyle(color: Color(0xFFD4AF37))),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(post['type'], style: TextStyle(fontSize: 10, color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue)),
-                                )
-                              ],
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
-                              onPressed: () => _toggleSave(index),
-                            ),
-                            IconButton(
-                              icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: isPinned ? const Color(0xFFD4AF37) : Colors.grey),
-                              onPressed: () => _togglePin(index),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(post['content'], style: const TextStyle(fontSize: 14)),
-                        const SizedBox(height: 12),
-                        const Divider(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  post['isLiked'] = !post['isLiked'];
-                                  post['likes'] += post['isLiked'] ? 1 : -1;
-                                });
-                              },
-                              icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
-                              label: Text('${post['likes']} إعجاب'),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => _showComments(index),
-                              icon: const Icon(Icons.comment_outlined, color: Colors.grey),
-                              label: Text('${post['comments'].length} تعليق'),
-                            ),
-                          ],
-                        )
+                        Text(post['title'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(post['content']),
                       ],
                     ),
                   ),
                 );
               },
             ),
-          ),
+          )
         ],
       ),
     );
   }
-}
-// ----------------- 2. شاشة الخدمات (مكتبة الحقوق وسوق الكتب) -----------------
+}// ----------------- 2. شاشة الخدمات (مكتبة الحقوق + سوق الكتب) -----------------
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> services = [
-      {'title': 'مكتبة الحقوق', 'icon': Icons.gavel, 'desc': 'تصفح كافة القوانين والتشريعات الحقوقية'},
-      {'title': 'سوق الكتب', 'icon': Icons.storefront, 'desc': 'عرض وشراء الكتب المصادر القانونية'},
-    ];
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الخدمات القانونية'),
+        title: const Text('الخدمات والكلية'),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-        ),
-        itemCount: services.length,
-        itemBuilder: (context, index) {
-          final service = services[index];
-          return Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('قسم "${service['title']}" قيد الفتح')));
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(service['icon'], size: 48, color: const Color(0xFFD4AF37)),
-                    const SizedBox(height: 12),
-                    Text(service['title'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 6),
-                    Text(service['desc'], textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: const Icon(Icons.account_balance, size: 40, color: Color(0xFFD4AF37)),
+                title: const Text('مكتبة الحقوق (المناهج والمراحل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                subtitle: const Text('تصفح المواد والمحاضرات حسب المرحلة الدراسية'),
+                trailing: const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (c) => const LawLibraryStagesScreen()));
+                },
               ),
             ),
-          );
-        },
+            const SizedBox(height: 16),
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: const Icon(Icons.storefront, size: 40, color: Color(0xFFD4AF37)),
+                title: const Text('سوق الكتب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                subtitle: const Text('شراء وتصفح الكتب والمصادر القانونية'),
+                trailing: const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قسم سوق الكتب قيد التفعيل')));
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ----------------- 3. شاشة الكتب (مع ميزة الرفع والوصف) -----------------
-class BooksScreen extends StatefulWidget {
-  const BooksScreen({super.key});
+// شاشة عرض المراحل الأربع لمكتبة الحقوق
+class LawLibraryStagesScreen extends StatefulWidget {
+  const LawLibraryStagesScreen({super.key});
 
   @override
-  State<BooksScreen> createState() => _BooksScreenState();
+  State<LawLibraryStagesScreen> createState() => _LawLibraryStagesScreenState();
 }
 
-class _BooksScreenState extends State<BooksScreen> {
-  final List<Map<String, String>> _books = [
-    {
-      'title': 'شرح القانون المدني',
-      'desc': 'كتاب شامل يشرح جميع نصوص ومواد القانون المدني والالتزامات.',
-      'fileName': 'civil_law.pdf'
-    },
-    {
-      'title': 'قانون العقوبات والإجراءات الجزائية',
-      'desc': 'مرجع قانوني يحتوي على العقوبات والأنظمة الجنائية المعمول بها.',
-      'fileName': 'penal_code.pdf'
-    },
-  ];
-
-  void _uploadNewBook() {
-    showModalBottomSheet(
+class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
+  void _addNewSubject(String stageName) {
+    final titleCtrl = TextEditingController();
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        final titleCtrl = TextEditingController();
-        final descCtrl = TextEditingController();
-        String selectedFile = '';
-
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 20,
-            left: 20,
-            right: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('رفع كتاب / ملف جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: titleCtrl,
-                decoration: const InputDecoration(labelText: 'اسم الكتاب', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: descCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'وصف توضيحي للملف', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.upload_file, color: Color(0xFFD4AF37)),
-                label: Text(selectedFile.isEmpty ? 'اختيار ملف PDF' : selectedFile),
-                onPressed: () {
-                  setState(() {
-                    selectedFile = 'book_document.pdf';
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار الملف بنجاح')));
-                },
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                onPressed: () {
-                  if (titleCtrl.text.isNotEmpty) {
-                    setState(() {
-                      _books.insert(0, {
-                        'title': titleCtrl.text,
-                        'desc': descCtrl.text,
-                        'fileName': selectedFile.isNotEmpty ? selectedFile : 'document.pdf',
-                      });
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر ورفع الكتاب بنجاح')));
-                  }
-                },
-                child: const Text('رفع وحفظ', style: TextStyle(color: Colors.white)),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
+      builder: (c) => AlertDialog(
+        title: Text('إضافة مادة لـ $stageName'),
+        content: TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المادة الدراسية')),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              if (titleCtrl.text.isNotEmpty) {
+                setState(() {
+                  academicStagesData[stageName]!.add({'title': titleCtrl.text, 'items': []});
+                });
+                Navigator.pop(c);
+              }
+            },
+            child: const Text('إضافة'),
+          )
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('مكتبة الكتب والمصادر'),
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: Colors.white,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFFD4AF37),
-        foregroundColor: Colors.black,
-        onPressed: _uploadNewBook,
-        icon: const Icon(Icons.picture_as_pdf),
-        label: const Text('رفع كتاب'),
-      ),
-      body: ListView.builder(
+      appBar: AppBar(title: const Text('مكتبة الحقوق - المراحل الدراسية'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      body: ListView(
         padding: const EdgeInsets.all(12),
-        itemCount: _books.length,
-        itemBuilder: (context, index) {
-          final book = _books[index];
+        children: academicStagesData.keys.map((stage) {
+          final subjects = academicStagesData[stage]!;
           return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.picture_as_pdf, color: Colors.red, size: 36),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(book['title']!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('جاري فتح ${book['title']}...')));
-                        },
-                        child: const Text('قراءة', style: TextStyle(color: Color(0xFFD4AF37))),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(book['desc']!, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-                ],
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ExpansionTile(
+              leading: const Icon(Icons.school, color: Color(0xFFD4AF37)),
+              title: Text(stage, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              trailing: IconButton(
+                icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37)),
+                onPressed: () => _addNewSubject(stage),
               ),
+              children: subjects.map((subj) {
+                return ListTile(
+                  title: Text(subj['title'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('المحتويات: ${subj['items'].length} ملف/محاضرة'),
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (c) => SubjectDetailsScreen(subjectData: subj)));
+                  },
+                );
+              }).toList(),
             ),
           );
-        },
+        }).toList(),
       ),
     );
   }
 }
 
-// ----------------- 4. شاشة حسابي (Profile Page المتكاملة) -----------------
+// تفاصيل المادة مع إمكانية إضافة المحتويات وتعديلها
+class SubjectDetailsScreen extends StatefulWidget {
+  final Map<String, dynamic> subjectData;
+  const SubjectDetailsScreen({super.key, required this.subjectData});
+
+  @override
+  State<SubjectDetailsScreen> createState() => _SubjectDetailsScreenState();
+}
+
+class _SubjectDetailsScreenState extends State<SubjectDetailsScreen> {
+  void _addItem() {
+    final itemCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('إضافة ملف/محاضرة للمادة'),
+        content: TextField(controller: itemCtrl, decoration: const InputDecoration(labelText: 'اسم الملف أو الملخص')),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              if (itemCtrl.text.isNotEmpty) {
+                setState(() {
+                  widget.subjectData['items'].add(itemCtrl.text);
+                });
+                Navigator.pop(c);
+              }
+            },
+            child: const Text('إضافة'),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List items = widget.subjectData['items'];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.subjectData['title']),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFFD4AF37),
+        onPressed: _addItem,
+        child: const Icon(Icons.add, color: Colors.black),
+      ),
+      body: items.isEmpty
+          ? const Center(child: Text('لا توجد محتويات أو محاضرة مضافة لهذه المادة'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: items.length,
+              itemBuilder: (context, i) => ListTile(
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                title: Text(items[i]),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    setState(() {
+                      items.removeAt(i);
+                    });
+                  },
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ----------------- 3. شاشة الكتب -----------------
+class BooksScreen extends StatelessWidget {
+  const BooksScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('مكتبة الكتب والـ PDF'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      body: const Center(child: Text('قسم رفع وتصفح الكتب المصدرية')),
+    );
+  }
+}
+
+// ----------------- 4. شاشة حسابي مع زر تحويل الوضع الداكن -----------------
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -1016,190 +710,41 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  void _editProfile() {
-    final nameCtrl = TextEditingController(text: currentUserAccountName);
-    final emailCtrl = TextEditingController(text: currentUserEmail);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعديل الملف الشخصي'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم')),
-            const SizedBox(height: 10),
-            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'البريد الإلكتروني')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                currentUserAccountName = nameCtrl.text;
-                currentUserEmail = emailCtrl.text;
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث البيانات الشخصية')));
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('الملف الشخصي'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: const Color(0xFF1A1A1A),
+            child: Text(currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 30, color: Color(0xFFD4AF37))),
+          ),
+          const SizedBox(height: 10),
+          Text(currentUserAccountName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(currentUserEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+          const Divider(height: 30),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode, color: Color(0xFFD4AF37)),
+            title: const Text('تفعيل الوضع الداكن (Dark Mode)'),
+            value: isDarkMode,
+            onChanged: (val) {
+              MyApp.of(context).toggleTheme();
             },
-            child: const Text('حفظ'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.exit_to_app, color: Colors.red),
+            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              isLoggedInGlobal = false;
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthScreen()));
+            },
           )
         ],
       ),
     );
   }
-
-  void _changePassword() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final passController = TextEditingController();
-        return AlertDialog(
-          title: const Text('تغيير كلمة المرور'),
-          content: TextField(
-            controller: passController,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث كلمة المرور بنجاح')));
-              },
-              child: const Text('حفظ'),
-            )
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('الملف الشخصي'),
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: const Color(0xFF1A1A1A),
-                  child: Text(
-                    currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'U',
-                    style: const TextStyle(fontSize: 40, color: Color(0xFFD4AF37)),
-                  ),
-                ),
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: const Color(0xFFD4AF37),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.camera_alt, size: 16, color: Colors.black),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تغيير الصورة الشخصية')));
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(currentUserAccountName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(currentUserEmail, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-              icon: const Icon(Icons.edit, color: Color(0xFFD4AF37), size: 18),
-              label: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
-              onPressed: _editProfile,
-            ),
-            const SizedBox(height: 20),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
-              title: const Text('المنشورات المحفوظة'),
-              trailing: Chip(label: Text('${savedPostsList.length}')),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: savedPostsList.length,
-                    itemBuilder: (context, i) => ListTile(
-                      title: Text(savedPostsList[i]['title']),
-                      subtitle: Text(savedPostsList[i]['content']),
-                    ),
-                  ),
-                );
-              },
-            ),
-            SwitchListTile(
-              secondary: const Icon(Icons.notifications_active, color: Color(0xFFD4AF37)),
-              title: const Text('إشعارات الهاتف'),
-              value: notificationsEnabled,
-              onChanged: (val) {
-                setState(() {
-                  notificationsEnabled = val;
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
-              title: const Text('تغيير كلمة المرور'),
-              onTap: _changePassword,
-            ),
-            ListTile(
-              leading: const Icon(Icons.headset_mic, color: Color(0xFFD4AF37)),
-              title: const Text('الدعم الفني والاتصال بنا'),
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('الدعم الفني'),
-                    content: const Text('يمكنك التواصل مع إدارة منصة القانون عبر البريد:\nsupport@law-platform.com'),
-                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Color(0xFFD4AF37)),
-              title: const Text('حول المنصة والسياسات'),
-              onTap: () {
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'منصة القانون',
-                  applicationVersion: '1.0.0',
-                  applicationLegalese: 'جميع الحقوق محفوظة © سيدعباس عقيل الحسيني',
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app, color: Colors.red),
-              title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                isLoggedInGlobal = false;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AuthScreen()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
+
