@@ -18,7 +18,21 @@ List<String> bannerAdsList = [
   '📌 متاح الآن ملخصات المادة القانونية للمراحل الأربع',
 ];
 
-// هيكلية المواد الدراسية المحدثة مع دعم حقول الملفات والتصنيف الفخم
+// قائمة الأحداث والعداد التنازلي القابلة للإدارة
+List<Map<String, dynamic>> countdownEventsList = [
+  {'title': 'امتحانات الكورس الأول', 'days': 12, 'icon': Icons.hourglass_top},
+  {'title': 'المحاكمة الصورية', 'days': 5, 'icon': Icons.gavel},
+];
+
+// قائمة الحكم والمواد القانونية القابلة للإدارة
+List<String> legalQuotesList = [
+  '« لا جَرِيمَةَ وَلا عُقُوبَةَ إِلاّ بِنَصٍّ »',
+  '« العقد شريعة المتعاقدين »',
+  '« المتهم بيء حتى تثبت إدانته »',
+];
+int currentQuoteIndex = 0;
+
+// هيكلية المواد الدراسية المحدثة
 Map<String, List<Map<String, dynamic>>> academicStagesData = {
   'المرحلة الأولى': [
     {
@@ -364,6 +378,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _bannerIndex = 0;
   Timer? _bannerTimer;
   late AnimationController _bgAnimationController;
+  String _selectedCategoryFilter = 'الكل';
 
   final List<Map<String, dynamic>> _posts = [
     {
@@ -372,6 +387,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       'title': 'تبليغ رسمي بشأن تحديث القوانين والمناهج',
       'content': 'تم نشر الجدول الجديد للتشريعات والمواد الدراسية الصادرة هذا الفصل.',
       'type': 'تبليغ رسمى',
+      'timeAgo': 'منذ ساعتين',
+      'isNew': true,
+      'imagePath': null,
       'likes': 12,
       'isLiked': false,
       'isPinned': true,
@@ -379,6 +397,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       'comments': [
         {'userName': 'سيدعقيل', 'text': 'تم الاطلاع، شكراً جزيلاً.'},
       ],
+    },
+    {
+      'id': '2',
+      'author': 'قسم الإعلانات',
+      'title': 'جدول الامتحانات النهائية',
+      'content': 'يرجى الاطلاع على الجدول المرفق للامتحانات.',
+      'type': 'جداول الامتحانات',
+      'timeAgo': 'أمس',
+      'isNew': false,
+      'imagePath': 'demo_schedule_image',
+      'likes': 25,
+      'isLiked': true,
+      'isPinned': false,
+      'isSaved': true,
+      'comments': [],
     },
   ];
 
@@ -412,20 +445,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  void _sortPosts() {
-    _posts.sort((a, b) {
-      if (a['isPinned'] == b['isPinned']) return 0;
-      return a['isPinned'] ? -1 : 1;
-    });
-  }
-
-  void _togglePin(int index) {
-    setState(() {
-      _posts[index]['isPinned'] = !_posts[index]['isPinned'];
-      _sortPosts();
-    });
-  }
-
   void _toggleSave(int index) {
     setState(() {
       _posts[index]['isSaved'] = !_posts[index]['isSaved'];
@@ -439,44 +458,81 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  void _editPost(int index) {
-    final titleCtrl = TextEditingController(text: _posts[index]['title']);
-    final contentCtrl = TextEditingController(text: _posts[index]['content']);
-    showDialog(
+  void _showComments(int index) {
+    showModalBottomSheet(
       context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('تعديل التبليغ'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder())),
-            const SizedBox(height: 8),
-            TextField(controller: contentCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'المحتوى', border: OutlineInputBorder())),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              if (titleCtrl.text.isNotEmpty) {
-                setState(() {
-                  _posts[index]['title'] = titleCtrl.text;
-                  _posts[index]['content'] = contentCtrl.text;
-                });
-                Navigator.pop(c);
-              }
-            },
-            child: const Text('حفظ التعديلات'),
-          )
-        ],
-      ),
+      isScrollControlled: true,
+      builder: (context) {
+        final commentController = TextEditingController();
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                height: 400,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    const Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    Expanded(
+                      child: _posts[index]['comments'].isEmpty
+                          ? const Center(child: Text('لا توجد تعليقات بعد'))
+                          : ListView.builder(
+                              itemCount: _posts[index]['comments'].length,
+                              itemBuilder: (context, i) {
+                                final comment = _posts[index]['comments'][i];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: const Color(0xFF1A1A1A),
+                                    child: Text(
+                                      comment['userName'][0].toUpperCase(),
+                                      style: const TextStyle(color: Color(0xFFD4AF37)),
+                                    ),
+                                  ),
+                                  title: Text(comment['userName'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  subtitle: Text(comment['text']),
+                                );
+                              },
+                            ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: commentController,
+                            decoration: const InputDecoration(
+                              hintText: 'اكتب تعليقاً...',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.send, color: Color(0xFFD4AF37)),
+                          onPressed: () {
+                            if (commentController.text.trim().isNotEmpty) {
+                              setState(() {
+                                _posts[index]['comments'].add({
+                                  'userName': currentUserAccountName,
+                                  'text': commentController.text.trim(),
+                                });
+                              });
+                              setModalState(() {});
+                              commentController.clear();
+                            }
+                          },
+                        )
+                      ],
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
-  }
-
-  void _deletePost(int index) {
-    setState(() {
-      _posts.removeAt(index);
-    });
   }
     void _addPost() {
     showModalBottomSheet(
@@ -485,146 +541,95 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       builder: (context) {
         final titleController = TextEditingController();
         final contentController = TextEditingController();
-        String selectedType = 'خبر';
+        String selectedType = 'أخبار الكلية';
+        String? attachedImagePath;
 
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 20,
-            left: 20,
-            right: 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('نشر خبر / تبليغ جديد', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder()),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                top: 20,
+                left: 20,
+                right: 20,
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: contentController,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'الوصف أو المحتوى النصي', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 10),
-              Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('النوع: '),
-                  DropdownButton<String>(
-                    value: selectedType,
-                    items: ['خبر', 'تبليغ رسمى'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                    onChanged: (v) => setState(() => selectedType = v!),
+                  const Text('نشر جديد مع صورة ووصف', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder()),
                   ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: contentController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: 'الوصف أو المحتوى النصي', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Text('نوع النشر: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: selectedType,
+                        items: ['تبليغ رسمى', 'أخبار الكلية', 'جداول الامتحانات']
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setModalState(() {
+                              selectedType = v;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
+                    icon: const Icon(Icons.add_a_photo),
+                    label: Text(attachedImagePath == null ? 'إرفاق صورة مع المنشور' : 'تم إرفاق الصورة'),
+                    onPressed: () {
+                      setModalState(() {
+                        attachedImagePath = 'sample_user_uploaded_image';
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                    onPressed: () {
+                      if (titleController.text.isNotEmpty) {
+                        setState(() {
+                          _posts.insert(0, {
+                            'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                            'author': currentUserAccountName,
+                            'title': titleController.text,
+                            'content': contentController.text,
+                            'type': selectedType,
+                            'timeAgo': 'الآن',
+                            'isNew': true,
+                            'imagePath': attachedImagePath,
+                            'likes': 0,
+                            'isLiked': false,
+                            'isPinned': false,
+                            'isSaved': false,
+                            'comments': [],
+                          });
+                        });
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: const Text('نشر وتنبيه المستخدمين', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                onPressed: () {
-                  if (titleController.text.isNotEmpty) {
-                    setState(() {
-                      _posts.insert(0, {
-                        'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                        'author': currentUserAccountName,
-                        'title': titleController.text,
-                        'content': contentController.text,
-                        'type': selectedType,
-                        'likes': 0,
-                        'isLiked': false,
-                        'isPinned': false,
-                        'isSaved': false,
-                        'comments': [],
-                      });
-                      _sortPosts();
-                    });
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('نشر وتنبيه المستخدمين', style: TextStyle(color: Colors.white)),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _manageAdsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final newAdCtrl = TextEditingController();
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('إدارة الإعلانات المتحركة', textDirection: TextDirection.rtl),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: newAdCtrl,
-                      decoration: const InputDecoration(labelText: 'إضافة نص إعلان جديد', border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-                      icon: const Icon(Icons.add),
-                      label: const Text('إضافة الإعلان'),
-                      onPressed: () {
-                        if (newAdCtrl.text.trim().isNotEmpty) {
-                          setState(() {
-                            bannerAdsList.add(newAdCtrl.text.trim());
-                          });
-                          setDialogState(() {});
-                          newAdCtrl.clear();
-                          _startBannerTimer();
-                        }
-                      },
-                    ),
-                    const Divider(height: 24),
-                    const Text('الإعلانات الحالية:', style: TextStyle(fontWeight: FontWeight.bold), textDirection: TextDirection.rtl),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 180,
-                      child: bannerAdsList.isEmpty
-                          ? const Center(child: Text('لا توجد إعلانات حالياً'))
-                          : ListView.builder(
-                              itemCount: bannerAdsList.length,
-                              itemBuilder: (context, index) => ListTile(
-                                dense: true,
-                                title: Text(bannerAdsList[index], style: const TextStyle(fontSize: 13), textDirection: TextDirection.rtl),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                      onPressed: () {
-                                        setState(() {
-                                          bannerAdsList.removeAt(index);
-                                        });
-                                        setDialogState(() {});
-                                        _startBannerTimer();
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    )
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق')),
-              ],
             );
           },
         );
@@ -632,20 +637,149 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  @override
+  void _manageCountdownsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final titleCtrl = TextEditingController();
+        final daysCtrl = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            return AlertDialog(
+              title: const Text('إدارة العداد التنازلي للأحداث'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'عنوان الحدث', border: OutlineInputBorder())),
+                    const SizedBox(height: 8),
+                    TextField(controller: daysCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الأيام المتبقية', border: OutlineInputBorder())),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                      onPressed: () {
+                        if (titleCtrl.text.isNotEmpty && daysCtrl.text.isNotEmpty) {
+                          setState(() {
+                            countdownEventsList.add({
+                              'title': titleCtrl.text,
+                              'days': int.parse(daysCtrl.text),
+                              'icon': Icons.event
+                            });
+                          });
+                          setDlgState(() {});
+                          titleCtrl.clear();
+                          daysCtrl.clear();
+                        }
+                      },
+                      child: const Text('إضافة حدث جديدة'),
+                    ),
+                    const Divider(),
+                    Container(
+                      height: 120,
+                      child: ListView.builder(
+                        itemCount: countdownEventsList.length,
+                        itemBuilder: (context, idx) => ListTile(
+                          dense: true,
+                          title: Text(countdownEventsList[idx]['title']),
+                          subtitle: Text('متبقي: ${countdownEventsList[idx]['days']} يوماً'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                countdownEventsList.removeAt(idx);
+                              });
+                              setDlgState(() {});
+                            },
+                          ),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق'))],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _manageLegalQuotesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final quoteCtrl = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            return AlertDialog(
+              title: const Text('إدارة حكمة / مادة اليوم القانونية'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(controller: quoteCtrl, decoration: const InputDecoration(labelText: 'نص القاعدة أو الحكمة', border: OutlineInputBorder())),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                      onPressed: () {
+                        if (quoteCtrl.text.isNotEmpty) {
+                          setState(() {
+                            legalQuotesList.add('« ${quoteCtrl.text} »');
+                          });
+                          setDlgState(() {});
+                          quoteCtrl.clear();
+                        }
+                      },
+                      child: const Text('إضافة حكمة'),
+                    ),
+                    const Divider(),
+                    Container(
+                      height: 120,
+                      child: ListView.builder(
+                        itemCount: legalQuotesList.length,
+                        itemBuilder: (context, idx) => ListTile(
+                          dense: true,
+                          title: Text(legalQuotesList[idx]),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                legalQuotesList.removeAt(idx);
+                                if (currentQuoteIndex >= legalQuotesList.length) currentQuoteIndex = 0;
+                              });
+                              setDlgState(() {});
+                            },
+                          ),
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('إغلاق'))],
+            );
+          },
+        );
+      },
+    );
+  }
+    @override
   Widget build(BuildContext context) {
-    _sortPosts();
+    List<Map<String, dynamic>> filteredPosts = _selectedCategoryFilter == 'الكل'
+        ? _posts
+        : _posts.where((p) => p['type'] == _selectedCategoryFilter).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('منصة القانون - التبليغات'),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.campaign, color: Color(0xFFD4AF37)),
-            tooltip: 'إدارة الإعلانات',
-            onPressed: _manageAdsDialog,
-          )
+          IconButton(icon: const Icon(Icons.timer, color: Color(0xFFD4AF37)), onPressed: _manageCountdownsDialog),
+          IconButton(icon: const Icon(Icons.format_quote, color: Color(0xFFD4AF37)), onPressed: _manageLegalQuotesDialog),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -660,56 +794,100 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           Positioned.fill(
             child: FadeTransition(
               opacity: Tween<double>(begin: 0.03, end: 0.08).animate(_bgAnimationController),
-              child: const Center(
-                child: Icon(
-                  Icons.gavel_rounded,
-                  size: 320,
-                  color: Color(0xFFD4AF37),
-                ),
-              ),
+              child: const Center(child: Icon(Icons.gavel_rounded, size: 320, color: Color(0xFFD4AF37))),
             ),
           ),
           Column(
             children: [
-              if (bannerAdsList.isNotEmpty)
+              // 1. حكمة اليوم القانونية
+              if (legalQuotesList.isNotEmpty)
                 Container(
-                  height: 75,
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFD4AF37), width: 1.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFD4AF37)),
                   ),
-                  child: PageView.builder(
-                    controller: _bannerController,
-                    itemCount: bannerAdsList.length,
-                    itemBuilder: (context, index) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            bannerAdsList[index],
-                            textAlign: TextAlign.center,
-                            textDirection: TextDirection.rtl,
-                            style: const TextStyle(
-                              color: Color(0xFFD4AF37),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              height: 1.3,
-                            ),
-                          ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.auto_awesome, color: Color(0xFFD4AF37), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          legalQuotesList[currentQuoteIndex],
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.navigate_next, color: Colors.white, size: 20),
+                        onPressed: () {
+                          setState(() {
+                            currentQuoteIndex = (currentQuoteIndex + 1) % legalQuotesList.length;
+                          });
+                        },
+                      )
+                    ],
+                  ),
+                ),
+
+              // 2. شريط الأحداث العداد التنازلي
+              if (countdownEventsList.isNotEmpty)
+                SizedBox(
+                  height: 45,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: countdownEventsList.length,
+                    itemBuilder: (context, idx) {
+                      final evt = countdownEventsList[idx];
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(20)),
+                        child: Row(
+                          children: [
+                            Icon(evt['icon'] as IconData, size: 16, color: Colors.black),
+                            const SizedBox(width: 6),
+                            Text('⌛ ${evt['title']}: متبقي ${evt['days']} يوماً', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                          ],
                         ),
                       );
                     },
                   ),
                 ),
+
+              // 3. أزرار التصفية الفئات (Filter Chips)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                child: Row(
+                  children: ['الكل', 'تبليغ رسمى', 'أخبار الكلية', 'جداول الامتحانات'].map((cat) {
+                    bool isSel = _selectedCategoryFilter == cat;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: ChoiceChip(
+                        label: Text(cat),
+                        selected: isSel,
+                        selectedColor: const Color(0xFFD4AF37),
+                        onSelected: (val) {
+                          setState(() {
+                            _selectedCategoryFilter = cat;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // 4. عرض قائمة المنشورات والتبليغات المحدثة
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(12),
-                  itemCount: _posts.length,
+                  itemCount: filteredPosts.length,
                   itemBuilder: (context, index) {
-                    final post = _posts[index];
-                    final isPinned = post['isPinned'] == true;
+                    final post = filteredPosts[index];
                     final isSaved = post['isSaved'] == true;
 
                     return Card(
@@ -730,20 +908,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    Text(post['type'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    Row(
+                                      children: [
+                                        Text(post['timeAgo'], style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                        if (post['isNew'] == true) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                                            child: const Text('جديد', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+                                          )
+                                        ]
+                                      ],
+                                    ),
                                   ],
                                 ),
                                 const Spacer(),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert),
-                                  onSelected: (val) {
-                                    if (val == 'edit') _editPost(index);
-                                    if (val == 'delete') _deletePost(index);
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 18), SizedBox(width: 6), Text('تعديل التبليغ')])),
-                                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 6), Text('حذف التبليغ')])),
-                                  ],
+                                IconButton(
+                                  icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
+                                  onPressed: () => _toggleSave(index),
                                 ),
                               ],
                             ),
@@ -751,6 +934,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Text('${post['content']}.', textDirection: TextDirection.rtl),
+                            if (post['imagePath'] != null) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                height: 140,
+                                width: double.infinity,
+                                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(8)),
+                                child: const Icon(Icons.image, size: 50, color: Colors.grey),
+                              )
+                            ],
+                            const Divider(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      post['isLiked'] = !post['isLiked'];
+                                      post['likes'] += post['isLiked'] ? 1 : -1;
+                                    });
+                                  },
+                                  icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
+                                  label: Text('${post['likes']} إعجاب'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => _showComments(index),
+                                  icon: const Icon(Icons.comment_outlined, color: Colors.grey),
+                                  label: Text('${post['comments'].length} تعليق'),
+                                ),
+                              ],
+                            )
                           ],
                         ),
                       ),
