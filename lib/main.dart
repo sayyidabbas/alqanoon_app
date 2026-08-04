@@ -3,8 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
+// ==========================================
+// إعدادات Firebase السحابية المدمجة
+// ==========================================
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    return android;
+  }
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AiZaSyBOT51AEyYCOGBteudtWv',
+    appId: '1:449394795:android:6f7',
+    messagingSenderId: '449394795',
+    projectId: 'alqanoon-302c7',
+    storageBucket: 'alqanoon-302c7.firebasestorage.app',
+  );
+}
+
+// ==========================================
 // متغيرات عامة لحفظ حالة الجلسة والبيانات
+// ==========================================
 String currentUserAccountName = 'سيدعباس عقيل';
 String currentUserEmail = 'abbas@law-platform.com';
 String currentUserUniversity = 'جامعة الموصل';
@@ -34,7 +54,6 @@ List<String> legalQuotesList = [
   '« المتهم بيء حتى تثبت إدانته »',
 ];
 int currentQuoteIndex = 0;
-
 // قاعدة بيانات جدول المحاضرات الدراسية الديناميكي
 Map<String, Map<String, Map<String, List<Map<String, String>>>>> fullScheduleDatabase = {
   'المرحلة الأولى': {
@@ -115,9 +134,11 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
-    debugPrint("Firebase init error: $e");
+    debugPrint("Firebase init bypassed/error: $e");
   }
   runApp(const MyApp());
 }
@@ -196,12 +217,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     Timer(const Duration(seconds: 3), () async {
       if (mounted) {
-        User? user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          isLoggedInGlobal = true;
-          currentUserEmail = user.email ?? currentUserEmail;
-          currentUserAccountName = user.displayName ?? currentUserAccountName;
-        }
+        try {
+          User? user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            isLoggedInGlobal = true;
+            currentUserEmail = user.email ?? currentUserEmail;
+            currentUserAccountName = user.displayName ?? currentUserAccountName;
+          }
+        } catch (_) {}
         Widget targetScreen = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => targetScreen));
       }
@@ -518,7 +541,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       },
     );
   }
-    void _addPost() {
+
+  void _addPost() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1624,7 +1648,9 @@ class ProfileScreen extends StatelessWidget {
             leading: const Icon(Icons.exit_to_app, color: Colors.red),
             title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
             onTap: () async {
-              await FirebaseAuth.instance.signOut();
+              try {
+                await FirebaseAuth.instance.signOut();
+              } catch (_) {}
               isLoggedInGlobal = false;
               if (context.mounted) {
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthScreen()));
