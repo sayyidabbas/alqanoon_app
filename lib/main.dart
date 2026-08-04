@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 String currentUserAccountName = 'سيدعباس عقيل';
 String currentUserEmail = 'abbas@law-platform.com';
 bool isLoggedInGlobal = false;
+bool notificationsEnabled = true;
 List<Map<String, dynamic>> savedPostsList = [];
 
 void main() {
@@ -67,7 +68,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // التوجيه التلقائي بعد 3 ثوانٍ
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
         Widget targetScreen = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
@@ -149,6 +149,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
   }
 }
+
 // ==========================================
 // 2. نظام تسجيل الدخول وإنشاء الحساب
 // ==========================================
@@ -360,7 +361,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 // ==========================================
-// 3. أ) شريط التنقل السفلي وشاشة الرئيسية
+// 3. شريط التنقل السفلي والأقسام
 // ==========================================
 class MainNavigationHolder extends StatefulWidget {
   const MainNavigationHolder({super.key});
@@ -405,7 +406,7 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
   }
 }
 
-// ----------------- 1. شاشة الرئيسية (الأخبار والمنشورات) -----------------
+// ----------------- 1. شاشة الرئيسية (الأخبار + الشريط الإعلاني) -----------------
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -414,6 +415,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final PageController _bannerController = PageController();
+  int _bannerIndex = 0;
+  Timer? _bannerTimer;
+
+  final List<String> _ads = [
+    '📣 إعلان هام: فتح باب التسجيل للدورة القانونية الشاملة لهذا الشهر',
+    '⚖️ خصم خاص على جميع الكتب التشريعية بمناسبة تدشين المنصة',
+    '📌 التبليغات الرسمية تُحدث يومياً تلقائياً عبر منصة القانون',
+  ];
+
   final List<Map<String, dynamic>> _posts = [
     {
       'id': '1',
@@ -430,6 +441,28 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (_bannerController.hasClients) {
+        _bannerIndex = (_bannerIndex + 1) % _ads.length;
+        _bannerController.animateToPage(
+          _bannerIndex,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerController.dispose();
+    super.dispose();
+  }
 
   void _sortPosts() {
     _posts.sort((a, b) {
@@ -642,118 +675,144 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.add_alert_rounded),
         label: const Text('نشر جديد'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _posts.length,
-        itemBuilder: (context, index) {
-          final post = _posts[index];
-          final isPinned = post['isPinned'] == true;
-          final isSaved = post['isSaved'] == true;
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: isPinned ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5) : BorderSide.none,
+      body: Column(
+        children: [
+          // الشريط الإعلاني المتحرك
+          Container(
+            height: 60,
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF1A1A1A), Color(0xFF333333)]),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFD4AF37), width: 1),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isPinned)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
-                          SizedBox(width: 4),
-                          Text('منشور مثبت في الأعلى', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
-                        ],
-                      ),
+            child: PageView.builder(
+              controller: _bannerController,
+              itemCount: _ads.length,
+              itemBuilder: (context, index) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Text(
+                      _ads[index],
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 13),
                     ),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: const Color(0xFF1A1A1A),
-                        child: Text(post['author'][0].toUpperCase(), style: const TextStyle(color: Color(0xFFD4AF37))),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(post['type'], style: TextStyle(fontSize: 10, color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue)),
-                          )
-                        ],
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
-                        onPressed: () => _toggleSave(index),
-                      ),
-                      IconButton(
-                        icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: isPinned ? const Color(0xFFD4AF37) : Colors.grey),
-                        onPressed: () => _togglePin(index),
-                      ),
-                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text(post['content'], style: const TextStyle(fontSize: 14)),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            post['isLiked'] = !post['isLiked'];
-                            post['likes'] += post['isLiked'] ? 1 : -1;
-                          });
-                        },
-                        icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
-                        label: Text('${post['likes']} إعجاب'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _showComments(index),
-                        icon: const Icon(Icons.comment_outlined, color: Colors.grey),
-                        label: Text('${post['comments'].length} تعليق'),
-                      ),
-                    ],
-                  )
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _posts.length,
+              itemBuilder: (context, index) {
+                final post = _posts[index];
+                final isPinned = post['isPinned'] == true;
+                final isSaved = post['isSaved'] == true;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: isPinned ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5) : BorderSide.none,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isPinned)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
+                                SizedBox(width: 4),
+                                Text('منشور مثبت في الأعلى', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
+                              ],
+                            ),
+                          ),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: const Color(0xFF1A1A1A),
+                              child: Text(post['author'][0].toUpperCase(), style: const TextStyle(color: Color(0xFFD4AF37))),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(post['type'], style: TextStyle(fontSize: 10, color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue)),
+                                )
+                              ],
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
+                              onPressed: () => _toggleSave(index),
+                            ),
+                            IconButton(
+                              icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: isPinned ? const Color(0xFFD4AF37) : Colors.grey),
+                              onPressed: () => _togglePin(index),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Text(post['content'], style: const TextStyle(fontSize: 14)),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  post['isLiked'] = !post['isLiked'];
+                                  post['likes'] += post['isLiked'] ? 1 : -1;
+                                });
+                              },
+                              icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
+                              label: Text('${post['likes']} إعجاب'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _showComments(index),
+                              icon: const Icon(Icons.comment_outlined, color: Colors.grey),
+                              label: Text('${post['comments'].length} تعليق'),
+                            ),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-// ==========================================
-// 3. ب) شاشة الخدمات، الكتب، والملف الشخصي
-// ==========================================
-
-// ----------------- 2. شاشة الخدمات -----------------
+// ----------------- 2. شاشة الخدمات (مكتبة الحقوق وسوق الكتب) -----------------
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> services = [
-      {'title': 'المكتبة التشريعية والقوانين', 'icon': Icons.gavel, 'desc': 'تصفح النصوص والقوانين الرسمية'},
-      {'title': 'طلب استشارة قانونية', 'icon': Icons.support_agent, 'desc': 'تواصل مباشر مع المستشارين'},
-      {'title': 'حاسبة الرسوم القضائية', 'icon': Icons.calculate, 'desc': 'احتساب التكاليف والرسوم'},
-      {'title': 'نماذج وصيغ العقود', 'icon': Icons.description, 'desc': 'نماذج جاهزة للتحميل والاستخدام'},
+      {'title': 'مكتبة الحقوق', 'icon': Icons.gavel, 'desc': 'تصفح كافة القوانين والتشريعات الحقوقية'},
+      {'title': 'سوق الكتب', 'icon': Icons.storefront, 'desc': 'عرض وشراء الكتب المصادر القانونية'},
     ];
 
     return Scaffold(
@@ -766,28 +825,29 @@ class ServicesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
         ),
         itemCount: services.length,
         itemBuilder: (context, index) {
           final service = services[index];
           return Card(
+            elevation: 3,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خدمة "${service['title']}" قيد التفعيل')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('قسم "${service['title']}" قيد الفتح')));
               },
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(service['icon'], size: 40, color: const Color(0xFFD4AF37)),
-                    const SizedBox(height: 10),
-                    Text(service['title'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    const SizedBox(height: 4),
+                    Icon(service['icon'], size: 48, color: const Color(0xFFD4AF37)),
+                    const SizedBox(height: 12),
+                    Text(service['title'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 6),
                     Text(service['desc'], textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
                 ),
@@ -800,9 +860,96 @@ class ServicesScreen extends StatelessWidget {
   }
 }
 
-// ----------------- 3. شاشة الكتب والـ PDF -----------------
-class BooksScreen extends StatelessWidget {
+// ----------------- 3. شاشة الكتب (مع ميزة الرفع والوصف) -----------------
+class BooksScreen extends StatefulWidget {
   const BooksScreen({super.key});
+
+  @override
+  State<BooksScreen> createState() => _BooksScreenState();
+}
+
+class _BooksScreenState extends State<BooksScreen> {
+  final List<Map<String, String>> _books = [
+    {
+      'title': 'شرح القانون المدني',
+      'desc': 'كتاب شامل يشرح جميع نصوص ومواد القانون المدني والالتزامات.',
+      'fileName': 'civil_law.pdf'
+    },
+    {
+      'title': 'قانون العقوبات والإجراءات الجزائية',
+      'desc': 'مرجع قانوني يحتوي على العقوبات والأنظمة الجنائية المعمول بها.',
+      'fileName': 'penal_code.pdf'
+    },
+  ];
+
+  void _uploadNewBook() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        final titleCtrl = TextEditingController();
+        final descCtrl = TextEditingController();
+        String selectedFile = '';
+
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            top: 20,
+            left: 20,
+            right: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('رفع كتاب / ملف جديد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'اسم الكتاب', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'وصف توضيحي للملف', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.upload_file, color: Color(0xFFD4AF37)),
+                label: Text(selectedFile.isEmpty ? 'اختيار ملف PDF' : selectedFile),
+                onPressed: () {
+                  setState(() {
+                    selectedFile = 'book_document.pdf';
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار الملف بنجاح')));
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
+                onPressed: () {
+                  if (titleCtrl.text.isNotEmpty) {
+                    setState(() {
+                      _books.insert(0, {
+                        'title': titleCtrl.text,
+                        'desc': descCtrl.text,
+                        'fileName': selectedFile.isNotEmpty ? selectedFile : 'document.pdf',
+                      });
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر ورفع الكتاب بنجاح')));
+                  }
+                },
+                child: const Text('رفع وحفظ', style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -812,22 +959,45 @@ class BooksScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFFD4AF37),
+        foregroundColor: Colors.black,
+        onPressed: _uploadNewBook,
+        icon: const Icon(Icons.picture_as_pdf),
+        label: const Text('رفع كتاب'),
+      ),
       body: ListView.builder(
         padding: const EdgeInsets.all(12),
-        itemCount: 3,
+        itemCount: _books.length,
         itemBuilder: (context, index) {
+          final book = _books[index];
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 36),
-              title: Text('الكتاب القانوني رقم ${index + 1}'),
-              subtitle: const Text('شرح القوانين والأنظمة - صيغة PDF'),
-              trailing: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري فتح الكتاب...')));
-                },
-                child: const Text('قراءة', style: TextStyle(color: Color(0xFFD4AF37))),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf, color: Colors.red, size: 36),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(book['title']!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('جاري فتح ${book['title']}...')));
+                        },
+                        child: const Text('قراءة', style: TextStyle(color: Color(0xFFD4AF37))),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(book['desc']!, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                ],
               ),
             ),
           );
@@ -837,7 +1007,7 @@ class BooksScreen extends StatelessWidget {
   }
 }
 
-// ----------------- 4. شاشة حسابي (Profile Page) -----------------
+// ----------------- 4. شاشة حسابي (Profile Page المتكاملة) -----------------
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -846,6 +1016,40 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  void _editProfile() {
+    final nameCtrl = TextEditingController(text: currentUserAccountName);
+    final emailCtrl = TextEditingController(text: currentUserEmail);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تعديل الملف الشخصي'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'الاسم')),
+            const SizedBox(height: 10),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'البريد الإلكتروني')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                currentUserAccountName = nameCtrl.text;
+                currentUserEmail = emailCtrl.text;
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث البيانات الشخصية')));
+            },
+            child: const Text('حفظ'),
+          )
+        ],
+      ),
+    );
+  }
+
   void _changePassword() {
     showDialog(
       context: context,
@@ -904,7 +1108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.camera_alt, size: 16, color: Colors.black),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('إمكانية تغيير الصورة الشخصية')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تغيير الصورة الشخصية')));
                     },
                   ),
                 ),
@@ -913,7 +1117,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             Text(currentUserAccountName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             Text(currentUserEmail, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
+              icon: const Icon(Icons.edit, color: Color(0xFFD4AF37), size: 18),
+              label: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
+              onPressed: _editProfile,
+            ),
+            const SizedBox(height: 20),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
@@ -933,11 +1144,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
+            SwitchListTile(
+              secondary: const Icon(Icons.notifications_active, color: Color(0xFFD4AF37)),
+              title: const Text('إشعارات الهاتف'),
+              value: notificationsEnabled,
+              onChanged: (val) {
+                setState(() {
+                  notificationsEnabled = val;
+                });
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
               title: const Text('تغيير كلمة المرور'),
               onTap: _changePassword,
             ),
+            ListTile(
+              leading: const Icon(Icons.headset_mic, color: Color(0xFFD4AF37)),
+              title: const Text('الدعم الفني والاتصال بنا'),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('الدعم الفني'),
+                    content: const Text('يمكنك التواصل مع إدارة منصة القانون عبر البريد:\nsupport@law-platform.com'),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Color(0xFFD4AF37)),
+              title: const Text('حول المنصة والسياسات'),
+              onTap: () {
+                showAboutDialog(
+                  context: context,
+                  applicationName: 'منصة القانون',
+                  applicationVersion: '1.0.0',
+                  applicationLegalese: 'جميع الحقوق محفوظة © سيدعباس عقيل الحسيني',
+                );
+              },
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.exit_to_app, color: Colors.red),
               title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
