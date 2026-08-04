@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 // متغيرات عامة لحفظ حالة الجلسة والبيانات
 String currentUserAccountName = 'سيدعباس عقيل';
 String currentUserEmail = 'abbas@law-platform.com';
+String currentUserUniversity = 'جامعة الموصل';
+String currentUserCollege = 'كلية الحقوق';
 bool isLoggedInGlobal = false;
 bool notificationsEnabled = true;
 bool isDarkMode = false;
@@ -16,23 +18,49 @@ List<String> bannerAdsList = [
   '📌 متاح الآن ملخصات المادة القانونية للمراحل الأربع',
 ];
 
-// هيكلية المواد الدراسية والفروع المخصصة داخل كل مادة
+// هيكلية المواد الدراسية المحدثة مع دعم حقول الملفات والتصنيف الفخم
 Map<String, List<Map<String, dynamic>>> academicStagesData = {
   'المرحلة الأولى': [
     {
       'title': 'المدخل لدراسة القانون',
       'categories': [
-        {'name': 'الملازم', 'files': ['ملزمة الكورس الأول - أ.د. علي']},
-        {'name': 'الكتاب المنهجي', 'files': ['كتاب المدخل لدراسة القانون PDF']},
-        {'name': 'الأسئلة والملخصات', 'files': ['ملخص نظرية الحق', 'أسئلة شهرية 2024']},
+        {
+          'name': 'الملازم',
+          'files': [
+            {'fileName': 'ملزمة الكورس الأول - أ.د. علي', 'filePath': 'demo_path.pdf'}
+          ]
+        },
+        {
+          'name': 'الكتاب المنهجي',
+          'files': [
+            {'fileName': 'كتاب المدخل لدراسة القانون PDF', 'filePath': 'demo_book.pdf'}
+          ]
+        },
+        {
+          'name': 'الأسئلة والملخصات',
+          'files': [
+            {'fileName': 'ملخص نظرية الحق', 'filePath': 'summary.pdf'},
+            {'fileName': 'أسئلة شهرية 2024', 'filePath': 'exam.pdf'}
+          ]
+        },
       ]
     },
     {
       'title': 'القانون الدستوري',
       'categories': [
         {'name': 'الملازم', 'files': []},
-        {'name': 'الكتاب المنهجي', 'files': ['النظام الدستوري المقارن']},
-        {'name': 'الأسئلة والملخصات', 'files': ['حلول أسئلة السنوات السابقة']},
+        {
+          'name': 'الكتاب المنهجي',
+          'files': [
+            {'fileName': 'النظام الدستوري المقارن', 'filePath': 'const.pdf'}
+          ]
+        },
+        {
+          'name': 'الأسئلة والملخصات',
+          'files': [
+            {'fileName': 'حلول أسئلة السنوات السابقة', 'filePath': 'answers.pdf'}
+          ]
+        },
       ]
     },
   ],
@@ -40,7 +68,12 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
     {
       'title': 'القانون المدني (الالتزامات)',
       'categories': [
-        {'name': 'الملازم', 'files': ['شرح مصادر الالتزام']},
+        {
+          'name': 'الملازم',
+          'files': [
+            {'fileName': 'شرح مصادر الالتزام', 'filePath': 'obligations.pdf'}
+          ]
+        },
         {'name': 'الكتاب المنهجي', 'files': []},
         {'name': 'الأسئلة والملخصات', 'files': []},
       ]
@@ -50,7 +83,12 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
     {
       'title': 'قانون العقوبات الخاص',
       'categories': [
-        {'name': 'الملازم', 'files': ['جرائم الأموال والأشخاص']},
+        {
+          'name': 'الملازم',
+          'files': [
+            {'fileName': 'جرائم الأموال والأشخاص', 'filePath': 'penal.pdf'}
+          ]
+        },
         {'name': 'الكتاب المنهجي', 'files': []},
         {'name': 'الأسئلة والملخصات', 'files': []},
       ]
@@ -60,7 +98,12 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
     {
       'title': 'القانون الدولي الخاص',
       'categories': [
-        {'name': 'الملازم', 'files': ['أحكام الجنسية والموطن']},
+        {
+          'name': 'الملازم',
+          'files': [
+            {'fileName': 'أحكام الجنسية والموطن', 'filePath': 'int_law.pdf'}
+          ]
+        },
         {'name': 'الكتاب المنهجي', 'files': []},
         {'name': 'الأسئلة والملخصات', 'files': []},
       ]
@@ -122,7 +165,8 @@ class _MyAppState extends State<MyApp> {
       home: const SplashScreen(),
     );
   }
-}// ==========================================
+}
+// ==========================================
 // 1. الواجهة الترحيبية (Splash Screen)
 // ==========================================
 class SplashScreen extends StatefulWidget {
@@ -193,7 +237,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 // ==========================================
-// 2. تسجيل الدخول
+// 2. تسجيل الدخول والتسجيل المعدل (جامعة وكلية يدوياً)
 // ==========================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -207,11 +251,16 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _universityController = TextEditingController(text: 'جامعة الموصل');
+  final _collegeController = TextEditingController(text: 'كلية الحقوق');
 
   void _submitAuth() {
     isLoggedInGlobal = true;
     if (_nameController.text.isNotEmpty) currentUserAccountName = _nameController.text;
     if (_emailController.text.isNotEmpty) currentUserEmail = _emailController.text;
+    if (_universityController.text.isNotEmpty) currentUserUniversity = _universityController.text;
+    if (_collegeController.text.isNotEmpty) currentUserCollege = _collegeController.text;
+
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainNavigationHolder()));
   }
 
@@ -224,27 +273,36 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 40),
-              const Icon(Icons.gavel_rounded, size: 60, color: Color(0xFFD4AF37)),
               const SizedBox(height: 20),
-              Text(isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد', textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 30),
+              const Icon(Icons.gavel_rounded, size: 60, color: Color(0xFFD4AF37)),
+              const SizedBox(height: 16),
+              Text(isLogin ? 'تسجيل الدخول' : 'إنشاء حساب طالب جديد', textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
               if (!isLogin) ...[
-                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'اسم الحساب', border: OutlineInputBorder())),
-                const SizedBox(height: 16),
+                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(controller: _universityController, decoration: const InputDecoration(labelText: 'اسم الجامعة (يدوياً)', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(controller: _collegeController, decoration: const InputDecoration(labelText: 'اسم الكلية (يدوياً)', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
               ],
               TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'البريد الإلكتروني', border: OutlineInputBorder())),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور', border: OutlineInputBorder())),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
                   onPressed: _submitAuth,
-                  child: Text(isLogin ? 'دخول' : 'تسجيل'),
+                  child: Text(isLogin ? 'دخول' : 'تسجيل الحساب'),
                 ),
               ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => setState(() => isLogin = !isLogin),
+                child: Text(isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك'),
+              )
             ],
           ),
         ),
@@ -252,7 +310,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 }
-
 // ==========================================
 // 3. شريط التنقل السفلي والواجهة الرئيسية
 // ==========================================
@@ -382,7 +439,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  void _addPost() {
+  void _editPost(int index) {
+    final titleCtrl = TextEditingController(text: _posts[index]['title']);
+    final contentCtrl = TextEditingController(text: _posts[index]['content']);
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('تعديل التبليغ'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'العنوان', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: contentCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'المحتوى', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              if (titleCtrl.text.isNotEmpty) {
+                setState(() {
+                  _posts[index]['title'] = titleCtrl.text;
+                  _posts[index]['content'] = contentCtrl.text;
+                });
+                Navigator.pop(c);
+              }
+            },
+            child: const Text('حفظ التعديلات'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _deletePost(int index) {
+    setState(() {
+      _posts.removeAt(index);
+    });
+  }
+    void _addPost() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -458,83 +554,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  void _showComments(int index) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        final commentController = TextEditingController();
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Container(
-                height: 400,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    const Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    Expanded(
-                      child: _posts[index]['comments'].isEmpty
-                          ? const Center(child: Text('لا توجد تعليقات بعد'))
-                          : ListView.builder(
-                              itemCount: _posts[index]['comments'].length,
-                              itemBuilder: (context, i) {
-                                final comment = _posts[index]['comments'][i];
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFF1A1A1A),
-                                    child: Text(
-                                      comment['userName'][0].toUpperCase(),
-                                      style: const TextStyle(color: Color(0xFFD4AF37)),
-                                    ),
-                                  ),
-                                  title: Text(comment['userName'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  subtitle: Text(comment['text']),
-                                );
-                              },
-                            ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: commentController,
-                            decoration: const InputDecoration(
-                              hintText: 'اكتب تعليقاً...',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: Color(0xFFD4AF37)),
-                          onPressed: () {
-                            if (commentController.text.trim().isNotEmpty) {
-                              setState(() {
-                                _posts[index]['comments'].add({
-                                  'userName': currentUserAccountName,
-                                  'text': commentController.text.trim(),
-                                });
-                              });
-                              setModalState(() {});
-                              commentController.clear();
-                            }
-                          },
-                        )
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-    void _manageAdsDialog() {
+  void _manageAdsDialog() {
     showDialog(
       context: context,
       builder: (context) {
@@ -584,31 +604,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                                      onPressed: () {
-                                        final editCtrl = TextEditingController(text: bannerAdsList[index]);
-                                        showDialog(
-                                          context: context,
-                                          builder: (c) => AlertDialog(
-                                            title: const Text('تعديل الإعلان'),
-                                            content: TextField(controller: editCtrl),
-                                            actions: [
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  setState(() {
-                                                    bannerAdsList[index] = editCtrl.text;
-                                                  });
-                                                  setDialogState(() {});
-                                                  Navigator.pop(c);
-                                                },
-                                                child: const Text('حفظ'),
-                                              )
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
                                     IconButton(
                                       icon: const Icon(Icons.delete, size: 18, color: Colors.red),
                                       onPressed: () {
@@ -684,7 +679,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFD4AF37), width: 1.2),
-                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
                   ),
                   child: PageView.builder(
                     controller: _bannerController,
@@ -720,27 +714,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: isPinned ? const BorderSide(color: Color(0xFFD4AF37), width: 1.5) : BorderSide.none,
-                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (isPinned)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 8.0),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.push_pin, size: 16, color: Color(0xFFD4AF37)),
-                                    SizedBox(width: 4),
-                                    Text('منشور مثبت في الأعلى', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
-                                  ],
-                                ),
-                              ),
                             Row(
                               children: [
                                 CircleAvatar(
@@ -752,53 +730,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(post['author'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: post['type'] == 'تبليغ رسمى' ? Colors.red.shade100 : Colors.blue.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(post['type'], style: TextStyle(fontSize: 10, color: post['type'] == 'تبليغ رسمى' ? Colors.red : Colors.blue)),
-                                    )
+                                    Text(post['type'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   ],
                                 ),
                                 const Spacer(),
-                                IconButton(
-                                  icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey),
-                                  onPressed: () => _toggleSave(index),
-                                ),
-                                IconButton(
-                                  icon: Icon(isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: isPinned ? const Color(0xFFD4AF37) : Colors.grey),
-                                  onPressed: () => _togglePin(index),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (val) {
+                                    if (val == 'edit') _editPost(index);
+                                    if (val == 'delete') _deletePost(index);
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 18), SizedBox(width: 6), Text('تعديل التبليغ')])),
+                                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 6), Text('حذف التبليغ')])),
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             Text(post['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
-                            Text('${post['content']}.', textDirection: TextDirection.rtl, style: const TextStyle(fontSize: 14)),
-                            const SizedBox(height: 12),
-                            const Divider(),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      post['isLiked'] = !post['isLiked'];
-                                      post['likes'] += post['isLiked'] ? 1 : -1;
-                                    });
-                                  },
-                                  icon: Icon(post['isLiked'] ? Icons.favorite : Icons.favorite_border, color: post['isLiked'] ? Colors.red : Colors.grey),
-                                  label: Text('${post['likes']} إعجاب'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => _showComments(index),
-                                  icon: const Icon(Icons.comment_outlined, color: Colors.grey),
-                                  label: Text('${post['comments'].length} تعليق'),
-                                ),
-                              ],
-                            )
+                            Text('${post['content']}.', textDirection: TextDirection.rtl),
                           ],
                         ),
                       ),
@@ -813,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 }
-// ----------------- 2. شاشة الخدمات (مكتبة الحقوق + سوق الكتب) -----------------
+// ----------------- 2. شاشة الخدمات والمكتبة المحدثة بالهيكلية الفخمة -----------------
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
@@ -836,25 +788,10 @@ class ServicesScreen extends StatelessWidget {
                 contentPadding: const EdgeInsets.all(16),
                 leading: const Icon(Icons.account_balance, size: 40, color: Color(0xFFD4AF37)),
                 title: const Text('مكتبة الحقوق (المناهج والمراحل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                subtitle: const Text('تصفح المواد والمحاضرات حسب المرحلة الدراسية'),
+                subtitle: const Text('تصفح المواد والمحاضرات الهيكلية المحدثة'),
                 trailing: const Icon(Icons.arrow_forward_ios),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (c) => const LawLibraryStagesScreen()));
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
-                leading: const Icon(Icons.storefront, size: 40, color: Color(0xFFD4AF37)),
-                title: const Text('سوق الكتب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                subtitle: const Text('شراء وتصفح الكتب والمصادر القانونية'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قسم سوق الكتب قيد التفعيل')));
                 },
               ),
             ),
@@ -865,7 +802,6 @@ class ServicesScreen extends StatelessWidget {
   }
 }
 
-// شاشة عرض المراحل الأربع لمكتبة الحقوق
 class LawLibraryStagesScreen extends StatefulWidget {
   const LawLibraryStagesScreen({super.key});
 
@@ -880,7 +816,7 @@ class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text('إضافة مادة لـ $stageName'),
-        content: TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المادة الدراسية', border: OutlineInputBorder())),
+        content: TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder())),
         actions: [
           ElevatedButton(
             onPressed: () {
@@ -929,12 +865,6 @@ class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
     );
   }
 
-  void _deleteSubject(String stageName, int index) {
-    setState(() {
-      academicStagesData[stageName]!.removeAt(index);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -957,16 +887,20 @@ class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
                 var subj = entry.value;
                 return ListTile(
                   title: Text(subj['title'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('الفروع: ${subj['categories'].length} فروع مخصصة'),
+                  subtitle: Text('الفروع المتاحة: ${subj['categories'].length}'),
                   trailing: PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert),
-                    onSelected: (value) {
-                      if (value == 'edit') _editSubject(stage, idx);
-                      if (value == 'delete') _deleteSubject(stage, idx);
+                    onSelected: (val) {
+                      if (val == 'edit') _editSubject(stage, idx);
+                      if (val == 'delete') {
+                        setState(() {
+                          academicStagesData[stage]!.removeAt(idx);
+                        });
+                      }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, color: Colors.blue, size: 18), SizedBox(width: 8), Text('تعديل المادة')])),
-                      const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text('حذف المادة')])),
+                      const PopupMenuItem(value: 'edit', child: Text('تعديل المادة')),
+                      const PopupMenuItem(value: 'delete', child: Text('حذف المادة')),
                     ],
                   ),
                   onTap: () {
@@ -981,7 +915,7 @@ class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
     );
   }
 }
-// تفاصيل الفروع داخل المادة (الملازم، الكتاب المنهجي، الأسئلة والملخصات)
+// الشاشة المحدثة للفروع والرفع الفعلي للملفات
 class SubjectCategoriesScreen extends StatefulWidget {
   final Map<String, dynamic> subjectData;
   const SubjectCategoriesScreen({super.key, required this.subjectData});
@@ -991,50 +925,53 @@ class SubjectCategoriesScreen extends StatefulWidget {
 }
 
 class _SubjectCategoriesScreenState extends State<SubjectCategoriesScreen> {
-  void _addCategory() {
-    final catCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('إضافة فرع جديد للمادة'),
-        content: TextField(controller: catCtrl, decoration: const InputDecoration(labelText: 'اسم الفرع (مثال: أبحاث ورسائل)', border: OutlineInputBorder())),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              if (catCtrl.text.isNotEmpty) {
-                setState(() {
-                  widget.subjectData['categories'].add({'name': catCtrl.text, 'files': []});
-                });
-                Navigator.pop(c);
-              }
-            },
-            child: const Text('إضافة'),
-          )
-        ],
-      ),
-    );
-  }
+  void _uploadRealFileToCategory(Map<String, dynamic> category) {
+    final titleCtrl = TextEditingController();
+    String simulatedPath = '';
 
-  void _addFileToCategory(Map<String, dynamic> category) {
-    final fileCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text('إضافة ملف لـ ${category['name']}'),
-        content: TextField(controller: fileCtrl, decoration: const InputDecoration(labelText: 'اسم الملف أو الملخص', border: OutlineInputBorder())),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              if (fileCtrl.text.isNotEmpty) {
-                setState(() {
-                  category['files'].add(fileCtrl.text);
-                });
-                Navigator.pop(c);
-              }
-            },
-            child: const Text('رفع وحفظ'),
-          )
-        ],
+      builder: (c) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            title: Text('إرفاق وررفع ملف لـ ${category['name']}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم أو عنوان الملف المرفوع', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
+                  icon: const Icon(Icons.attach_file),
+                  label: Text(simulatedPath.isEmpty ? 'اختر ملف PDF من الهاتف' : 'تم اختيار: document.pdf'),
+                  onPressed: () {
+                    setDlgState(() {
+                      simulatedPath = '/storage/emulated/0/Download/law_file.pdf';
+                    });
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                onPressed: () {
+                  if (titleCtrl.text.isNotEmpty) {
+                    setState(() {
+                      category['files'].add({
+                        'fileName': titleCtrl.text,
+                        'filePath': simulatedPath.isEmpty ? 'default_path.pdf' : simulatedPath,
+                      });
+                    });
+                    Navigator.pop(c);
+                  }
+                },
+                child: const Text('تأكيد الرفع'),
+              )
+            ],
+          );
+        },
       ),
     );
   }
@@ -1048,13 +985,6 @@ class _SubjectCategoriesScreenState extends State<SubjectCategoriesScreen> {
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFFD4AF37),
-        foregroundColor: Colors.black,
-        onPressed: _addCategory,
-        icon: const Icon(Icons.create_new_folder),
-        label: const Text('فرع جديد'),
-      ),
       body: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: categories.length,
@@ -1064,20 +994,22 @@ class _SubjectCategoriesScreenState extends State<SubjectCategoriesScreen> {
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ExpansionTile(
-              leading: const Icon(Icons.folder, color: Color(0xFFD4AF37)),
-              title: Text(cat['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              leading: const Icon(Icons.folder_special, color: Color(0xFFD4AF37)),
+              title: Text(cat['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${files.length} ملفات مرفوعة'),
               trailing: IconButton(
-                icon: const Icon(Icons.add, color: Color(0xFFD4AF37)),
-                onPressed: () => _addFileToCategory(cat),
+                icon: const Icon(Icons.upload_file, color: Color(0xFFD4AF37)),
+                onPressed: () => _uploadRealFileToCategory(cat),
               ),
               children: files.isEmpty
-                  ? [const Padding(padding: EdgeInsets.all(8.0), child: Text('لا توجد ملفات مرفوعة في هذا الفرع'))]
+                  ? [const Padding(padding: EdgeInsets.all(8.0), child: Text('لا توجد ملفات مرفوعة حالياً'))]
                   : files.asMap().entries.map((fEntry) {
                       int fIdx = fEntry.key;
-                      String fileName = fEntry.value;
+                      var fileMap = fEntry.value;
                       return ListTile(
                         leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                        title: Text(fileName),
+                        title: Text(fileMap['fileName']),
+                        subtitle: Text('المسار: ${fileMap['filePath']}', style: const TextStyle(fontSize: 10)),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                           onPressed: () {
@@ -1104,12 +1036,12 @@ class BooksScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('مكتبة الكتب والـ PDF'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
-      body: const Center(child: Text('قسم رفع وتصفح الكتب المصدرية')),
+      body: const Center(child: Text('قسم المصادر والكتب القانونية')),
     );
   }
 }
 
-// ----------------- 4. شاشة حسابي مع زر تحويل الوضع الداكن -----------------
+// ----------------- 4. شاشة الملف الشخصي الطالب المتكاملة -----------------
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -1121,18 +1053,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الملف الشخصي'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('الملف الشخصي'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           CircleAvatar(
             radius: 40,
             backgroundColor: const Color(0xFF1A1A1A),
-            child: Text(currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 30, color: Color(0xFFD4AF37))),
+            child: Text(currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'س', style: const TextStyle(fontSize: 30, color: Color(0xFFD4AF37))),
           ),
           const SizedBox(height: 10),
           Text(currentUserAccountName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           Text(currentUserEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 6),
+          Text('$currentUserUniversity - $currentUserCollege', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
           const Divider(height: 30),
           SwitchListTile(
             secondary: const Icon(Icons.dark_mode, color: Color(0xFFD4AF37)),
@@ -1141,6 +1079,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onChanged: (val) {
               MyApp.of(context).toggleTheme();
             },
+          ),
+          ListTile(
+            leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
+            title: const Text('المنشورات المحفوظة'),
+            trailing: Text('${savedPostsList.length}'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.help_outline, color: Colors.blue),
+            title: const Text('تواصل مع الدعم الفني'),
           ),
           ListTile(
             leading: const Icon(Icons.exit_to_app, color: Colors.red),
