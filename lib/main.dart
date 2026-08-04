@@ -1407,3 +1407,111 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
+// ==========================================
+// شاشة مكتبة الحقوق (المناهج والمراحل)
+// ==========================================
+class LawLibraryStagesScreen extends StatefulWidget {
+  const LawLibraryStagesScreen({super.key});
+
+  @override
+  State<LawLibraryStagesScreen> createState() => _LawLibraryStagesScreenState();
+}
+
+class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('مكتبة الحقوق - المراحل الدراسية'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: academicStagesData.keys.map((stageName) {
+          final subjects = academicStagesData[stageName] ?? [];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ExpansionTile(
+              leading: const Icon(Icons.school, color: Color(0xFFD4AF37)),
+              title: Text(stageName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              subtitle: Text('${subjects.length} مواد دراسية'),
+              children: subjects.map((subj) {
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  leading: const Icon(Icons.book, color: Colors.grey),
+                  title: Text(subj['title'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (c) => StageSubjectDetailsScreen(subjectData: subj),
+                      ),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class StageSubjectDetailsScreen extends StatefulWidget {
+  final Map<String, dynamic> subjectData;
+  const StageSubjectDetailsScreen({super.key, required this.subjectData});
+
+  @override
+  State<StageSubjectDetailsScreen> createState() => _StageSubjectDetailsScreenState();
+}
+
+class _StageSubjectDetailsScreenState extends State<StageSubjectDetailsScreen> {
+  @override
+  Widget build(BuildContext context) {
+    List categories = widget.subjectData['categories'] ?? [];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.subjectData['title']),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: categories.length,
+        itemBuilder: (context, idx) {
+          final cat = categories[idx];
+          List files = cat['files'] ?? [];
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ExpansionTile(
+              leading: const Icon(Icons.folder, color: Color(0xFFD4AF37)),
+              title: Text(cat['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${files.length} ملفات'),
+              children: files.isEmpty
+                  ? [const Padding(padding: EdgeInsets.all(12), child: Text('لا توجد ملفات حالياً'))]
+                  : files.map<Widget>((file) {
+                      return ListTile(
+                        leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                        title: Text(file['fileName']),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.download, color: Color(0xFFD4AF37)),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('جاري تحميل: ${file['fileName']}')),
+                            );
+                          },
+                        ),
+                      );
+                    }).toList(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
