@@ -26,30 +26,40 @@ List<Map<String, dynamic>> countdownEventsList = [
 
 // قائمة الحكم والمواد القانونية القابلة للإدارة
 List<String> legalQuotesList = [
-  '« لا جَرِيمَةَ وَلا عُقُوبَةَ إِلاّ بِنَصٍّ »',
+  '« لا جَرِيمَةَ وَلا عُقُوبَةَ إِلاّ بينَصٍّ »',
   '« العقد شريعة المتعاقدين »',
   '« المتهم بيء حتى تثبت إدانته »',
 ];
 int currentQuoteIndex = 0;
 
-// بيانات جدول المحاضرات الأسبوعي القابل للإدارة
-Map<String, List<Map<String, String>>> weeklyScheduleData = {
-  'الأحد': [
-    {'subject': 'المدخل لدراسة القانون', 'time': '08:30 ص - 10:30 ص', 'hall': 'القاعة 1', 'professor': 'أ.د. علي الحسيني'},
-    {'subject': 'القانون الدستوري', 'time': '10:45 ص - 12:45 م', 'hall': 'المدرج الكبير', 'professor': 'د. خليل إبراهيم'},
-  ],
-  'الإثنين': [
-    {'subject': 'القانون المدني (التزامات)', 'time': '09:00 ص - 11:00 ص', 'hall': 'القاعة 3', 'professor': 'د. أسامة محمود'},
-  ],
-  'الثلاثاء': [
-    {'subject': 'قانون العقوبات العام', 'time': '08:30 ص - 10:30 ص', 'hall': 'القاعة 2', 'professor': 'أ.د. حسن فاضل'},
-  ],
-  'الأربعاء': [
-    {'subject': 'القانون الدولي العام', 'time': '11:00 ص - 01:00 م', 'hall': 'المدرج A', 'professor': 'د. زينب عبد السلام'},
-  ],
-  'الخميس': [
-    {'subject': 'التطبيق القضائي والمحاكمة الصورية', 'time': '10:00 ص - 12:00 م', 'hall': 'قاعة المحاكمة الصورية', 'professor': 'القاضي أحمد سالم'},
-  ],
+// قاعدة بيانات جدول المحاضرات الدراسية الديناميكي (مراحل - شعب - أيام)
+Map<String, Map<String, Map<String, List<Map<String, String>>>>> fullScheduleDatabase = {
+  'المرحلة الأولى': {
+    'الشعبة الأولى (أ)': {
+      'الأحد': [
+        {'subject': 'المدخل لدراسة القانون', 'time': '08:30 ص - 10:30 ص', 'hall': 'القاعة 1', 'professor': 'أ.د. علي الحسيني'},
+      ],
+      'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+    },
+    'الشعبة الثانية (ب)': {
+      'الأحد': [], 'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+    }
+  },
+  'المرحلة الثانية': {
+    'الشعبة الأولى (أ)': {
+      'الأحد': [], 'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+    }
+  },
+  'المرحلة الثالثة': {
+    'الشعبة الأولى (أ)': {
+      'الأحد': [], 'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+    }
+  },
+  'المرحلة الرابعة': {
+    'الشعبة الأولى (أ)': {
+      'الأحد': [], 'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+    }
+  },
 };
 
 // هيكلية المواد الدراسية لمكتبة الحقوق
@@ -225,7 +235,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 // ==========================================
-// 2. تسجيل الدخول والتسجيل المعدل (جامعة وكلية يدوياً)
+// 2. تسجيل الدخول والتسجيل
 // ==========================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -773,7 +783,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           Column(
             children: [
-              // 1. حكمة اليوم القانونية
               if (legalQuotesList.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.all(8),
@@ -806,7 +815,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
 
-              // 2. شريط الأحداث العداد التنازلي
               if (countdownEventsList.isNotEmpty)
                 SizedBox(
                   height: 45,
@@ -831,7 +839,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
 
-              // 3. أزرار التصفية الفئات (Filter Chips)
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -855,7 +862,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 4. عرض قائمة المنشورات
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(12),
@@ -998,7 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 // ==========================================
-// 4. شاشة الخدمات والكلية المحدثة بالكامل
+// 4. شاشة الخدمات والكلية المحدثة
 // ==========================================
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -1014,7 +1020,6 @@ class ServicesScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // 1. كارت مكتبة الحقوق
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1030,8 +1035,6 @@ class ServicesScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // 2. كارت جدول المحاضرات الأسبوعي
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1039,16 +1042,14 @@ class ServicesScreen extends StatelessWidget {
               contentPadding: const EdgeInsets.all(16),
               leading: const Icon(Icons.calendar_month, size: 40, color: Colors.blue),
               title: const Text('جدول المحاضرات الأسبوعي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              subtitle: const Text('متابعة أوقات المحاضرات والقاعات والأستاذ'),
+              subtitle: const Text('متابعة المراحل والشعب وأوقات المحاضرات والقاعات'),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (c) => const WeeklyScheduleScreen()));
+                Navigator.push(context, MaterialPageRoute(builder: (c) => const DynamicWeeklyScheduleScreen()));
               },
             ),
           ),
           const SizedBox(height: 12),
-
-          // 3. كارت منتدى الطلبة والدردشة
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1069,15 +1070,151 @@ class ServicesScreen extends StatelessWidget {
   }
 }
 
-// ----------------- شاشة جدول المحاضرات الأسبوعي -----------------
-class WeeklyScheduleScreen extends StatefulWidget {
-  const WeeklyScheduleScreen({super.key});
+// ----------------- هيكل جدول المحاضرات الديناميكي (مراحل وشعب) -----------------
+class DynamicWeeklyScheduleScreen extends StatefulWidget {
+  const DynamicWeeklyScheduleScreen({super.key});
 
   @override
-  State<WeeklyScheduleScreen> createState() => _WeeklyScheduleScreenState();
+  State<DynamicWeeklyScheduleScreen> createState() => _DynamicWeeklyScheduleScreenState();
 }
 
-class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
+class _DynamicWeeklyScheduleScreenState extends State<DynamicWeeklyScheduleScreen> {
+  String selectedStage = 'المرحلة الأولى';
+
+  void _addSectionDialog() {
+    final secCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('إضافة شعبة جديدة لـ $selectedStage'),
+        content: TextField(controller: secCtrl, decoration: const InputDecoration(labelText: 'اسم الشعبة (مثلاً: الشعبة الثالثة ج)', border: OutlineInputBorder())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+            onPressed: () {
+              if (secCtrl.text.isNotEmpty) {
+                setState(() {
+                  fullScheduleDatabase[selectedStage]![secCtrl.text] = {
+                    'الأحد': [], 'الإثنين': [], 'الثلاثاء': [], 'الأربعاء': [], 'الخميس': [],
+                  };
+                });
+                Navigator.pop(c);
+              }
+            },
+            child: const Text('إضافة'),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Map<String, Map<String, List<Map<String, String>>>> sections = fullScheduleDatabase[selectedStage] ?? {};
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('جدول المحاضرات الدراسية'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          Container(
+            height: 55,
+            color: const Color(0xFF1A1A1A),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة'].map((stage) {
+                bool isSel = selectedStage == stage;
+                return GestureDetector(
+                  onTap: () => setState(() => selectedStage = stage),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSel ? const Color(0xFFD4AF37) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(stage, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('شعب $selectedStage:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('إضافة شعبة'),
+                  onPressed: _addSectionDialog,
+                )
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: sections.isEmpty
+                ? const Center(child: Text('لا توجد شعب مضافة لهذه المرحلة'))
+                : ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: sections.keys.map((secName) {
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          leading: const CircleAvatar(backgroundColor: Color(0xFF1A1A1A), child: Icon(Icons.groups, color: Color(0xFFD4AF37))),
+                          title: Text(secName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: const Text('اضغط لمشاهدة جدول الأيام والمحاضرات'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                onPressed: () {
+                                  setState(() {
+                                    fullScheduleDatabase[selectedStage]!.remove(secName);
+                                  });
+                                },
+                              ),
+                              const Icon(Icons.arrow_forward_ios, size: 14),
+                            ],
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (c) => SectionDaysScheduleScreen(stage: selectedStage, sectionName: secName),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+class SectionDaysScheduleScreen extends StatefulWidget {
+  final String stage;
+  final String sectionName;
+  const SectionDaysScheduleScreen({super.key, required this.stage, required this.sectionName});
+
+  @override
+  State<SectionDaysScheduleScreen> createState() => _SectionDaysScheduleScreenState();
+}
+
+class _SectionDaysScheduleScreenState extends State<SectionDaysScheduleScreen> {
   String selectedDay = 'الأحد';
 
   void _addLectureDialog() {
@@ -1089,7 +1226,7 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
     showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('إضافة محاضرة يوم $selectedDay'),
+        title: Text('إضافة محاضرة - ${widget.sectionName} ($selectedDay)'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1109,7 +1246,7 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
             onPressed: () {
               if (subjCtrl.text.isNotEmpty) {
                 setState(() {
-                  weeklyScheduleData[selectedDay]!.add({
+                  fullScheduleDatabase[widget.stage]![widget.sectionName]![selectedDay]!.add({
                     'subject': subjCtrl.text,
                     'time': timeCtrl.text,
                     'hall': hallCtrl.text,
@@ -1119,7 +1256,7 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
                 Navigator.pop(c);
               }
             },
-            child: const Text('إضافة'),
+            child: const Text('إضافة المحاضرة'),
           )
         ],
       ),
@@ -1128,11 +1265,11 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, String>> currentDayLectures = weeklyScheduleData[selectedDay] ?? [];
+    List<Map<String, String>> lectures = fullScheduleDatabase[widget.stage]?[widget.sectionName]?[selectedDay] ?? [];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('جدول المحاضرات الأسبوعي'),
+        title: Text('${widget.sectionName} - $selectedDay'),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
@@ -1145,46 +1282,46 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
       body: Column(
         children: [
           Container(
-            height: 60,
+            height: 55,
             color: const Color(0xFF1A1A1A),
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'].map((day) {
-                bool isSelected = selectedDay == day;
+                bool isSel = selectedDay == day;
                 return GestureDetector(
                   onTap: () => setState(() => selectedDay = day),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
+                      color: isSel ? const Color(0xFFD4AF37) : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(day, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(day, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 );
               }).toList(),
             ),
           ),
           Expanded(
-            child: currentDayLectures.isEmpty
-                ? const Center(child: Text('لا توجد محاضرات في هذا اليوم'))
+            child: lectures.isEmpty
+                ? const Center(child: Text('لا توجد محاضرات في هذا اليوم لهذه الشعبة'))
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
-                    itemCount: currentDayLectures.length,
+                    itemCount: lectures.length,
                     itemBuilder: (context, idx) {
-                      final lec = currentDayLectures[idx];
+                      final lec = lectures[idx];
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: ListTile(
                           leading: const CircleAvatar(backgroundColor: Color(0xFF1A1A1A), child: Icon(Icons.menu_book, color: Color(0xFFD4AF37))),
                           title: Text(lec['subject']!, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('⏰ ${lec['time']} | 📍 ${lec['hall']}\n👨‍🏫 ${lec['professor']}'),
+                          subtitle: Text('⏰ ${lec['time']!} | 📍 ${lec['hall']!}\n👨‍🏫 ${lec['professor']!}'),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                             onPressed: () {
                               setState(() {
-                                weeklyScheduleData[selectedDay]!.removeAt(idx);
+                                fullScheduleDatabase[widget.stage]![widget.sectionName]![selectedDay]!.removeAt(idx);
                               });
                             },
                           ),
@@ -1198,7 +1335,7 @@ class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
     );
   }
 }
-// ----------------- شاشة منتدى الطلبة والدردشة -----------------
+// ----------------- شاشة منتدى الطلبة والدردشة الاحترافية -----------------
 class StudentForumScreen extends StatefulWidget {
   const StudentForumScreen({super.key});
 
@@ -1250,7 +1387,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
       ),
       body: Column(
         children: [
-          // شريط اختيار الغرف
           Container(
             height: 50,
             color: Colors.grey.shade200,
@@ -1261,7 +1397,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                   child: ChoiceChip(
-                    label: Text(ch, style: TextStyle(fontSize: 12, color: isSel ? Colors.black : Colors.grey)),
+                    label: Text(ch, style: TextStyle(fontSize: 12, color: isSel ? Colors.black : Colors.grey.shade700, fontWeight: FontWeight.bold)),
                     selected: isSel,
                     selectedColor: const Color(0xFFD4AF37),
                     onSelected: (val) => setState(() => activeChannel = ch),
@@ -1271,7 +1407,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
             ),
           ),
 
-          // قائمة الرسائل
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -1289,27 +1424,40 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                     });
                   },
                   child: Align(
-                    alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         color: isMe ? const Color(0xFFD4AF37) : const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(14),
+                          topRight: const Radius.circular(14),
+                          bottomLeft: isMe ? const Radius.circular(14) : const Radius.circular(2),
+                          bottomRight: isMe ? const Radius.circular(2) : const Radius.circular(14),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(msg['sender'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isMe ? Colors.black : Colors.amber)),
+                          if (!isMe)
+                            Text(msg['sender'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber)),
                           if (msg['replyTo'] != null) ...[
                             Container(
-                              padding: const EdgeInsets.all(4),
+                              padding: const EdgeInsets.all(6),
                               margin: const EdgeInsets.symmetric(vertical: 4),
-                              decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
-                              child: Text('رد على: ${msg['replyTo']}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                              decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(6)),
+                              child: Text('رد على: ${msg['replyTo']}', style: TextStyle(fontSize: 11, color: isMe ? Colors.black87 : Colors.white70, fontStyle: FontStyle.italic)),
                             )
                           ],
-                          Text(msg['text'], style: TextStyle(color: isMe ? Colors.black : Colors.white)),
+                          const SizedBox(height: 2),
+                          Text(msg['text'], style: TextStyle(color: isMe ? Colors.black : Colors.white, fontSize: 14)),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.bottomLeft,
+                            child: Text(msg['time'], style: TextStyle(fontSize: 9, color: isMe ? Colors.black54 : Colors.grey)),
+                          )
                         ],
                       ),
                     ),
@@ -1319,14 +1467,15 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
             ),
           ),
 
-          // شريط إدخال الرسالة وسحب الرد
           if (replyToMessage != null)
             Container(
               padding: const EdgeInsets.all(8),
               color: Colors.amber.shade100,
               child: Row(
                 children: [
-                  Expanded(child: Text('جاري الرد على: ${replyToMessage!['text']}', style: const TextStyle(fontSize: 12, color: Colors.black))),
+                  const Icon(Icons.reply, size: 16, color: Colors.black),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text('جاري الرد على: ${replyToMessage!['text']}', style: const TextStyle(fontSize: 12, color: Colors.black), overflow: TextOverflow.ellipsis)),
                   IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => setState(() => replyToMessage = null)),
                 ],
               ),
@@ -1336,7 +1485,18 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
             color: Colors.white,
             child: Row(
               children: [
-                Expanded(child: TextField(controller: _chatController, decoration: const InputDecoration(hintText: 'اكتب رسالة...', border: InputBorder.none))),
+                IconButton(
+                  icon: const Icon(Icons.attach_file, color: Colors.grey),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ميزة إرفاق الصور والملفات')));
+                  },
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _chatController,
+                    decoration: const InputDecoration(hintText: 'اكتب رسالتك هنا...', border: InputBorder.none),
+                  ),
+                ),
                 IconButton(icon: const Icon(Icons.send, color: Color(0xFFD4AF37)), onPressed: _sendMessage),
               ],
             ),
@@ -1347,69 +1507,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
   }
 }
 
-// ----------------- مكتبة الكتب والملف الشخصي -----------------
-class BooksScreen extends StatelessWidget {
-  const BooksScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('مكتبة الكتب والـ PDF'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
-      body: const Center(child: Text('قسم المصادر والكتب القانونية')),
-    );
-  }
-}
-
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('الملف الشخصي'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: const Color(0xFF1A1A1A),
-            child: Text(currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'س', style: const TextStyle(fontSize: 30, color: Color(0xFFD4AF37))),
-          ),
-          const SizedBox(height: 10),
-          Text(currentUserAccountName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          Text(currentUserEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 6),
-          Text('$currentUserUniversity - $currentUserCollege', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
-          const Divider(height: 30),
-          SwitchListTile(
-            secondary: const Icon(Icons.dark_mode, color: Color(0xFFD4AF37)),
-            title: const Text('تفعيل الوضع الداكن (Dark Mode)'),
-            value: isDarkMode,
-            onChanged: (val) {
-              MyApp.of(context).toggleTheme();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
-            title: const Text('المنشورات المحفوظة'),
-            trailing: Text('${savedPostsList.length}'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.exit_to_app, color: Colors.red),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              isLoggedInGlobal = false;
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthScreen()));
-            },
-          )
-        ],
-      ),
-    );
-  }
-}
-// ==========================================
-// شاشة مكتبة الحقوق (المناهج والمراحل)
-// ==========================================
+// ----------------- مكتبة الحقوق -----------------
 class LawLibraryStagesScreen extends StatefulWidget {
   const LawLibraryStagesScreen({super.key});
 
@@ -1511,6 +1609,67 @@ class _StageSubjectDetailsScreenState extends State<StageSubjectDetailsScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// ----------------- شاشات الكتب والحساب -----------------
+class BooksScreen extends StatelessWidget {
+  const BooksScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('مكتبة الكتب والـ PDF'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      body: const Center(child: Text('قسم المصادر والكتب القانونية')),
+    );
+  }
+}
+
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('الملف الشخصي'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: const Color(0xFF1A1A1A),
+            child: Text(currentUserAccountName.isNotEmpty ? currentUserAccountName[0].toUpperCase() : 'س', style: const TextStyle(fontSize: 30, color: Color(0xFFD4AF37))),
+          ),
+          const SizedBox(height: 10),
+          Text(currentUserAccountName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(currentUserEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 6),
+          Text('$currentUserUniversity - $currentUserCollege', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+          const Divider(height: 30),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode, color: Color(0xFFD4AF37)),
+            title: const Text('تفعيل الوضع الداكن (Dark Mode)'),
+            value: isDarkMode,
+            onChanged: (val) {
+              MyApp.of(context).toggleTheme();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
+            title: const Text('المنشورات المحفوظة'),
+            trailing: Text('${savedPostsList.length}'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.exit_to_app, color: Colors.red),
+            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              isLoggedInGlobal = false;
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthScreen()));
+            },
+          )
+        ],
       ),
     );
   }
