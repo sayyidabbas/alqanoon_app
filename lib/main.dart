@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart0:async';
 import 'package:flutter/material.dart';
 
 // متغيرات عامة لحفظ حالة الجلسة والبيانات
@@ -32,7 +32,27 @@ List<String> legalQuotesList = [
 ];
 int currentQuoteIndex = 0;
 
-// هيكلية المواد الدراسية المحدثة
+// بيانات جدول المحاضرات الأسبوعي القابل للإدارة
+Map<String, List<Map<String, String>>> weeklyScheduleData = {
+  'الأحد': [
+    {'subject': 'المدخل لدراسة القانون', 'time': '08:30 ص - 10:30 ص', 'hall': 'القاعة 1', 'professor': 'أ.د. علي الحسيني'},
+    {'subject': 'القانون الدستوري', 'time': '10:45 ص - 12:45 م', 'hall': 'المدرج الكبير', 'professor': 'د. خليل إبراهيم'},
+  ],
+  'الإثنين': [
+    {'subject': 'القانون المدني (التزامات)', 'time': '09:00 ص - 11:00 ص', 'hall': 'القاعة 3', 'professor': 'د. أسامة محمود'},
+  ],
+  'الثلاثاء': [
+    {'subject': 'قانون العقوبات العام', 'time': '08:30 ص - 10:30 ص', 'hall': 'القاعة 2', 'professor': 'أ.د. حسن فاضل'},
+  ],
+  'الأربعاء': [
+    {'subject': 'القانون الدولي العام', 'time': '11:00 ص - 01:00 م', 'hall': 'المدرج A', 'professor': 'د. زينب عبد السلام'},
+  ],
+  'الخميس': [
+    {'subject': 'التطبيق القضائي والمحاكمة الصورية', 'time': '10:00 ص - 12:00 م', 'hall': 'قاعة المحاكمة الصورية', 'professor': 'القاضي أحمد سالم'},
+  ],
+};
+
+// هيكلية المواد الدراسية لمكتبة الحقوق
 Map<String, List<Map<String, dynamic>>> academicStagesData = {
   'المرحلة الأولى': [
     {
@@ -59,24 +79,6 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
         },
       ]
     },
-    {
-      'title': 'القانون الدستوري',
-      'categories': [
-        {'name': 'الملازم', 'files': []},
-        {
-          'name': 'الكتاب المنهجي',
-          'files': [
-            {'fileName': 'النظام الدستوري المقارن', 'filePath': 'const.pdf'}
-          ]
-        },
-        {
-          'name': 'الأسئلة والملخصات',
-          'files': [
-            {'fileName': 'حلول أسئلة السنوات السابقة', 'filePath': 'answers.pdf'}
-          ]
-        },
-      ]
-    },
   ],
   'المرحلة الثانية': [
     {
@@ -93,36 +95,8 @@ Map<String, List<Map<String, dynamic>>> academicStagesData = {
       ]
     },
   ],
-  'المرحلة الثالثة': [
-    {
-      'title': 'قانون العقوبات الخاص',
-      'categories': [
-        {
-          'name': 'الملازم',
-          'files': [
-            {'fileName': 'جرائم الأموال والأشخاص', 'filePath': 'penal.pdf'}
-          ]
-        },
-        {'name': 'الكتاب المنهجي', 'files': []},
-        {'name': 'الأسئلة والملخصات', 'files': []},
-      ]
-    },
-  ],
-  'المرحلة الرابعة': [
-    {
-      'title': 'القانون الدولي الخاص',
-      'categories': [
-        {
-          'name': 'الملازم',
-          'files': [
-            {'fileName': 'أحكام الجنسية والموطن', 'filePath': 'int_law.pdf'}
-          ]
-        },
-        {'name': 'الكتاب المنهجي', 'files': []},
-        {'name': 'الأسئلة والملخصات', 'files': []},
-      ]
-    },
-  ],
+  'المرحلة الثالثة': [],
+  'المرحلة الرابعة': [],
 };
 
 void main() {
@@ -881,7 +855,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 4. عرض قائمة المنشورات والتبليغات مع زري الحفظ والـ 3 نقاط للتحكم
+              // 4. عرض قائمة المنشورات
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(12),
@@ -932,7 +906,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   icon: const Icon(Icons.more_vert),
                                   onSelected: (val) {
                                     if (val == 'edit') {
-                                      // فتح نافذة التعديل
                                       final titleCtrl = TextEditingController(text: post['title']);
                                       final contentCtrl = TextEditingController(text: post['content']);
                                       showDialog(
@@ -1024,7 +997,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 }
-// ----------------- 2. شاشة الخدمات والمكتبة المحدثة بالهيكلية الفخمة -----------------
+// ==========================================
+// 4. شاشة الخدمات والكلية المحدثة بالكامل
+// ==========================================
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
@@ -1036,58 +1011,109 @@ class ServicesScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
-                leading: const Icon(Icons.account_balance, size: 40, color: Color(0xFFD4AF37)),
-                title: const Text('مكتبة الحقوق (المناهج والمراحل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                subtitle: const Text('تصفح المواد والمحاضرات الهيكلية المحدثة'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (c) => const LawLibraryStagesScreen()));
-                },
-              ),
+        children: [
+          // 1. كارت مكتبة الحقوق
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              leading: const Icon(Icons.account_balance, size: 40, color: Color(0xFFD4AF37)),
+              title: const Text('مكتبة الحقوق (المناهج والمراحل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              subtitle: const Text('تصفح المواد والمحاضرات الهيكلية المحدثة'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (c) => const LawLibraryStagesScreen()));
+              },
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+
+          // 2. كارت جدول المحاضرات الأسبوعي
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              leading: const Icon(Icons.calendar_month, size: 40, color: Colors.blue),
+              title: const Text('جدول المحاضرات الأسبوعي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              subtitle: const Text('متابعة أوقات المحاضرات والقاعات والأستاذ'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (c) => const WeeklyScheduleScreen()));
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 3. كارت منتدى الطلبة والدردشة
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              leading: const Icon(Icons.forum, size: 40, color: Colors.green),
+              title: const Text('منتدى الطلبة والدردشة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              subtitle: const Text('غرف المحادثة، إرسال الملازم، والرد المباشر'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (c) => const StudentForumScreen()));
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class LawLibraryStagesScreen extends StatefulWidget {
-  const LawLibraryStagesScreen({super.key});
+// ----------------- شاشة جدول المحاضرات الأسبوعي -----------------
+class WeeklyScheduleScreen extends StatefulWidget {
+  const WeeklyScheduleScreen({super.key});
 
   @override
-  State<LawLibraryStagesScreen> createState() => _LawLibraryStagesScreenState();
+  State<WeeklyScheduleScreen> createState() => _WeeklyScheduleScreenState();
 }
 
-class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
-  void _addNewSubject(String stageName) {
-    final titleCtrl = TextEditingController();
+class _WeeklyScheduleScreenState extends State<WeeklyScheduleScreen> {
+  String selectedDay = 'الأحد';
+
+  void _addLectureDialog() {
+    final subjCtrl = TextEditingController();
+    final timeCtrl = TextEditingController();
+    final hallCtrl = TextEditingController();
+    final profCtrl = TextEditingController();
+
     showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('إضافة مادة لـ $stageName'),
-        content: TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder())),
+        title: Text('إضافة محاضرة يوم $selectedDay'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: subjCtrl, decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: timeCtrl, decoration: const InputDecoration(labelText: 'التوقيت (مثال: 08:30 ص)', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: hallCtrl, decoration: const InputDecoration(labelText: 'القاعة الدراسية', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: profCtrl, decoration: const InputDecoration(labelText: 'اسم الأستاذ', border: OutlineInputBorder())),
+          ],
+        ),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
             onPressed: () {
-              if (titleCtrl.text.isNotEmpty) {
+              if (subjCtrl.text.isNotEmpty) {
                 setState(() {
-                  academicStagesData[stageName]!.add({
-                    'title': titleCtrl.text,
-                    'categories': [
-                      {'name': 'الملازم', 'files': []},
-                      {'name': 'الكتاب المنهجي', 'files': []},
-                      {'name': 'الأسئلة والملخصات', 'files': []},
-                    ]
+                  weeklyScheduleData[selectedDay]!.add({
+                    'subject': subjCtrl.text,
+                    'time': timeCtrl.text,
+                    'hall': hallCtrl.text,
+                    'professor': profCtrl.text,
                   });
                 });
                 Navigator.pop(c);
@@ -1100,194 +1126,228 @@ class _LawLibraryStagesScreenState extends State<LawLibraryStagesScreen> {
     );
   }
 
-  void _editSubject(String stageName, int index) {
-    final editCtrl = TextEditingController(text: academicStagesData[stageName]![index]['title']);
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('تعديل اسم المادة'),
-        content: TextField(controller: editCtrl, decoration: const InputDecoration(border: OutlineInputBorder())),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              if (editCtrl.text.isNotEmpty) {
-                setState(() {
-                  academicStagesData[stageName]![index]['title'] = editCtrl.text;
-                });
-                Navigator.pop(c);
-              }
-            },
-            child: const Text('حفظ'),
+  @override
+  Widget build(BuildContext context) {
+    List<Map<String, String>> currentDayLectures = weeklyScheduleData[selectedDay] ?? [];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('جدول المحاضرات الأسبوعي'),
+        backgroundColor: const Color(0xFF1A1A1A),
+        foregroundColor: Colors.white,
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFFD4AF37),
+        foregroundColor: Colors.black,
+        onPressed: _addLectureDialog,
+        child: const Icon(Icons.add),
+      ),
+      body: Column(
+        children: [
+          Container(
+            height: 60,
+            color: const Color(0xFF1A1A1A),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'].map((day) {
+                bool isSelected = selectedDay == day;
+                return GestureDetector(
+                  onTap: () => setState(() => selectedDay = day),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(day, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: currentDayLectures.isEmpty
+                ? const Center(child: Text('لا توجد محاضرات في هذا اليوم'))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: currentDayLectures.length,
+                    itemBuilder: (context, idx) {
+                      final lec = currentDayLectures[idx];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: const CircleAvatar(backgroundColor: Color(0xFF1A1A1A), child: Icon(Icons.menu_book, color: Color(0xFFD4AF37))),
+                          title: Text(lec['subject']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('⏰ ${lec['time']} | 📍 ${lec['hall']}\n👨‍🏫 ${lec['professor']}'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                            onPressed: () {
+                              setState(() {
+                                weeklyScheduleData[selectedDay]!.removeAt(idx);
+                              });
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           )
         ],
       ),
     );
   }
+}
+// ----------------- شاشة منتدى الطلبة والدردشة -----------------
+class StudentForumScreen extends StatefulWidget {
+  const StudentForumScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('مكتبة الحقوق - المراحل الدراسية'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: academicStagesData.keys.map((stage) {
-          final subjects = academicStagesData[stage]!;
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: ExpansionTile(
-              leading: const Icon(Icons.school, color: Color(0xFFD4AF37)),
-              title: Text(stage, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              trailing: IconButton(
-                icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37)),
-                onPressed: () => _addNewSubject(stage),
-              ),
-              children: subjects.asMap().entries.map((entry) {
-                int idx = entry.key;
-                var subj = entry.value;
-                return ListTile(
-                  title: Text(subj['title'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text('الفروع المتاحة: ${subj['categories'].length}'),
-                  trailing: PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (val) {
-                      if (val == 'edit') _editSubject(stage, idx);
-                      if (val == 'delete') {
-                        setState(() {
-                          academicStagesData[stage]!.removeAt(idx);
-                        });
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'edit', child: Text('تعديل المادة')),
-                      const PopupMenuItem(value: 'delete', child: Text('حذف المادة')),
-                    ],
-                  ),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (c) => SubjectCategoriesScreen(subjectData: subj)));
-                  },
-                );
-              }).toList(),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-// الشاشة المحدثة للفروع والرفع الفعلي للملفات
-class SubjectCategoriesScreen extends StatefulWidget {
-  final Map<String, dynamic> subjectData;
-  const SubjectCategoriesScreen({super.key, required this.subjectData});
-
-  @override
-  State<SubjectCategoriesScreen> createState() => _SubjectCategoriesScreenState();
+  State<StudentForumScreen> createState() => _StudentForumScreenState();
 }
 
-class _SubjectCategoriesScreenState extends State<SubjectCategoriesScreen> {
-  void _uploadRealFileToCategory(Map<String, dynamic> category) {
-    final titleCtrl = TextEditingController();
-    String simulatedPath = '';
+class _StudentForumScreenState extends State<StudentForumScreen> {
+  String activeChannel = '📢 الدردشة العامة';
+  Map<String, dynamic>? replyToMessage;
+  final TextEditingController _chatController = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          return AlertDialog(
-            title: Text('إرفاق وررفع ملف لـ ${category['name']}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'اسم أو عنوان الملف المرفوع', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
-                  icon: const Icon(Icons.attach_file),
-                  label: Text(simulatedPath.isEmpty ? 'اختر ملف PDF من الهاتف' : 'تم اختيار: document.pdf'),
-                  onPressed: () {
-                    setDlgState(() {
-                      simulatedPath = '/storage/emulated/0/Download/law_file.pdf';
-                    });
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c), child: const Text('إلغاء')),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-                onPressed: () {
-                  if (titleCtrl.text.isNotEmpty) {
-                    setState(() {
-                      category['files'].add({
-                        'fileName': titleCtrl.text,
-                        'filePath': simulatedPath.isEmpty ? 'default_path.pdf' : simulatedPath,
-                      });
-                    });
-                    Navigator.pop(c);
-                  }
-                },
-                child: const Text('تأكيد الرفع'),
-              )
-            ],
-          );
-        },
-      ),
-    );
+  Map<String, List<Map<String, dynamic>>> forumChannelsMessages = {
+    '📢 الدردشة العامة': [
+      {'sender': 'علي أحمد', 'text': 'السلام عليكم زملاء، متى تبدأ محاضرة اليوم؟', 'time': '10:15 ص', 'replyTo': null},
+    ],
+    '📚 تبادل الملازم': [
+      {'sender': 'سارة عمر', 'text': 'تم رفع ملخص المادة المدنية في مكتبة الحقوق.', 'time': '09:30 ص', 'replyTo': null},
+    ],
+    '❓ سؤال وجواب': [
+      {'sender': 'حسين خليل', 'text': 'ما الفرق بين القصد الجنائي العام والخاص؟', 'time': 'أمس', 'replyTo': null},
+    ],
+  };
+
+  void _sendMessage() {
+    if (_chatController.text.trim().isNotEmpty) {
+      setState(() {
+        forumChannelsMessages[activeChannel]!.add({
+          'sender': currentUserAccountName,
+          'text': _chatController.text.trim(),
+          'time': 'الآن',
+          'replyTo': replyToMessage != null ? replyToMessage!['text'] : null,
+        });
+        _chatController.clear();
+        replyToMessage = null;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final List categories = widget.subjectData['categories'];
+    List<Map<String, dynamic>> messages = forumChannelsMessages[activeChannel] ?? [];
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.subjectData['title']),
+        title: Text(activeChannel),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: categories.length,
-        itemBuilder: (context, catIdx) {
-          final cat = categories[catIdx];
-          final List files = cat['files'];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ExpansionTile(
-              leading: const Icon(Icons.folder_special, color: Color(0xFFD4AF37)),
-              title: Text(cat['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${files.length} ملفات مرفوعة'),
-              trailing: IconButton(
-                icon: const Icon(Icons.upload_file, color: Color(0xFFD4AF37)),
-                onPressed: () => _uploadRealFileToCategory(cat),
-              ),
-              children: files.isEmpty
-                  ? [const Padding(padding: EdgeInsets.all(8.0), child: Text('لا توجد ملفات مرفوعة حالياً'))]
-                  : files.asMap().entries.map((fEntry) {
-                      int fIdx = fEntry.key;
-                      var fileMap = fEntry.value;
-                      return ListTile(
-                        leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                        title: Text(fileMap['fileName']),
-                        subtitle: Text('المسار: ${fileMap['filePath']}', style: const TextStyle(fontSize: 10)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                          onPressed: () {
-                            setState(() {
-                              files.removeAt(fIdx);
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
+      body: Column(
+        children: [
+          // شريط اختيار الغرف
+          Container(
+            height: 50,
+            color: Colors.grey.shade200,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: ['📢 الدردشة العامة', '📚 تبادل الملازم', '❓ سؤال وجواب'].map((ch) {
+                bool isSel = activeChannel == ch;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  child: ChoiceChip(
+                    label: Text(ch, style: TextStyle(fontSize: 12, color: isSel ? Colors.black : Colors.grey)),
+                    selected: isSel,
+                    selectedColor: const Color(0xFFD4AF37),
+                    onSelected: (val) => setState(() => activeChannel = ch),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        },
+          ),
+
+          // قائمة الرسائل
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: messages.length,
+              itemBuilder: (context, idx) {
+                final msg = messages[idx];
+                bool isMe = msg['sender'] == currentUserAccountName;
+
+                return Dismissible(
+                  key: UniqueKey(),
+                  direction: DismissDirection.startToEnd,
+                  onDismissed: (_) {
+                    setState(() {
+                      replyToMessage = msg;
+                    });
+                  },
+                  child: Align(
+                    alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isMe ? const Color(0xFFD4AF37) : const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(msg['sender'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isMe ? Colors.black : Colors.amber)),
+                          if (msg['replyTo'] != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(4)),
+                              child: Text('رد على: ${msg['replyTo']}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                            )
+                          ],
+                          Text(msg['text'], style: TextStyle(color: isMe ? Colors.black : Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // شريط إدخال الرسالة وسحب الرد
+          if (replyToMessage != null)
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: Colors.amber.shade100,
+              child: Row(
+                children: [
+                  Expanded(child: Text('جاري الرد على: ${replyToMessage!['text']}', style: const TextStyle(fontSize: 12, color: Colors.black))),
+                  IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => setState(() => replyToMessage = null)),
+                ],
+              ),
+            ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(child: TextField(controller: _chatController, decoration: const InputDecoration(hintText: 'اكتب رسالة...', border: InputBorder.none))),
+                IconButton(icon: const Icon(Icons.send, color: Color(0xFFD4AF37)), onPressed: _sendMessage),
+              ],
+            ),
+          )
+        ],
       ),
     );
   }
 }
 
-// ----------------- 3. شاشة الكتب -----------------
+// ----------------- مكتبة الكتب والملف الشخصي -----------------
 class BooksScreen extends StatelessWidget {
   const BooksScreen({super.key});
 
@@ -1300,23 +1360,13 @@ class BooksScreen extends StatelessWidget {
   }
 }
 
-// ----------------- 4. شاشة الملف الشخصي الطالب المتكاملة -----------------
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('الملف الشخصي'),
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('الملف الشخصي'), backgroundColor: const Color(0xFF1A1A1A), foregroundColor: Colors.white),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1343,10 +1393,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             leading: const Icon(Icons.bookmark, color: Color(0xFFD4AF37)),
             title: const Text('المنشورات المحفوظة'),
             trailing: Text('${savedPostsList.length}'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.help_outline, color: Colors.blue),
-            title: const Text('تواصل مع الدعم الفني'),
           ),
           ListTile(
             leading: const Icon(Icons.exit_to_app, color: Colors.red),
