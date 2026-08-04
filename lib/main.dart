@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'sections/books_library.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,11 +18,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF8F9FA),
         fontFamily: 'Roboto',
       ),
-      home: const Scaffold(
-        body: Center(
-          child: Text('مرحباً بك في منصة القانون', style: TextStyle(fontSize: 20)),
-        ),
-      ),
+      home: const BooksLibraryScreen(),
     );
   }
 }
