@@ -17,14 +17,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   bool isLogin = true;
   bool isLoading = false;
 
-  // controllers
-  final _identifierController = TextEditingController(); // إيميل/هاتف/يوزر عند الدخول
-  final _emailOrPhoneController = TextEditingController(); // إيميل أو هاتف عند الإنشاء
-  final _usernameController = TextEditingController(); // اسم المستخدم (اليوزر)
-  final _nameController = TextEditingController(); // الاسم الكامل
-  final _passwordController = TextEditingController(); // كلمة المرور
+  final _identifierController = TextEditingController();
+  final _emailOrPhoneController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _passwordController = TextEditingController();
 
-  // حالة فحص اليوزر المباشر
   bool isCheckingUsername = false;
   bool? isUsernameAvailable;
   String usernameMessage = '';
@@ -64,7 +62,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _animController.forward();
   }
 
-  // فحص متاحية اليوزر في الفايربيس تلقائياً
   Future<void> _checkUsernameAvailability(String username) async {
     final cleanUsername = username.trim().toLowerCase();
     if (cleanUsername.isEmpty || cleanUsername.length < 3) {
@@ -216,7 +213,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       try {
         String targetEmail = input;
 
-        // إذا أُدخل اسم مستخدم أو رقم بدلاً من البريد الإلكتروني، يتم جلب البريد المرتبط به من Firestore
         if (!input.contains('@')) {
           final queryByUsername = await FirebaseFirestore.instance
               .collection('users')
@@ -276,7 +272,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         if (mounted) setState(() => isLoading = false);
       }
     } else {
-      // حالة إنشاء حساب جديد
       final name = _nameController.text.trim();
       final emailOrPhone = _emailOrPhoneController.text.trim();
       final username = _usernameController.text.trim().toLowerCase();
@@ -301,7 +296,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         String emailToRegister = emailOrPhone;
         String phoneToRegister = '';
 
-        // إذا أدخل المستخدم رقماً بدل الإيميل، يتم تحويله لصيغة إيميل افتراضية للـ Auth
         if (!emailOrPhone.contains('@')) {
           phoneToRegister = emailOrPhone;
           emailToRegister = '$emailOrPhone@lawapp.com';
@@ -315,7 +309,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         if (creds.user != null) {
           await creds.user!.updateDisplayName(name);
 
-          // حفظ الوثيقة بـ Firestore مع اليوزر والبيانات
           await FirebaseFirestore.instance.collection('users').doc(creds.user!.uid).set({
             'uid': creds.user!.uid,
             'name': name,
@@ -612,4 +605,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-        
+        ],
+      ),
+    );
+  }
+}
