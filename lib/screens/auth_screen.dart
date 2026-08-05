@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,9 +17,10 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   bool isLogin = true;
   bool isLoading = false;
+  bool _obscurePassword = true;
 
   final _identifierController = TextEditingController();
-  final _emailOrPhoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _usernameController = TextEditingController();
   final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -45,7 +47,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   void dispose() {
     _animController.dispose();
     _identifierController.dispose();
-    _emailOrPhoneController.dispose();
+    _emailController.dispose();
     _usernameController.dispose();
     _nameController.dispose();
     _passwordController.dispose();
@@ -57,6 +59,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       isLogin = !isLogin;
       isUsernameAvailable = null;
       usernameMessage = '';
+      _obscurePassword = true;
     });
     _animController.reset();
     _animController.forward();
@@ -105,6 +108,79 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
   }
 
+  // واجهة الانتظار للتحقق من رابط البريد الإلكتروني
+  void _showEmailVerificationDialog(User user, String name, String email) {
+    Timer? timer;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.mark_email_read, color: Color(0xFFD4AF37)),
+            SizedBox(width: 8),
+            Text('تأكيد البريد الإلكتروني', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'تم إرسال رابط التأكيد إلى:\n$email\n\nيرجى فتح بريدك والضغط على الرابط ثم ضغط الزر بالأسفل للتعرف الآلي.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 15),
+            const CircularProgressIndicator(color: Color(0xFFD4AF37)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await user.sendEmailVerification();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تمت إعادة إرسال رابط التفعيل!')),
+              );
+            },
+            child: const Text('إعادة إرسال الرابط', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+            onPressed: () async {
+              await user.reload();
+              final updatedUser = FirebaseAuth.instance.currentUser;
+              if (updatedUser != null && updatedUser.emailVerified) {
+                timer?.cancel();
+                currentUserAccountName = name;
+                currentUserEmail = email;
+                isLoggedInGlobal = true;
+
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+                    (route) => false,
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('لم يتم تأكيد البريد بعد! يرجى الضغط على الرابط في بريدك أولاً.')),
+                );
+              }
+            },
+            child: const Text('تم التأكيد، دخول للواجهة', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _resetPasswordDialog() async {
     final resetEmailController = TextEditingController(text: _identifierController.text.trim());
     showDialog(
@@ -136,6 +212,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             const SizedBox(height: 15),
             TextField(
               controller: resetEmailController,
+              cursorColor: const Color(0xFFD4AF37),
+              cursorWidth: 2.5,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 labelText: 'البريد الإلكتروني',
@@ -203,7 +281,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       final input = _identifierController.text.trim();
       if (input.isEmpty || password.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يرجى إدخال اسم المستخدم/البريد/الهاتف وكلمة المرور')),
+          const SnackBar(content: Text('يرجى إدخال اسم المستخدم أو البريد الإلكتروني وكلمة المرور')),
         );
         return;
       }
@@ -222,16 +300,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           if (queryByUsername.docs.isNotEmpty) {
             targetEmail = queryByUsername.docs.first.data()['email'] ?? '';
           } else {
-            final queryByPhone = await FirebaseFirestore.instance
-                .collection('users')
-                .where('phone', isEqualTo: input)
-                .get();
-
-            if (queryByPhone.docs.isNotEmpty) {
-              targetEmail = queryByPhone.docs.first.data()['email'] ?? '';
-            } else {
-              throw FirebaseAuthException(code: 'user-not-found');
-            }
+            throw FirebaseAuthException(code: 'user-not-found');
           }
         }
 
@@ -254,7 +323,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         }
       } on FirebaseAuthException catch (e) {
         String errorMessage = 'بيانات الدخول غير صحيحة';
-        if (e.code == 'user-not-found') errorMessage = 'المستخدم غير موجود!';
+        if (e.code == 'user-not-found') errorMessage = 'اسم المستخدم أو البريد غير موجود!';
         if (e.code == 'wrong-password' || e.code == 'invalid-credential') errorMessage = 'كلمة المرور غير صحيحة!';
 
         if (mounted) {
@@ -273,12 +342,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       }
     } else {
       final name = _nameController.text.trim();
-      final emailOrPhone = _emailOrPhoneController.text.trim();
+      final email = _emailController.text.trim();
       final username = _usernameController.text.trim().toLowerCase();
 
-      if (name.isEmpty || emailOrPhone.isEmpty || username.isEmpty || password.isEmpty) {
+      if (name.isEmpty || email.isEmpty || username.isEmpty || password.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('الرجاء إكمال كافة الحقول')),
+        );
+        return;
+      }
+
+      if (!email.contains('@')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('يرجى إدخال بريد إلكتروني صحيح يحوي @')),
         );
         return;
       }
@@ -293,16 +369,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       setState(() => isLoading = true);
 
       try {
-        String emailToRegister = emailOrPhone;
-        String phoneToRegister = '';
-
-        if (!emailOrPhone.contains('@')) {
-          phoneToRegister = emailOrPhone;
-          emailToRegister = '$emailOrPhone@lawapp.com';
-        }
-
         UserCredential creds = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: emailToRegister,
+          email: email,
           password: password,
         );
 
@@ -313,23 +381,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             'uid': creds.user!.uid,
             'name': name,
             'username': username,
-            'email': emailToRegister,
-            'phone': phoneToRegister,
+            'email': email,
             'role': 'user',
             'createdAt': DateTime.now().millisecondsSinceEpoch,
           });
-        }
 
-        currentUserAccountName = name;
-        currentUserEmail = emailToRegister;
-        isLoggedInGlobal = true;
+          // إرسال رابط التأكيد للإيميل
+          await creds.user!.sendEmailVerification();
 
-        if (mounted) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-            (route) => false,
-          );
+          if (mounted) {
+            _showEmailVerificationDialog(creds.user!, name, email);
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -341,9 +403,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         if (mounted) setState(() => isLoading = false);
       }
     }
-  }
-
-  @override
+    }
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
@@ -425,9 +486,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                 if (isLogin) ...[
                                   TextField(
                                     controller: _identifierController,
+                                    cursorColor: const Color(0xFFD4AF37),
+                                    cursorWidth: 2.5,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
-                                      labelText: 'اسم المستخدم / البريد / الهاتف',
+                                      labelText: 'اسم المستخدم / البريد الإلكتروني',
                                       labelStyle: const TextStyle(color: Colors.white60),
                                       prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFD4AF37)),
                                       enabledBorder: OutlineInputBorder(
@@ -445,6 +508,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                 ] else ...[
                                   TextField(
                                     controller: _nameController,
+                                    cursorColor: const Color(0xFFD4AF37),
+                                    cursorWidth: 2.5,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
                                       labelText: 'الاسم الكامل',
@@ -464,12 +529,15 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                   ),
                                   const SizedBox(height: 12),
                                   TextField(
-                                    controller: _emailOrPhoneController,
+                                    controller: _emailController,
+                                    cursorColor: const Color(0xFFD4AF37),
+                                    cursorWidth: 2.5,
+                                    keyboardType: TextInputType.emailAddress,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
-                                      labelText: 'البريد الإلكتروني أو رقم الهاتف',
+                                      labelText: 'البريد الإلكتروني',
                                       labelStyle: const TextStyle(color: Colors.white60),
-                                      prefixIcon: const Icon(Icons.contact_mail, color: Color(0xFFD4AF37)),
+                                      prefixIcon: const Icon(Icons.email, color: Color(0xFFD4AF37)),
                                       enabledBorder: OutlineInputBorder(
                                         borderSide: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
                                         borderRadius: BorderRadius.circular(12),
@@ -485,6 +553,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: _usernameController,
+                                    cursorColor: const Color(0xFFD4AF37),
+                                    cursorWidth: 2.5,
                                     onChanged: _checkUsernameAvailability,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: InputDecoration(
@@ -532,12 +602,25 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                 const SizedBox(height: 14),
                                 TextField(
                                   controller: _passwordController,
-                                  obscureText: true,
+                                  cursorColor: const Color(0xFFD4AF37),
+                                  cursorWidth: 2.5,
+                                  obscureText: _obscurePassword,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     labelText: 'كلمة المرور',
                                     labelStyle: const TextStyle(color: Colors.white60),
                                     prefixIcon: const Icon(Icons.lock, color: Color(0xFFD4AF37)),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                        color: const Color(0xFFD4AF37),
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                    ),
                                     enabledBorder: OutlineInputBorder(
                                       borderSide: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
                                       borderRadius: BorderRadius.circular(12),
