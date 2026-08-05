@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../main.dart'; // لاستدعاء MainNavigationHolder بشكل مباشر وآمن
+import '../main.dart';
 
 class AuthScreen extends StatefulWidget {
   final Function(String name, String email)? onAuthSuccess;
@@ -469,4 +469,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                           ),
                         ),
                       ),
-        
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
