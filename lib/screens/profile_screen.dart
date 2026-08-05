@@ -1,4 +1,5 @@
 import 'dart:io';
+import ' meui/ui.dart' if (dart.library.html) 'html'; // للتوافقية
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -58,13 +59,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     university = widget.currentUserUniversity;
     college = widget.currentUserCollege;
 
-    // أنيميشن حركة الدوائر الضوئية في الخلفية
     _bgAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
     )..repeat(reverse: true);
 
-    // أنيميشن النبض الذهبي حول الصورة الشخصية
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -197,8 +196,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       );
     }
   }
-
-  Future<void> _launchURL(String urlString) async {
+    Future<void> _launchURL(String urlString) async {
     final Uri uri = Uri.parse(urlString);
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -312,7 +310,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-    void _openEditProfileScreen() {
+
+  void _openEditProfileScreen() {
     final nameCtrl = TextEditingController(text: displayName);
     final uniCtrl = TextEditingController(text: university);
     final colCtrl = TextEditingController(text: college);
@@ -490,8 +489,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-
-  void _openMasterAdminDialog() async {
+    void _openMasterAdminDialog() async {
     if (isMasterAdmin) {
       _openAdminManagementPanel();
       return;
@@ -571,108 +569,168 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 20, left: 20, right: 20),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('لوحة التحكم والإدارة العليا 👑', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-                const Divider(color: Colors.white24),
-                const Text('تحديث وسائل اتصالات الشكاوى:', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: whatsappCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'رقم الواتساب الرسمي',
-                    labelStyle: TextStyle(color: Colors.white60),
-                    prefixIcon: Icon(Icons.phone, color: Colors.greenAccent),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: telegramCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'يوزر تليجرام الدعم',
-                    labelStyle: TextStyle(color: Colors.white60),
-                    prefixIcon: Icon(Icons.send, color: Colors.blueAccent),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-                  icon: const Icon(Icons.save),
-                  label: const Text('حفظ وسائل الدعم الجديدة'),
-                  onPressed: () async {
-                    await FirebaseFirestore.instance.collection('settings').doc('support_info').set({
-                      'whatsapp': whatsappCtrl.text.trim(),
-                      'telegram': telegramCtrl.text.trim(),
-                    });
-                    setState(() {
-                      supportWhatsApp = whatsappCtrl.text.trim();
-                      supportTelegram = telegramCtrl.text.trim();
-                    });
-                    if (mounted) Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تحديث أرقام ويوزرات الدعم والشكاوى بنجاح!')),
-                    );
-                  },
-                ),
-                const Divider(color: Colors.white24, height: 25),
-                const Text('إدارة المشرفين والتوثيق:', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: targetUsernameCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(hintText: 'أدخل اليوزر المستهدف...', hintStyle: TextStyle(color: Colors.white38)),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-                        icon: const Icon(Icons.person_add),
-                        label: const Text('ترقية المشرف'),
-                        onPressed: () async {
-                          final u = targetUsernameCtrl.text.trim().toLowerCase();
-                          if (u.isNotEmpty) {
-                            final q = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: u).get();
-                            if (q.docs.isNotEmpty) {
-                              await FirebaseFirestore.instance.collection('users').doc(q.docs.first.id).update({'role': 'admin'});
-                              if (mounted) Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تمت ترقية @$u إلى مشرف')));
-                            }
-                          }
-                        },
-                      ),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.75,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('لوحة التحكم والإدارة العليا 👑', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Divider(color: Colors.white24),
+                  const Text('تحديث وسائل اتصالات الشكاوى:', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: whatsappCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الواتساب الرسمي',
+                      labelStyle: TextStyle(color: Colors.white60),
+                      prefixIcon: Icon(Icons.phone, color: Colors.greenAccent),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
-                        icon: const Icon(Icons.verified),
-                        label: const Text('توثيق 💙'),
-                        onPressed: () async {
-                          final u = targetUsernameCtrl.text.trim().toLowerCase();
-                          if (u.isNotEmpty) {
-                            final q = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: u).get();
-                            if (q.docs.isNotEmpty) {
-                              await FirebaseFirestore.instance.collection('users').doc(q.docs.first.id).update({'isVerified': true});
-                              if (mounted) Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم توثيق حساب @$u')));
-                            }
-                          }
-                        },
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: telegramCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'يوزر تليجرام الدعم',
+                      labelStyle: TextStyle(color: Colors.white60),
+                      prefixIcon: Icon(Icons.send, color: Colors.blueAccent),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 15),
-              ],
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                    icon: const Icon(Icons.save),
+                    label: const Text('حفظ وسائل الدعم الجديدة'),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance.collection('settings').doc('support_info').set({
+                        'whatsapp': whatsappCtrl.text.trim(),
+                        'telegram': telegramCtrl.text.trim(),
+                      });
+                      setState(() {
+                        supportWhatsApp = whatsappCtrl.text.trim();
+                        supportTelegram = telegramCtrl.text.trim();
+                      });
+                      if (mounted) Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم تحديث أرقام ويوزرات الدعم والشكاوى بنجاح!')),
+                      );
+                    },
+                  ),
+                  const Divider(color: Colors.white24, height: 25),
+                  const Text('إدارة المشرفين والتوثيق:', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: targetUsernameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'أدخل اليوزر المستهدف...', hintStyle: TextStyle(color: Colors.white38)),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                          icon: const Icon(Icons.person_add),
+                          label: const Text('ترقية المشرف'),
+                          onPressed: () async {
+                            final u = targetUsernameCtrl.text.trim().toLowerCase();
+                            if (u.isNotEmpty) {
+                              final q = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: u).get();
+                              if (q.docs.isNotEmpty) {
+                                await FirebaseFirestore.instance.collection('users').doc(q.docs.first.id).update({'role': 'admin'});
+                                if (mounted) Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تمت ترقية @$u إلى مشرف')));
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                          icon: const Icon(Icons.verified),
+                          label: const Text('منح توثيق 💙'),
+                          onPressed: () async {
+                            final u = targetUsernameCtrl.text.trim().toLowerCase();
+                            if (u.isNotEmpty) {
+                              final q = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: u).get();
+                              if (q.docs.isNotEmpty) {
+                                await FirebaseFirestore.instance.collection('users').doc(q.docs.first.id).update({'isVerified': true});
+                                if (mounted) Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم توثيق حساب @$u')));
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  const Text('المشرفون والحسابات الموثقة حالياً:', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 160,
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                        final docs = snapshot.data!.docs.where((d) {
+                          final data = d.data() as Map<String, dynamic>;
+                          return (data['role'] == 'admin') || (data['isVerified'] == true);
+                        }).toList();
+
+                        if (docs.isEmpty) {
+                          return const Center(child: Text('لا يوجد مشرفون أو موثقون حالياً', style: TextStyle(color: Colors.white38)));
+                        }
+
+                        return ListView.builder(
+                          itemCount: docs.length,
+                          itemBuilder: (ctx, i) {
+                            final uData = docs[i].data() as Map<String, dynamic>;
+                            final bool isAdmin = uData['role'] == 'admin';
+                            final bool isVerif = uData['isVerified'] == true;
+
+                            return ListTile(
+                              dense: true,
+                              title: Text(uData['name'] ?? '', style: const TextStyle(color: Colors.white)),
+                              subtitle: Text('@${uData['username'] ?? ''}', style: const TextStyle(color: Color(0xFFD4AF37))),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isAdmin)
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                                      tooltip: 'سحب الإشراف',
+                                      onPressed: () async {
+                                        await FirebaseFirestore.instance.collection('users').doc(docs[i].id).update({'role': 'user'});
+                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم سحب الإشراف من @${uData['username']}')));
+                                      },
+                                    ),
+                                  if (isVerif)
+                                    IconButton(
+                                      icon: const Icon(Icons.do_not_disturb_on_outlined, color: Colors.blueAccent, size: 20),
+                                      tooltip: 'إزالة التوثيق',
+                                      onPressed: () async {
+                                        await FirebaseFirestore.instance.collection('users').doc(docs[i].id).update({'isVerified': false});
+                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إلغاء توثيق @${uData['username']}')));
+                                      },
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -764,7 +822,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
           : Stack(
               children: [
-                // الدائرة المتحركة الذهبية الأولى في أعلى الشاشة
                 Positioned(
                   top: -60,
                   right: -60,
@@ -790,7 +847,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     },
                   ),
                 ),
-                // الدائرة المتحركة الذهبية الثانية خلف بطاقة الأزرار
                 Positioned(
                   bottom: 100,
                   left: -80,
@@ -823,6 +879,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     children: [
                       Center(
                         child: Stack(
+                          clipBehavior: Clip.none,
                           children: [
                             AnimatedBuilder(
                               animation: _glowAnimation,
@@ -856,6 +913,13 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                 );
                               },
                             ),
+                            if (isMasterAdmin)
+                              const Positioned(
+                                top: -14,
+                                right: 0,
+                                left: 0,
+                                child: Icon(Icons.workspace_premium, color: Color(0xFFD4AF37), size: 28),
+                              ),
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -880,10 +944,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(displayName, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
-                          if (isMasterAdmin) ...[
-                            const SizedBox(width: 6),
-                            const Icon(Icons.star, color: Color(0xFFD4AF37), size: 22),
-                          ] else if (isVerified) ...[
+                          if (isVerified || isMasterAdmin) ...[
                             const SizedBox(width: 6),
                             const Icon(Icons.verified, color: Colors.blueAccent, size: 22),
                           ],
@@ -915,7 +976,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
                       const SizedBox(height: 26),
 
-                      // البطاقة الخيارية الفاخرة المكسوة بحواف الجلاس الذهبي
                       ClipRRect(
                         borderRadius: BorderRadius.circular(22),
                         child: Container(
