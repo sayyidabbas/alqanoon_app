@@ -91,7 +91,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     super.dispose();
   }
 
-  // فحص صلاحية الإدارة العليا المخزنة دائمياً
   Future<void> _checkMasterAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
@@ -101,7 +100,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // تحميل بيانات المستخدم وحفظ الصورة المحلية من الذاكرة
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final savedImagePath = prefs.getString('saved_profile_image_path');
@@ -160,11 +158,12 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     } catch (_) {}
   }
 
-  // ميزة اختيار الصورة وحفظ مسارها الدائم بالهاتف والسحابة
   Future<void> _pickImageFromGallery() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
         imageQuality: 85,
       );
 
@@ -214,7 +213,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // تغيير كلمة المرور المباشر والآمن من داخل التطبيق
   void _openChangePasswordDialog() {
     final newPassCtrl = TextEditingController();
     final confirmPassCtrl = TextEditingController();
@@ -511,7 +509,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // ميزة الدخول التلقائي للإدارة بعد التحقق لأول مرة
   void _openMasterAdminDialog() async {
     if (isMasterAdmin) {
       _openAdminManagementPanel();
@@ -906,7 +903,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
                       const SizedBox(height: 24),
 
-                      // بطاقة خيارات البروفايل المعززة
                       ClipRRect(
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
