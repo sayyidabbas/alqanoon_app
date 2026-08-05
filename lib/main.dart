@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 // ==========================================
-// إعدادات Firebase السحابية المدمجة
+// إعدادات Firebase السحابية المدمجة بالمفاتيح الصحيحة
 // ==========================================
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
@@ -138,7 +138,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
-    debugPrint("Firebase init bypassed/error: $e");
+    debugPrint("Firebase init error: $e");
   }
   runApp(const MyApp());
 }
@@ -1329,7 +1329,7 @@ class _SectionDaysScheduleScreenState extends State<SectionDaysScheduleScreen> {
     );
   }
 }
-// ----------------- شاشة منتدى الطلبة والدردشة الاحترافية -----------------
+// ----------------- شاشة منتدى الطلبة والدردشة المحدثة الثابتة -----------------
 class StudentForumScreen extends StatefulWidget {
   const StudentForumScreen({super.key});
 
@@ -1347,13 +1347,17 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
       String text = _chatController.text.trim();
       _chatController.clear();
       
-      await FirebaseFirestore.instance.collection('forum_chats').add({
-        'channel': activeChannel,
-        'sender': currentUserAccountName,
-        'text': text,
-        'replyTo': replyToMessage != null ? replyToMessage!['text'] : null,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+      try {
+        await FirebaseFirestore.instance.collection('forum_chats').add({
+          'channel': activeChannel,
+          'sender': currentUserAccountName,
+          'text': text,
+          'replyTo': replyToMessage != null ? replyToMessage!['text'] : null,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+      } catch (e) {
+        debugPrint("Error sending message: $e");
+      }
 
       setState(() {
         replyToMessage = null;
@@ -1396,19 +1400,25 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
               stream: FirebaseFirestore.instance
                   .collection('forum_chats')
                   .where('channel', isEqualTo: activeChannel)
-                  .orderBy('timestamp', descending: false)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
                 }
                 var docs = snapshot.data?.docs ?? [];
+                
+                var sortedDocs = docs.toList()
+                  ..sort((a, b) {
+                    var aTime = (a.data() as Map<String, dynamic>)['timestamp'] ?? 0;
+                    var bTime = (b.data() as Map<String, dynamic>)['timestamp'] ?? 0;
+                    return aTime.compareTo(bTime);
+                  });
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(12),
-                  itemCount: docs.length,
+                  itemCount: sortedDocs.length,
                   itemBuilder: (context, idx) {
-                    var msg = docs[idx].data() as Map<String, dynamic>;
+                    var msg = sortedDocs[idx].data() as Map<String, dynamic>;
                     bool isMe = msg['sender'] == currentUserAccountName;
 
                     return Align(
@@ -1469,12 +1479,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
             color: Colors.white,
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.attach_file, color: Colors.grey),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ميزة إرفاق الصور والملفات')));
-                  },
-                ),
                 Expanded(
                   child: TextField(
                     controller: _chatController,
