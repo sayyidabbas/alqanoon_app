@@ -109,7 +109,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         if (user != null) {
           isLoggedInGlobal = true;
           currentUserEmail = user.email ?? currentUserEmail;
-          currentUserAccountName = user.displayName ?? currentUserAccountName;
+          currentUserAccountName = (user.displayName != null && user.displayName!.isNotEmpty)
+              ? user.displayName!
+              : currentUserAccountName;
         }
 
         Widget target = isLoggedInGlobal
@@ -117,7 +119,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             : AuthScreen(
                 onAuthSuccess: (name, email) {
                   isLoggedInGlobal = true;
-                  currentUserAccountName = name;
+                  currentUserAccountName = name.isEmpty ? 'سيدعباس عقيل' : name;
                   currentUserEmail = email;
                   Navigator.pushReplacement(
                     context,
@@ -201,7 +203,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         letterSpacing: 1.5,
                         shadows: [
                           Shadow(
-                            color: Colors.black54, // تم التصحيح لمنع خطأ black50
+                            color: Colors.black54,
                             offset: Offset(0, 3),
                             blurRadius: 8,
                           )
@@ -260,24 +262,27 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
         currentUserEmail: currentUserEmail,
         currentUserUniversity: currentUserUniversity,
         currentUserCollege: currentUserCollege,
-        onLogout: () {
+        onLogout: () async {
+          await FirebaseAuth.instance.signOut();
           isLoggedInGlobal = false;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AuthScreen(
-                onAuthSuccess: (name, email) {
-                  isLoggedInGlobal = true;
-                  currentUserAccountName = name;
-                  currentUserEmail = email;
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-                  );
-                },
+          if (context.mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AuthScreen(
+                  onAuthSuccess: (name, email) {
+                    isLoggedInGlobal = true;
+                    currentUserAccountName = name.isEmpty ? 'سيدعباس عقيل' : name;
+                    currentUserEmail = email;
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+                    );
+                  },
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
       ),
     ];
