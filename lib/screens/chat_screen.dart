@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 
 class StudentForumScreen extends StatefulWidget {
   final String currentUserAccountName;
-  final bool isAdmin; // يتم تحديد إذا كان المستخدم أدمن أم لا
+  final bool isAdmin;
 
   const StudentForumScreen({
     super.key,
@@ -26,7 +25,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
   bool _isUserBanned = false;
   List<String> _bannedUsers = [];
   
-  // Pagination Variables
   int _documentLimit = 20;
   bool _isLoadingMore = false;
   
@@ -45,25 +43,25 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     super.dispose();
   }
 
-  // الاستماع لاشتراطات الإدارة (قفل الشات، الحظر)
   void _listenToAdminSettings() {
     FirebaseFirestore.instance
         .collection('chat_settings')
         .doc('general')
         .snapshots()
         .listen((snapshot) {
-      if (snapshot.exists) {
-        var data = snapshot.data();
-        setState(() {
-          _isChatDisabled = data?['isChatDisabled'] ?? false;
-          _bannedUsers = List<String>.from(data?['bannedUsers'] ?? []);
-          _isUserBanned = _bannedUsers.contains(widget.currentUserAccountName);
-        });
+      if (snapshot.exists && snapshot.data() != null) {
+        var data = snapshot.data()!;
+        if (mounted) {
+          setState(() {
+            _isChatDisabled = data['isChatDisabled'] ?? false;
+            _bannedUsers = List<String>.from(data['bannedUsers'] ?? []);
+            _isUserBanned = _bannedUsers.contains(widget.currentUserAccountName);
+          });
+        }
       }
     });
   }
 
-  // مؤشر جاري الكتابة...
   void _onTextChanged() {
     bool isTyping = _chatController.text.isNotEmpty;
     FirebaseFirestore.instance
@@ -72,7 +70,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
         .set({'isTyping': isTyping, 'sender': widget.currentUserAccountName});
   }
 
-  // التمرير الذكي (Pagination)
   void _onScroll() {
     if (_scrollController.position.pixels ==
         _scrollController.position.maxScrollExtent) {
@@ -87,9 +84,11 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
         _documentLimit += 20;
       });
       Future.delayed(const Duration(milliseconds: 500), () {
-        setState(() {
-          _isLoadingMore = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoadingMore = false;
+          });
+        }
       });
     }
   }
@@ -104,7 +103,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     }
   }
 
-  // خيارات الإدارة (3 نقاط أعلى الشاشة)
   void _showAdminOptionsMenu() {
     showModalBottomSheet(
       context: context,
@@ -193,8 +191,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
       ),
     );
   }
-    // إرسال رسالة
-  void _sendMessage({String type = 'text', String? mediaUrl}) async {
+    void _sendMessage({String type = 'text', String? mediaUrl}) async {
     if (_isChatDisabled && !widget.isAdmin) {
       _showSnackBar('الدردشة مغلقة حالياً من قبل الإدارة.');
       return;
@@ -212,7 +209,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
         await FirebaseFirestore.instance.collection('forum_chats').add({
           'sender': widget.currentUserAccountName,
           'text': mediaUrl ?? text,
-          'type': type, // 'text', 'image', 'audio', 'file'
+          'type': type,
           'replyTo': replyToMessage != null
               ? {
                   'text': replyToMessage!['text'],
@@ -230,13 +227,14 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
         debugPrint("Error sending message: $e");
       }
 
-      setState(() {
-        replyToMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          replyToMessage = null;
+        });
+      }
     }
   }
 
-  // إضافة تفاعل (Emoji Reaction)
   void _toggleReaction(String docId, Map<String, dynamic> reactions, String emoji) {
     String user = widget.currentUserAccountName;
     if (reactions[user] == emoji) {
@@ -251,7 +249,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
         .update({'reactions': reactions});
   }
 
-  // خيارات رفع الملفات والوسائط
   void _showAttachmentModal() {
     showModalBottomSheet(
       context: context,
@@ -301,6 +298,16 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  String _formatTime(dynamic timestamp) {
+    if (timestamp == null || timestamp is! Timestamp) return '';
+    DateTime dt = timestamp.toDate();
+    int hourInt = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    String hour = hourInt.toString().padLeft(2, '0');
+    String minute = dt.minute.toString().padLeft(2, '0');
+    String period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -318,10 +325,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
       ),
       body: Column(
         children: [
-          // 1. الرسالة المثبتة
           _buildPinnedMessageBanner(),
-
-          // 2. قائمة الرسائل
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -363,21 +367,14 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
               },
             ),
           ),
-
-          // 3. مؤشر الكتابة
           _buildTypingIndicator(),
-
-          // 4. خيار المعاينة عند الرد
           if (replyToMessage != null) _buildReplyPreview(),
-
-          // 5. حقل إدخال النص والإرسال
           _buildInputArea(),
         ],
       ),
     );
   }
-    // تصميم شريط الرسالة المثبتة
-  Widget _buildPinnedMessageBanner() {
+    Widget _buildPinnedMessageBanner() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('forum_chats')
@@ -411,13 +408,8 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     );
   }
 
-  // فقاعة الرسالة (Chat Bubble)
   Widget _buildChatBubble(String docId, Map<String, dynamic> msg, bool isMe) {
-    DateTime? time = msg['timestamp'] != null
-        ? (msg['timestamp'] as Timestamp).toDate()
-        : null;
-    String formattedTime = time != null ? DateFormat('hh:mm a').format(time) : '';
-
+    String formattedTime = _formatTime(msg['timestamp']);
     Map<String, dynamic> reactions = Map<String, dynamic>.from(msg['reactions'] ?? {});
 
     return GestureDetector(
@@ -464,8 +456,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                 )
               ],
               const SizedBox(height: 2),
-
-              // نوع المحتوى
               if (msg['type'] == 'image')
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -476,7 +466,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                   children: [
                     Icon(Icons.play_arrow),
                     SizedBox(width: 8),
-                    Text('رسالة صوتية (تنزيل/تشغيل)'),
+                    Text('رسالة صوتية'),
                   ],
                 )
               else
@@ -484,10 +474,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                   msg['text'] ?? '',
                   style: TextStyle(color: isMe ? Colors.black : Colors.white, fontSize: 14),
                 ),
-
               const SizedBox(height: 4),
-
-              // الوقت وحالة القراءة
               Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -509,8 +496,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
                   ]
                 ],
               ),
-
-              // التفاعلات
               if (reactions.isNotEmpty)
                 Wrap(
                   spacing: 4,
@@ -523,7 +508,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     );
   }
 
-  // القائمة المنسدلة للضغط المطول على الرسالة
   void _showContextMenu(String docId, Map<String, dynamic> msg, bool isMe) {
     showModalBottomSheet(
       context: context,
@@ -572,7 +556,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     );
   }
 
-  // معاينة الرد الإلحاقي
   Widget _buildReplyPreview() {
     return Container(
       padding: const EdgeInsets.all(8),
@@ -597,7 +580,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     );
   }
 
-  // مؤشر الكتابة
   Widget _buildTypingIndicator() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('chat_typing').snapshots(),
@@ -624,7 +606,6 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     );
   }
 
-  // حقل إدخال النص وإرسال المرفقات
   Widget _buildInputArea() {
     if (_isChatDisabled && !widget.isAdmin) {
       return Container(
