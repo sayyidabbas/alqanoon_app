@@ -32,7 +32,11 @@ class _AuthScreenState extends State<AuthScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
+        
+        // التحقق الآمن من الاسم لعدم حدوث خطأ Null
         String name = creds.user?.displayName ?? 'سيدعباس عقيل';
+        if (name.isEmpty) name = 'سيدعباس عقيل';
+        
         widget.onAuthSuccess(name, _emailController.text.trim());
       } else {
         if (_nameController.text.trim().isEmpty) {
