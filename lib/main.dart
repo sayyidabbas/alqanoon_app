@@ -7,6 +7,7 @@ import 'screens/home_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/services_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/auth_screen.dart';
 
 // ==========================================
 // إعدادات Firebase السحابية
@@ -87,7 +88,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
 
-    // إعداد أنيميشن مدته 2.5 ثانية
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -103,7 +103,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _animationController.forward();
 
-    // للانتقال بعد 3.5 ثوانٍ
     Timer(const Duration(milliseconds: 3500), () {
       if (mounted) {
         User? user = FirebaseAuth.instance.currentUser;
@@ -112,7 +111,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           currentUserEmail = user.email ?? currentUserEmail;
           currentUserAccountName = user.displayName ?? currentUserAccountName;
         }
-        Widget target = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
+
+        Widget target = isLoggedInGlobal
+            ? const MainNavigationHolder()
+            : AuthScreen(
+                onAuthSuccess: (name, email) {
+                  isLoggedInGlobal = true;
+                  currentUserAccountName = name;
+                  currentUserEmail = email;
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+                  );
+                },
+              );
+
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => target));
       }
     });
@@ -139,7 +152,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ميزان العدالة المتحرك مع التوهج الذهبي
               ScaleTransition(
                 scale: _scaleAnimation,
                 child: FadeTransition(
@@ -159,7 +171,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ],
                     ),
                     child: const Icon(
-                      Icons.balance_rounded, // أيقونة ميزان العدالة الفخمة
+                      Icons.balance_rounded,
                       size: 85,
                       color: Color(0xFFD4AF37),
                     ),
@@ -167,8 +179,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 ),
               ),
               const SizedBox(height: 35),
-
-              // النصوص الترحيبية المنسقة
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Column(
@@ -179,7 +189,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         fontSize: 18,
                         color: Colors.white70,
                         letterSpacing: 1.2,
-                        fontFamily: 'sans-serif',
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -192,7 +201,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         letterSpacing: 1.5,
                         shadows: [
                           Shadow(
-                            color: Colors.black50,
+                            color: Colors.black54, // تم التصحيح لمنع خطأ black50
                             offset: Offset(0, 3),
                             blurRadius: 8,
                           )
@@ -228,88 +237,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 // ==========================================
-// شاشة تسجيل الدخول
-// ==========================================
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
-
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
-
-class _AuthScreenState extends State<AuthScreen> {
-  bool isLogin = true;
-  bool isLoading = false;
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-
-  Future<void> _submitAuth() async {
-    setState(() => isLoading = true);
-    try {
-      if (isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-      } else {
-        UserCredential creds = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        await creds.user?.updateDisplayName(_nameController.text.trim());
-      }
-      isLoggedInGlobal = true;
-      if (_nameController.text.isNotEmpty) currentUserAccountName = _nameController.text;
-      if (_emailController.text.isNotEmpty) currentUserEmail = _emailController.text;
-
-      if (mounted) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainNavigationHolder()));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.balance_rounded, size: 60, color: Color(0xFFD4AF37)),
-              const SizedBox(height: 20),
-              if (!isLogin) ...[
-                TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-              ],
-              TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'البريد الإلكتروني', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور', border: OutlineInputBorder())),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), foregroundColor: const Color(0xFFD4AF37)),
-                onPressed: isLoading ? null : _submitAuth,
-                child: Text(isLogin ? 'دخول' : 'تسجيل الحساب'),
-              ),
-              TextButton(
-                onPressed: () => setState(() => isLogin = !isLogin),
-                child: Text(isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك'),
-              )
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ==========================================
 // شريط التنقل السفلي والتحكم بالشاشات
 // ==========================================
 class MainNavigationHolder extends StatefulWidget {
@@ -335,7 +262,22 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
         currentUserCollege: currentUserCollege,
         onLogout: () {
           isLoggedInGlobal = false;
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthScreen()));
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AuthScreen(
+                onAuthSuccess: (name, email) {
+                  isLoggedInGlobal = true;
+                  currentUserAccountName = name;
+                  currentUserEmail = email;
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+                  );
+                },
+              ),
+            ),
+          );
         },
       ),
     ];
