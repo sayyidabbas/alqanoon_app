@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String currentUserAccountName;
@@ -31,6 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   late AnimationController _bgAnimationController;
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
+  late AnimationController _entranceController;
 
   String username = '';
   String phoneNumber = '';
@@ -42,11 +44,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   bool isVerified = false;
   bool notificationsEnabled = true;
   bool isLoading = true;
+  bool isMasterAdmin = false;
 
   File? _selectedLocalImage;
   final ImagePicker _picker = ImagePicker();
 
-  // بيانات الدعم والشكاوى المسترجعة ديناميكياً من السحابة
   String supportWhatsApp = '07777558324';
   String supportTelegram = 'x9.ta9';
 
@@ -67,23 +69,48 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _glowAnimation = Tween<double>(begin: 0.25, end: 0.6).animate(
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.75).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
 
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..forward();
+
     _loadUserData();
     _loadSupportContactInfo();
+    _checkMasterAdminStatus();
   }
 
   @override
   void dispose() {
     _bgAnimationController.dispose();
     _glowController.dispose();
+    _entranceController.dispose();
     super.dispose();
   }
 
-  // تحميل بيانات المستخدم من السحابة
+  // فحص صلاحية الإدارة العليا المخزنة دائمياً
+  Future<void> _checkMasterAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        isMasterAdmin = prefs.getBool('isMasterAdminUnlocked') ?? false;
+      });
+    }
+  }
+
+  // تحميل بيانات المستخدم وحفظ الصورة المحلية من الذاكرة
   Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedImagePath = prefs.getString('saved_profile_image_path');
+    if (savedImagePath != null && File(savedImagePath).existsSync()) {
+      setState(() {
+        _selectedLocalImage = File(savedImagePath);
+      });
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
@@ -118,7 +145,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // تحميل بيانات اتصالات الدعم الفني والشكاوى
   Future<void> _loadSupportContactInfo() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('settings').doc('support_info').get();
@@ -134,15 +160,18 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     } catch (_) {}
   }
 
-  // ميزة اختيار صورة البروفايل من معرض الهاتف حصراً
+  // ميزة اختيار الصورة وحفظ مسارها الدائم بالهاتف والسحابة
   Future<void> _pickImageFromGallery() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 80,
+        imageQuality: 85,
       );
 
       if (pickedFile != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_profile_image_path', pickedFile.path);
+
         setState(() {
           _selectedLocalImage = File(pickedFile.path);
         });
@@ -157,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم تحديث صورة البروفايل من المعرض بنجاح! 📸'),
+              content: Text('تم حفظ وتثبيت صورة البروفايل بنجاح! 📸'),
               backgroundColor: Colors.green,
             ),
           );
@@ -170,7 +199,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // دالة تحويل الرابط وتوجيهه للواتساب والتليجرام
   Future<void> _launchURL(String urlString) async {
     final Uri uri = Uri.parse(urlString);
     try {
@@ -186,31 +214,107 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // ميزة إرسال رابط تغيير كلمة المرور
-  Future<void> _changePassword() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null && user.email != null) {
-      try {
-        await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك: ${user.email}'),
-              backgroundColor: Colors.green,
+  // تغيير كلمة المرور المباشر والآمن من داخل التطبيق
+  void _openChangePasswordDialog() {
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          backgroundColor: const Color(0xFF141414),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
+              SizedBox(width: 8),
+              Text('تغيير كلمة المرور', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: newPassCtrl,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'كلمة المرور الجديدة',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmPassCtrl,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'تأكيد كلمة المرور الجديدة',
+                  labelStyle: const TextStyle(color: Colors.white60),
+                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(10)),
+                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
             ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('تعذر الإرسال: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final p1 = newPassCtrl.text.trim();
+                      final p2 = confirmPassCtrl.text.trim();
+                      if (p1.isEmpty || p1.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة المرور يجب أن لا تقل عن 6 أحرف')));
+                        return;
+                      }
+                      if (p1 != p2) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمات المرور غير متطابقة')));
+                        return;
+                      }
+
+                      setModalState(() => isSubmitting = true);
+                      try {
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          await user.updatePassword(p1);
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تم تحديث كلمة المرور بنجاح! 🔒'), backgroundColor: Colors.green),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('خطأ أثناء التحديث: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      } finally {
+                        setModalState(() => isSubmitting = false);
+                      }
+                    },
+              child: isSubmitting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2)) : const Text('تحديث كلمة المرور', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
-    // الشاشة الكاملة لتعديل كافة البيانات الشخصية
-  void _openEditProfileScreen() {
+    void _openEditProfileScreen() {
     final nameCtrl = TextEditingController(text: displayName);
     final uniCtrl = TextEditingController(text: university);
     final colCtrl = TextEditingController(text: college);
@@ -253,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                   keyboardType: TextInputType.phone,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'رقم الهاتف',
+                    labelText: 'رقم الهاتف الشخصي',
                     labelStyle: const TextStyle(color: Colors.white60),
                     prefixIcon: const Icon(Icons.phone, color: Color(0xFFD4AF37)),
                     enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
@@ -349,7 +453,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // نافذة الدعم الفني والشكاوى مع التحويل الآلي
   void _openSupportDialog() {
     showDialog(
       context: context,
@@ -370,7 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('اختر وسيلة التواصل المباشرة للرد الفوري:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            const Text('اختر وسيلة التواصل المباشرة المتاحة للرد الفوري:', style: TextStyle(color: Colors.white70, fontSize: 13)),
             const SizedBox(height: 15),
             ListTile(
               dense: true,
@@ -408,8 +511,13 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // دخول بوابة الإدارة العليا بالكلمة السرية
-  void _openMasterAdminDialog() {
+  // ميزة الدخول التلقائي للإدارة بعد التحقق لأول مرة
+  void _openMasterAdminDialog() async {
+    if (isMasterAdmin) {
+      _openAdminManagementPanel();
+      return;
+    }
+
     final userCtrl = TextEditingController();
     final passCtrl = TextEditingController();
 
@@ -449,24 +557,28 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.white54))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-            onPressed: () {
+            onPressed: () async {
               if (userCtrl.text.trim() == 'x9.ta9' && passCtrl.text.trim() == 'Abbas312004') {
-                Navigator.pop(ctx);
-                _openAdminManagementPanel();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('isMasterAdminUnlocked', true);
+                if (mounted) {
+                  setState(() => isMasterAdmin = true);
+                  Navigator.pop(ctx);
+                  _openAdminManagementPanel();
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('غير مصرح لك بالدخول!'), backgroundColor: Colors.red),
                 );
               }
             },
-            child: const Text('دخول'),
+            child: const Text('دخول وتثبيت الصلاحية'),
           ),
         ],
       ),
     );
   }
 
-  // لوحة الإدارة العليا (تحكم ديناميكي ببيانات الدعم والتوثيق والترقية)
   void _openAdminManagementPanel() {
     final targetUsernameCtrl = TextEditingController();
     final whatsappCtrl = TextEditingController(text: supportWhatsApp);
@@ -658,14 +770,18 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
-        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
         backgroundColor: const Color(0xFF141414),
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37)),
-            tooltip: 'بوابة الإدارة',
+            icon: Icon(
+              isMasterAdmin ? Icons.workspace_premium : Icons.admin_panel_settings,
+              color: const Color(0xFFD4AF37),
+              size: 26,
+            ),
+            tooltip: isMasterAdmin ? 'لوحة الإدارة المفعلة 👑' : 'بوابة الإدارة',
             onPressed: _openMasterAdminDialog,
           ),
         ],
@@ -675,207 +791,212 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           : Stack(
               children: [
                 Positioned(
-                  top: -40,
-                  left: -40,
+                  top: -50,
+                  left: -50,
                   child: AnimatedBuilder(
                     animation: _bgAnimationController,
                     builder: (context, child) {
                       return Container(
-                        width: 220,
-                        height: 220,
+                        width: 240,
+                        height: 240,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFFD4AF37).withOpacity(0.05 + (_bgAnimationController.value * 0.05)),
+                          color: const Color(0xFFD4AF37).withOpacity(0.04 + (_bgAnimationController.value * 0.06)),
                         ),
                       );
                     },
                   ),
                 ),
-                ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    Center(
-                      child: Stack(
-                        children: [
-                          AnimatedBuilder(
-                            animation: _glowAnimation,
-                            builder: (context, child) {
-                              return Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFFD4AF37), width: 2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFD4AF37).withOpacity(_glowAnimation.value),
-                                      blurRadius: 25,
-                                      spreadRadius: 3,
-                                    ),
-                                  ],
+                FadeTransition(
+                  opacity: CurvedAnimation(parent: _entranceController, curve: Curves.easeIn),
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      Center(
+                        child: Stack(
+                          children: [
+                            AnimatedBuilder(
+                              animation: _glowAnimation,
+                              builder: (context, child) {
+                                return Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFD4AF37).withOpacity(_glowAnimation.value),
+                                        blurRadius: 30,
+                                        spreadRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 50,
+                                    backgroundColor: const Color(0xFF1A1A1A),
+                                    backgroundImage: _selectedLocalImage != null
+                                        ? FileImage(_selectedLocalImage!) as ImageProvider
+                                        : (hasNetworkImage ? NetworkImage(profileImageUrl) : null),
+                                    child: (_selectedLocalImage == null && !hasNetworkImage)
+                                        ? Text(
+                                            displayName.isNotEmpty ? displayName[0].toUpperCase() : 'س',
+                                            style: const TextStyle(fontSize: 36, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+                                          )
+                                        : null,
+                                  ),
+                                );
+                              },
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: InkWell(
+                                onTap: _pickImageFromGallery,
+                                child: Container(
+                                  padding: const EdgeInsets.all(9),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFD4AF37),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 6)],
+                                  ),
+                                  child: const Icon(Icons.photo_library, size: 19, color: Colors.black),
                                 ),
-                                child: CircleAvatar(
-                                  radius: 48,
-                                  backgroundColor: const Color(0xFF1A1A1A),
-                                  backgroundImage: _selectedLocalImage != null
-                                      ? FileImage(_selectedLocalImage!) as ImageProvider
-                                      : (hasNetworkImage ? NetworkImage(profileImageUrl) : null),
-                                  child: (_selectedLocalImage == null && !hasNetworkImage)
-                                      ? Text(
-                                          displayName.isNotEmpty ? displayName[0].toUpperCase() : 'س',
-                                          style: const TextStyle(fontSize: 34, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
-                                        )
-                                      : null,
-                                ),
-                              );
-                            },
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: InkWell(
-                              onTap: _pickImageFromGallery,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFD4AF37),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 4)],
-                                ),
-                                child: const Icon(Icons.photo_library, size: 18, color: Colors.black),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                        if (isVerified) ...[
-                          const SizedBox(width: 6),
-                          const Icon(Icons.verified, color: Colors.blueAccent, size: 22),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    if (username.isNotEmpty)
-                      InkWell(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: '@$username'));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('تم نسخ اسم المستخدم بنجاح! 📋'), backgroundColor: Colors.green),
-                          );
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('@$username', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w600, fontSize: 15)),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.copy, size: 14, color: Color(0xFFD4AF37)),
                           ],
                         ),
                       ),
-                    const SizedBox(height: 4),
-                    Text(displayContact, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Text('$university - $college ($academicYear)', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
-
-                    const SizedBox(height: 24),
-
-                    // بطاقة خيارات البروفايل الفاخرة
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1E1E24), Color(0xFF141418)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.25)),
-                        ),
-                        child: Column(
-                          children: [
-                            SwitchListTile(
-                              activeColor: const Color(0xFFD4AF37),
-                              title: const Text('الإشعارات والتنبيهات', style: TextStyle(color: Colors.white)),
-                              secondary: const Icon(Icons.notifications_active, color: Color(0xFFD4AF37)),
-                              value: notificationsEnabled,
-                              onChanged: (val) => setState(() => notificationsEnabled = val),
-                            ),
-                            const Divider(color: Colors.white12, height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.edit, color: Color(0xFFD4AF37)),
-                              title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                              onTap: _openEditProfileScreen,
-                            ),
-                            const Divider(color: Colors.white12, height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
-                              title: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                              onTap: _changePassword,
-                            ),
-                            const Divider(color: Colors.white12, height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.headset_mic, color: Color(0xFFD4AF37)),
-                              title: const Text('الدعم الفني والشكاوى', style: TextStyle(color: Colors.white)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                              onTap: _openSupportDialog,
-                            ),
-                            const Divider(color: Colors.white12, height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFFD4AF37)),
-                              title: const Text('الشروط وسياسة الخصوصية', style: TextStyle(color: Colors.white)),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                              onTap: () {},
-                            ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                          if (isMasterAdmin) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.star, color: Color(0xFFD4AF37), size: 22),
+                          ] else if (isVerified) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.verified, color: Colors.blueAccent, size: 22),
                           ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (username.isNotEmpty)
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: '@$username'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تم نسخ اسم المستخدم بنجاح! 📋'), backgroundColor: Colors.green),
+                            );
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('@$username', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w600, fontSize: 15)),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.copy, size: 14, color: Color(0xFFD4AF37)),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(displayContact, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Text('$university - $college ($academicYear)', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
+
+                      const SizedBox(height: 24),
+
+                      // بطاقة خيارات البروفايل المعززة
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1E1E24), Color(0xFF141418)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            children: [
+                              SwitchListTile(
+                                activeColor: const Color(0xFFD4AF37),
+                                title: const Text('الإشعارات والتنبيهات', style: TextStyle(color: Colors.white)),
+                                secondary: const Icon(Icons.notifications_active, color: Color(0xFFD4AF37)),
+                                value: notificationsEnabled,
+                                onChanged: (val) => setState(() => notificationsEnabled = val),
+                              ),
+                              const Divider(color: Colors.white12, height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.edit, color: Color(0xFFD4AF37)),
+                                title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                                onTap: _openEditProfileScreen,
+                              ),
+                              const Divider(color: Colors.white12, height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
+                                title: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                                onTap: _openChangePasswordDialog,
+                              ),
+                              const Divider(color: Colors.white12, height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.headset_mic, color: Color(0xFFD4AF37)),
+                                title: const Text('الدعم الفني والشكاوى', style: TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                                onTap: _openSupportDialog,
+                              ),
+                              const Divider(color: Colors.white12, height: 1),
+                              ListTile(
+                                leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFFD4AF37)),
+                                title: const Text('الشروط وسياسة الخصوصية', style: TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                                onTap: () {},
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // أزرار الحساب السفلية
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.withOpacity(0.15),
-                              foregroundColor: Colors.redAccent,
-                              side: const BorderSide(color: Colors.redAccent),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.withOpacity(0.15),
+                                foregroundColor: Colors.redAccent,
+                                side: const BorderSide(color: Colors.redAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.logout),
+                              label: const Text('خروج'),
+                              onPressed: _confirmLogout,
                             ),
-                            icon: const Icon(Icons.logout),
-                            label: const Text('خروج'),
-                            onPressed: _confirmLogout,
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade900,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade900,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.delete_forever),
+                              label: const Text('حذف الحساب'),
+                              onPressed: _confirmDeleteAccount,
                             ),
-                            icon: const Icon(Icons.delete_forever),
-                            label: const Text('حذف الحساب'),
-                            onPressed: _confirmDeleteAccount,
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
