@@ -15,7 +15,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBOT5lAEyYCOGBteudtWvXwydJ0PG7MWJ8',
-    appId: '1:449394795:android:6f7',
+    appId: '1:4493934795:android:6f73ac530179d429cfdb4e',
     messagingSenderId: '449394795',
     projectId: 'alqanoon-302c7',
     storageBucket: 'alqanoon-302c7.firebasestorage.app',
