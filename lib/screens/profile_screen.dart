@@ -35,7 +35,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   late AnimationController _entranceController;
 
   String username = '';
-  String phoneNumber = '';
   String profileImageUrl = '';
   String displayName = '';
   String university = '';
@@ -59,23 +58,25 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     university = widget.currentUserUniversity;
     college = widget.currentUserCollege;
 
+    // أنيميشن حركة الدوائر الضوئية في الخلفية
     _bgAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 6),
     )..repeat(reverse: true);
 
+    // أنيميشن النبض الذهبي حول الصورة الشخصية
     _glowController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
 
-    _glowAnimation = Tween<double>(begin: 0.3, end: 0.75).animate(
+    _glowAnimation = Tween<double>(begin: 0.35, end: 0.85).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
 
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 900),
     )..forward();
 
     _loadUserData();
@@ -118,7 +119,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           if (mounted) {
             setState(() {
               username = data['username'] ?? '';
-              phoneNumber = data['phone'] ?? '';
               profileImageUrl = data['avatar'] ?? '';
               isVerified = data['isVerified'] ?? false;
               academicYear = data['academicYear'] ?? 'المرحلة الأولى';
@@ -162,9 +162,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
+        maxWidth: 900,
+        maxHeight: 900,
+        imageQuality: 88,
       );
 
       if (pickedFile != null) {
@@ -185,8 +185,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم حفظ وتثبيت صورة البروفايل بنجاح! 📸'),
-              backgroundColor: Colors.green,
+              content: Text('تم تثبيت صورة البروفايل الفاخرة بنجاح! 📸'),
+              backgroundColor: Color(0xFFD4AF37),
             ),
           );
         }
@@ -222,9 +222,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          backgroundColor: const Color(0xFF141414),
+          backgroundColor: const Color(0xFF141416),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(22),
             side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
           ),
           title: const Row(
@@ -244,11 +244,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                 decoration: InputDecoration(
                   labelText: 'كلمة المرور الجديدة',
                   labelStyle: const TextStyle(color: Colors.white60),
-                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(10)),
-                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(10)),
+                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextField(
                 controller: confirmPassCtrl,
                 obscureText: true,
@@ -256,8 +256,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                 decoration: InputDecoration(
                   labelText: 'تأكيد كلمة المرور الجديدة',
                   labelStyle: const TextStyle(color: Colors.white60),
-                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(10)),
-                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(10)),
+                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
@@ -316,7 +316,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     final nameCtrl = TextEditingController(text: displayName);
     final uniCtrl = TextEditingController(text: university);
     final colCtrl = TextEditingController(text: college);
-    final phoneCtrl = TextEditingController(text: phoneNumber);
     String selectedStage = academicYear;
 
     final stages = ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة', 'خريج حقوق'];
@@ -325,10 +324,10 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       context,
       MaterialPageRoute(
         builder: (context) => Scaffold(
-          backgroundColor: const Color(0xFF0A0A0A),
+          backgroundColor: const Color(0xFF0D0D0F),
           appBar: AppBar(
             title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF141414),
+            backgroundColor: const Color(0xFF141418),
             foregroundColor: Colors.white,
           ),
           body: Padding(
@@ -346,28 +345,13 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'رقم الهاتف الشخصي',
-                    labelStyle: const TextStyle(color: Colors.white60),
-                    prefixIcon: const Icon(Icons.phone, color: Color(0xFFD4AF37)),
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withOpacity(0.04),
                   ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: stages.contains(selectedStage) ? selectedStage : stages.first,
-                  dropdownColor: const Color(0xFF1A1A1A),
+                  dropdownColor: const Color(0xFF1A1A1E),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'المرحلة الدراسية',
@@ -376,7 +360,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withOpacity(0.04),
                   ),
                   items: stages.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                   onChanged: (val) {
@@ -394,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withOpacity(0.04),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -408,12 +392,12 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37)), borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2), borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withOpacity(0.04),
                   ),
                 ),
                 const SizedBox(height: 30),
                 SizedBox(
-                  height: 50,
+                  height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFD4AF37),
@@ -425,14 +409,12 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                       if (user != null) {
                         await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                           'name': nameCtrl.text.trim(),
-                          'phone': phoneCtrl.text.trim(),
                           'academicYear': selectedStage,
                           'university': uniCtrl.text.trim(),
                           'college': colCtrl.text.trim(),
                         });
                         setState(() {
                           displayName = nameCtrl.text.trim();
-                          phoneNumber = phoneCtrl.text.trim();
                           academicYear = selectedStage;
                           university = uniCtrl.text.trim();
                           college = colCtrl.text.trim();
@@ -455,9 +437,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141414),
+        backgroundColor: const Color(0xFF141418),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
         ),
         title: const Row(
@@ -521,9 +503,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141414),
+        backgroundColor: const Color(0xFF141418),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(22),
           side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
         ),
         title: const Row(
@@ -584,7 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF141418),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
@@ -701,7 +683,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141414),
+        backgroundColor: const Color(0xFF141418),
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.red),
@@ -737,7 +719,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: const Color(0xFF141418),
         title: const Text('تسجيل الخروج', style: TextStyle(color: Color(0xFFD4AF37))),
         content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج؟', style: TextStyle(color: Colors.white70)),
         actions: [
@@ -757,18 +739,13 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    String displayContact = widget.currentUserEmail;
-    if (displayContact.endsWith('@lawapp.com')) {
-      displayContact = phoneNumber.isNotEmpty ? phoneNumber : displayContact.replaceAll('@lawapp.com', '');
-    }
-
     bool hasNetworkImage = profileImageUrl.startsWith('http://') || profileImageUrl.startsWith('https://');
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF08080A),
       appBar: AppBar(
-        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-        backgroundColor: const Color(0xFF141414),
+        title: const Text('الملف الشخصي', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        backgroundColor: const Color(0xFF121215),
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
@@ -787,18 +764,53 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
           : Stack(
               children: [
+                // الدائرة المتحركة الذهبية الأولى في أعلى الشاشة
                 Positioned(
-                  top: -50,
-                  left: -50,
+                  top: -60,
+                  right: -60,
                   child: AnimatedBuilder(
                     animation: _bgAnimationController,
                     builder: (context, child) {
-                      return Container(
-                        width: 240,
-                        height: 240,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFD4AF37).withOpacity(0.04 + (_bgAnimationController.value * 0.06)),
+                      return Transform.translate(
+                        offset: Offset(_bgAnimationController.value * 25, _bgAnimationController.value * 15),
+                        child: Container(
+                          width: 260,
+                          height: 260,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                const Color(0xFFD4AF37).withOpacity(0.12),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // الدائرة المتحركة الذهبية الثانية خلف بطاقة الأزرار
+                Positioned(
+                  bottom: 100,
+                  left: -80,
+                  child: AnimatedBuilder(
+                    animation: _bgAnimationController,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(-_bgAnimationController.value * 20, -_bgAnimationController.value * 30),
+                        child: Container(
+                          width: 300,
+                          height: 300,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                const Color(0xFFD4AF37).withOpacity(0.08),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -819,25 +831,25 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                                    border: Border.all(color: const Color(0xFFD4AF37), width: 2.2),
                                     boxShadow: [
                                       BoxShadow(
                                         color: const Color(0xFFD4AF37).withOpacity(_glowAnimation.value),
-                                        blurRadius: 30,
+                                        blurRadius: 32,
                                         spreadRadius: 4,
                                       ),
                                     ],
                                   ),
                                   child: CircleAvatar(
-                                    radius: 50,
-                                    backgroundColor: const Color(0xFF1A1A1A),
+                                    radius: 52,
+                                    backgroundColor: const Color(0xFF141418),
                                     backgroundImage: _selectedLocalImage != null
                                         ? FileImage(_selectedLocalImage!) as ImageProvider
                                         : (hasNetworkImage ? NetworkImage(profileImageUrl) : null),
                                     child: (_selectedLocalImage == null && !hasNetworkImage)
                                         ? Text(
                                             displayName.isNotEmpty ? displayName[0].toUpperCase() : 'س',
-                                            style: const TextStyle(fontSize: 36, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+                                            style: const TextStyle(fontSize: 38, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
                                           )
                                         : null,
                                   ),
@@ -854,7 +866,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                   decoration: const BoxDecoration(
                                     color: Color(0xFFD4AF37),
                                     shape: BoxShape.circle,
-                                    boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 6)],
+                                    boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 6)],
                                   ),
                                   child: const Icon(Icons.photo_library, size: 19, color: Colors.black),
                                 ),
@@ -863,11 +875,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text(displayName, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
                           if (isMasterAdmin) ...[
                             const SizedBox(width: 6),
                             const Icon(Icons.star, color: Color(0xFFD4AF37), size: 22),
@@ -896,30 +908,34 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                             ],
                           ),
                         ),
-                      const SizedBox(height: 4),
-                      Text(displayContact, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Text(widget.currentUserEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13)),
                       const SizedBox(height: 6),
                       Text('$university - $college ($academicYear)', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 26),
 
+                      // البطاقة الخيارية الفاخرة المكسوة بحواف الجلاس الذهبي
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(22),
                         child: Container(
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF1E1E24), Color(0xFF141418)],
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withOpacity(0.06),
+                                Colors.white.withOpacity(0.02),
+                              ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.35), width: 1.2),
                           ),
                           child: Column(
                             children: [
                               SwitchListTile(
                                 activeColor: const Color(0xFFD4AF37),
-                                title: const Text('الإشعارات والتنبيهات', style: TextStyle(color: Colors.white)),
+                                title: const Text('الإشعارات والتنبيهات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                                 secondary: const Icon(Icons.notifications_active, color: Color(0xFFD4AF37)),
                                 value: notificationsEnabled,
                                 onChanged: (val) => setState(() => notificationsEnabled = val),
@@ -927,28 +943,28 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                               const Divider(color: Colors.white12, height: 1),
                               ListTile(
                                 leading: const Icon(Icons.edit, color: Color(0xFFD4AF37)),
-                                title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
+                                title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                                 onTap: _openEditProfileScreen,
                               ),
                               const Divider(color: Colors.white12, height: 1),
                               ListTile(
                                 leading: const Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
-                                title: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white)),
+                                title: const Text('تغيير كلمة المرور', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                                 onTap: _openChangePasswordDialog,
                               ),
                               const Divider(color: Colors.white12, height: 1),
                               ListTile(
                                 leading: const Icon(Icons.headset_mic, color: Color(0xFFD4AF37)),
-                                title: const Text('الدعم الفني والشكاوى', style: TextStyle(color: Colors.white)),
+                                title: const Text('الدعم الفني والشكاوى', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                                 onTap: _openSupportDialog,
                               ),
                               const Divider(color: Colors.white12, height: 1),
                               ListTile(
                                 leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFFD4AF37)),
-                                title: const Text('الشروط وسياسة الخصوصية', style: TextStyle(color: Colors.white)),
+                                title: const Text('الشروط وسياسة الخصوصية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                                 onTap: () {},
                               ),
@@ -957,21 +973,21 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 26),
 
                       Row(
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red.withOpacity(0.15),
+                                backgroundColor: Colors.red.withOpacity(0.12),
                                 foregroundColor: Colors.redAccent,
-                                side: const BorderSide(color: Colors.redAccent),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                side: const BorderSide(color: Colors.redAccent, width: 1.2),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                               icon: const Icon(Icons.logout),
-                              label: const Text('خروج'),
+                              label: const Text('خروج', style: TextStyle(fontWeight: FontWeight.bold)),
                               onPressed: _confirmLogout,
                             ),
                           ),
@@ -981,11 +997,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red.shade900,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                               icon: const Icon(Icons.delete_forever),
-                              label: const Text('حذف الحساب'),
+                              label: const Text('حذف الحساب', style: TextStyle(fontWeight: FontWeight.bold)),
                               onPressed: _confirmDeleteAccount,
                             ),
                           ),
