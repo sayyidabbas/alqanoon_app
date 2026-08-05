@@ -30,20 +30,25 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   String username = '';
   String phoneNumber = '';
   String profileImageUrl = '';
-  String currentRole = 'user';
+  String displayName = '';
+  String university = '';
+  String college = '';
   bool notificationsEnabled = true;
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // أنيميشن نبض ذهبي فخم حول الدائرة الشخصية
+    displayName = widget.currentUserAccountName;
+    university = widget.currentUserUniversity;
+    college = widget.currentUserCollege;
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
@@ -56,7 +61,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.dispose();
   }
 
-  // جلب البيانات التفصيلية من Firestore
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -69,19 +73,143 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               username = data['username'] ?? '';
               phoneNumber = data['phone'] ?? '';
               profileImageUrl = data['avatar'] ?? '';
-              currentRole = data['role'] ?? 'user';
+              if (data['name'] != null && data['name'].toString().isNotEmpty) {
+                displayName = data['name'];
+              }
               isLoading = false;
             });
           }
         }
-      } catch (e) {
+      } catch (_) {
         if (mounted) setState(() => isLoading = false);
       }
     }
   }
 
-  // نافذة الإدارة الحصرية للماستر أدمن x9.ta9
-  void _openMasterAdminDialog() {
+  // نافذة تعديل البيانات الشخصية
+  void _openEditProfileDialog() {
+    final nameCtrl = TextEditingController(text: displayName);
+    final uniCtrl = TextEditingController(text: university);
+    final colCtrl = TextEditingController(text: college);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'الاسم الكامل', labelStyle: TextStyle(color: Colors.white60)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: uniCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'الجامعة', labelStyle: TextStyle(color: Colors.white60)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: colCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'الكلية', labelStyle: TextStyle(color: Colors.white60)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+            onPressed: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                  'name': nameCtrl.text.trim(),
+                  'university': uniCtrl.text.trim(),
+                  'college': colCtrl.text.trim(),
+                });
+                setState(() {
+                  displayName = nameCtrl.text.trim();
+                  university = uniCtrl.text.trim();
+                  college = colCtrl.text.trim();
+                });
+              }
+              if (mounted) Navigator.pop(ctx);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // تغيير صورة البروفايل عن طريق رابط مباشر
+  void _changeProfileAvatar() {
+    final imgController = TextEditingController(text: profileImageUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: const Text('تغيير صورة البروفايل', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'أدخل رابط صورة مباشر من الإنترنت (http/https):',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: imgController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'https://example.com/image.jpg',
+                hintStyle: TextStyle(color: Colors.white38),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              final url = imgController.text.trim();
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid != null) {
+                  await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatar': url});
+                  setState(() => profileImageUrl = url);
+                }
+                if (mounted) Navigator.pop(ctx);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('يرجى كتابة رابط صورة صحيح ببدء http أو https')),
+                );
+              }
+            },
+            child: const Text('حفظ الصورة', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+    void _openMasterAdminDialog() {
     final userCtrl = TextEditingController();
     final passCtrl = TextEditingController();
 
@@ -138,7 +266,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  // لوحة ترقية وعزل المشرفين
   void _openAdminManagementPanel() {
     final newAdminUsernameCtrl = TextEditingController();
 
@@ -214,39 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
     );
   }
-    // تغيير رابط/صورة البروفايل
-  void _changeProfileAvatar() {
-    final imgController = TextEditingController(text: profileImageUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141414),
-        title: const Text('تغيير صورة البروفايل', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: TextField(
-          controller: imgController,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'ضع رابط الصورة (Image URL)...', hintStyle: TextStyle(color: Colors.white38)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء', style: TextStyle(color: Colors.white54))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              final uid = FirebaseAuth.instance.currentUser?.uid;
-              if (uid != null) {
-                await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatar': imgController.text.trim()});
-                setState(() => profileImageUrl = imgController.text.trim());
-              }
-              if (mounted) Navigator.pop(ctx);
-            },
-            child: const Text('حفظ الصورة', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
 
-  // نافذة تأكيد حذف الحساب
   void _confirmDeleteAccount() {
     showDialog(
       context: context,
@@ -283,7 +378,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  // تأكيد تسجيل الخروج
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -312,6 +406,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       displayContact = phoneNumber.isNotEmpty ? phoneNumber : displayContact.replaceAll('@lawapp.com', '');
     }
 
+    bool hasValidImage = profileImageUrl.startsWith('http://') || profileImageUrl.startsWith('https://');
+
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
@@ -320,6 +416,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_note, color: Color(0xFFD4AF37)),
+            tooltip: 'تعديل البيانات',
+            onPressed: _openEditProfileDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37)),
             tooltip: 'بوابة الإدارة',
@@ -331,7 +432,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
           : Stack(
               children: [
-                // خلفية بإضاءة متحركة خفيفة
                 Positioned(
                   top: -60,
                   left: -60,
@@ -347,7 +447,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    // الصورة الرمزية المتحركة بالنبض الذهبي
                     Center(
                       child: ScaleTransition(
                         scale: _pulseAnimation,
@@ -369,10 +468,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               child: CircleAvatar(
                                 radius: 46,
                                 backgroundColor: const Color(0xFF1A1A1A),
-                                backgroundImage: profileImageUrl.isNotEmpty ? NetworkImage(profileImageUrl) : null,
-                                child: profileImageUrl.isEmpty
+                                backgroundImage: hasValidImage ? NetworkImage(profileImageUrl) : null,
+                                child: !hasValidImage
                                     ? Text(
-                                        widget.currentUserAccountName.isNotEmpty ? widget.currentUserAccountName[0].toUpperCase() : 'س',
+                                        displayName.isNotEmpty ? displayName[0].toUpperCase() : 'س',
                                         style: const TextStyle(fontSize: 34, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
                                       )
                                     : null,
@@ -395,17 +494,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text(widget.currentUserAccountName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text(displayName, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                     if (username.isNotEmpty)
                       Text('@$username', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     Text(displayContact, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 13)),
                     const SizedBox(height: 6),
-                    Text('${widget.currentUserUniversity} - ${widget.currentUserCollege}', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text('$university - $college', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
                     
                     const SizedBox(height: 24),
                     
-                    // كارت glassmorphic للإحصائيات والخيارات
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: BackdropFilter(
@@ -428,10 +526,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               ),
                               const Divider(color: Colors.white12),
                               ListTile(
+                                leading: const Icon(Icons.edit_note, color: Color(0xFFD4AF37)),
+                                title: const Text('تعديل البيانات الشخصية', style: TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                                onTap: _openEditProfileDialog,
+                              ),
+                              ListTile(
                                 leading: const Icon(Icons.support_agent, color: Color(0xFFD4AF37)),
                                 title: const Text('الدعم الفني والشكاوى', style: TextStyle(color: Colors.white)),
                                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                                onTap: () {},
+                                onTap: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('جاري فتح قنوات التواصل مع الدعم الفني...')),
+                                  );
+                                },
                               ),
                               ListTile(
                                 leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFFD4AF37)),
@@ -447,7 +555,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
                     const SizedBox(height: 20),
 
-                    // زر الخروج وزر الحذف
                     Row(
                       children: [
                         Expanded(
