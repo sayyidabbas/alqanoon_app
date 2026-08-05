@@ -172,23 +172,22 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           password: password,
         );
 
-        String finalName = 'سيدعباس عقيل';
-        if (creds.user != null && creds.user?.displayName != null && creds.user!.displayName!.isNotEmpty) {
-          finalName = creds.user!.displayName!;
+        String safeName = 'طالب حقوق';
+        if (creds.user != null && creds.user!.displayName != null && creds.user!.displayName!.isNotEmpty) {
+          safeName = creds.user!.displayName!;
         } else if (nameInput.isNotEmpty) {
-          finalName = nameInput;
+          safeName = nameInput;
         }
 
-        currentUserAccountName = finalName;
+        currentUserAccountName = safeName;
         currentUserEmail = email;
         isLoggedInGlobal = true;
 
-        if (widget.onAuthSuccess != null) {
-          widget.onAuthSuccess!(finalName, email);
-        } else if (mounted) {
-          Navigator.pushReplacement(
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+            (route) => false,
           );
         }
       } else {
@@ -215,12 +214,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         currentUserEmail = email;
         isLoggedInGlobal = true;
 
-        if (widget.onAuthSuccess != null) {
-          widget.onAuthSuccess!(nameInput, email);
-        } else if (mounted) {
-          Navigator.pushReplacement(
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+            (route) => false,
           );
         }
       }
