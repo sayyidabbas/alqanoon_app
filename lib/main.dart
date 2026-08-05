@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'screens/home_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/services_screen.dart';
 import 'screens/profile_screen.dart';
@@ -68,6 +68,9 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ==========================================
+// الواجهة الترحيبية الفخمة والمتحركة
+// ==========================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -75,33 +78,158 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 2), () {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        isLoggedInGlobal = true;
-        currentUserEmail = user.email ?? currentUserEmail;
-        currentUserAccountName = user.displayName ?? currentUserAccountName;
+
+    // إعداد أنيميشن مدته 2.5 ثانية
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+
+    _animationController.forward();
+
+    // للانتقال بعد 3.5 ثوانٍ
+    Timer(const Duration(milliseconds: 3500), () {
+      if (mounted) {
+        User? user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          isLoggedInGlobal = true;
+          currentUserEmail = user.email ?? currentUserEmail;
+          currentUserAccountName = user.displayName ?? currentUserAccountName;
+        }
+        Widget target = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => target));
       }
-      Widget target = isLoggedInGlobal ? const MainNavigationHolder() : const AuthScreen();
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => target));
     });
   }
 
   @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF1A1A1A),
-      body: Center(
-        child: Icon(Icons.gavel_rounded, size: 80, color: Color(0xFFD4AF37)),
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D0D), Color(0xFF1A1A1A), Color(0xFF000000)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // ميزان العدالة المتحرك مع التوهج الذهبي
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF1A1A1A),
+                      border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFD4AF37).withOpacity(0.25),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.balance_rounded, // أيقونة ميزان العدالة الفخمة
+                      size: 85,
+                      color: Color(0xFFD4AF37),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 35),
+
+              // النصوص الترحيبية المنسقة
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    const Text(
+                      'أهلاً بكم في',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white70,
+                        letterSpacing: 1.2,
+                        fontFamily: 'sans-serif',
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'منصة القانون',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFD4AF37),
+                        letterSpacing: 1.5,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black50,
+                            offset: Offset(0, 3),
+                            blurRadius: 8,
+                          )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4AF37).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(25),
+                        border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+                      ),
+                      child: const Text(
+                        'سيدعباس عقيل الحسيني',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFD4AF37),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
+// ==========================================
+// شاشة تسجيل الدخول
+// ==========================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -154,7 +282,7 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.gavel_rounded, size: 60, color: Color(0xFFD4AF37)),
+              const Icon(Icons.balance_rounded, size: 60, color: Color(0xFFD4AF37)),
               const SizedBox(height: 20),
               if (!isLogin) ...[
                 TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder())),
@@ -181,6 +309,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
+// ==========================================
+// شريط التنقل السفلي والتحكم بالشاشات
+// ==========================================
 class MainNavigationHolder extends StatefulWidget {
   const MainNavigationHolder({super.key});
 
@@ -194,6 +325,7 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
   @override
   Widget build(BuildContext context) {
     List<Widget> screens = [
+      HomeScreen(currentUserAccountName: currentUserAccountName),
       StudentForumScreen(currentUserAccountName: currentUserAccountName),
       ServicesScreen(currentUserAccountName: currentUserAccountName),
       ProfileScreen(
@@ -213,8 +345,11 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFFD4AF37),
+        unselectedItemColor: Colors.grey,
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
           BottomNavigationBarItem(icon: Icon(Icons.forum), label: 'الدردشة'),
           BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'الخدمات'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'حسابي'),
