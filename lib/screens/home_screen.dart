@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   final String currentUserAccountName;
@@ -13,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late AnimationController _bgAnimationController;
   String _selectedCategoryFilter = 'الكل';
+  bool isAdmin = false;
 
   List<String> legalQuotesList = [
     '« لا جَرِيمَةَ وَلا عُقُوبَةَ إِلاّ بينَصٍّ »',
@@ -29,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    _checkAdminStatus();
     _bgAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
@@ -39,6 +42,111 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void dispose() {
     _bgAnimationController.dispose();
     super.dispose();
+  }
+
+  // التحقق من صلاحيات الأدمن للحساب الحالية
+  Future<void> _checkAdminStatus() async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      try {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+
+        if (userDoc.exists && userDoc.data() != null) {
+          var data = userDoc.data() as Map<String, dynamic>;
+          if (mounted) {
+            setState(() {
+              isAdmin = (data['role'] == 'admin');
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint("Error checking admin status: $e");
+      }
+    }
+  }
+
+  // لوحة تحكم الأدمن لإدارة المقولات والأحداث
+  void _showAdminControlPanel() {
+    final quoteCtrl = TextEditingController();
+    final eventTitleCtrl = TextEditingController();
+    final eventDaysCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          top: 20,
+          left: 20,
+          right: 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('لوحة إدارة الصفحة الرئيسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(),
+              const Text('إضافة مقولة قانونية جديدة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: quoteCtrl,
+                decoration: const InputDecoration(hintText: 'أدخل النص القانوني...', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                onPressed: () {
+                  if (quoteCtrl.text.trim().isNotEmpty) {
+                    setState(() {
+                      legalQuotesList.add('« ${quoteCtrl.text.trim()} »');
+                    });
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text('إضافة المقولة'),
+              ),
+              const SizedBox(height: 16),
+              const Text('إضافة حدث عد تنازلي جديد:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: eventTitleCtrl,
+                decoration: const InputDecoration(hintText: 'عنوان الحدث (مثلاً: الامتحانات)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: eventDaysCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(hintText: 'عدد الأيام المتبقية', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
+                onPressed: () {
+                  int? days = int.tryParse(eventDaysCtrl.text.trim());
+                  if (eventTitleCtrl.text.trim().isNotEmpty && days != null) {
+                    setState(() {
+                      countdownEventsList.add({
+                        'title': eventTitleCtrl.text.trim(),
+                        'days': days,
+                        'icon': Icons.event,
+                      });
+                    });
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text('إضافة الحدث'),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showComments(String docId, List comments) {
@@ -198,22 +306,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       },
     );
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('منصة القانون - الرئيسية'),
         backgroundColor: const Color(0xFF1A1A1A),
         foregroundColor: Colors.white,
+        actions: [
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37)),
+              tooltip: 'إدارة الصفحة الرئيسية',
+              onPressed: _showAdminControlPanel,
+            ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFFD4AF37),
-        foregroundColor: Colors.black,
-        onPressed: _addPost,
-        icon: const Icon(Icons.add_alert_rounded),
-        label: const Text('نشر جديد'),
-      ),
+      // زر "نشر جديد" يظهر فقط عندما يكون حساب المستخدم أدمن
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+              onPressed: _addPost,
+              icon: const Icon(Icons.add_alert_rounded),
+              label: const Text('نشر جديد'),
+            )
+          : null,
       body: Stack(
         children: [
           Positioned.fill(
@@ -358,12 +476,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       ],
                                     ),
                                     const Spacer(),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () {
-                                        FirebaseFirestore.instance.collection('posts').doc(docId).delete();
-                                      },
-                                    ),
+                                    // أيقونة الحذف تظهر فقط للأدمن
+                                    if (isAdmin)
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                        onPressed: () {
+                                          FirebaseFirestore.instance.collection('posts').doc(docId).delete();
+                                        },
+                                      ),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
