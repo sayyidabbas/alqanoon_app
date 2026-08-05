@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../main.dart'; // لاستدعاء MainNavigationHolder بشكل مباشر وآمن
 
 class AuthScreen extends StatefulWidget {
   final Function(String name, String email)? onAuthSuccess;
@@ -74,7 +75,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'أدخل بريدك الإلكتروني وسيصلك رابط التعيين (يرجى مراجعة مجلد Spam/الرسائل المهملة أيضاً):',
+              'أدخل بريدك الإلكتروني وسيصلك رابط التعيين (تحقق من الرسائل المهملة Spam):',
               style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
             const SizedBox(height: 15),
@@ -172,14 +173,23 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         );
 
         String finalName = 'سيدعباس عقيل';
-        if (creds.user != null && creds.user!.displayName != null && creds.user!.displayName!.isNotEmpty) {
+        if (creds.user != null && creds.user?.displayName != null && creds.user!.displayName!.isNotEmpty) {
           finalName = creds.user!.displayName!;
         } else if (nameInput.isNotEmpty) {
           finalName = nameInput;
         }
 
+        currentUserAccountName = finalName;
+        currentUserEmail = email;
+        isLoggedInGlobal = true;
+
         if (widget.onAuthSuccess != null) {
           widget.onAuthSuccess!(finalName, email);
+        } else if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+          );
         }
       } else {
         if (nameInput.isEmpty) {
@@ -201,8 +211,17 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           } catch (_) {}
         }
 
+        currentUserAccountName = nameInput;
+        currentUserEmail = email;
+        isLoggedInGlobal = true;
+
         if (widget.onAuthSuccess != null) {
           widget.onAuthSuccess!(nameInput, email);
+        } else if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
+          );
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -450,14 +469,4 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+        
