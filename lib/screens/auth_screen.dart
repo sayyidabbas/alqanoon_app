@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -49,175 +48,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     });
     _animController.reset();
     _animController.forward();
-  }
-
-  // نافذة بوابة تفعيل الأدمن الخفية
-  void _showSecretAdminDialog() {
-    final adminUserCtrl = TextEditingController();
-    final adminPassCtrl = TextEditingController();
-    bool isChanging = false;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
-            ),
-            title: Row(
-              children: [
-                const Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37)),
-                const SizedBox(width: 8),
-                Text(
-                  isChanging ? 'تغيير بيانات الأدمن' : 'تفعيل صلاحية الإدارة',
-                  style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: adminUserCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'اسم مستخدم الأدمن',
-                    labelStyle: const TextStyle(color: Colors.white60),
-                    prefixIcon: const Icon(Icons.person, color: Color(0xFFD4AF37)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xFFD4AF37)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: adminPassCtrl,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'رمز سر الأدمن',
-                    labelStyle: const TextStyle(color: Colors.white60),
-                    prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFD4AF37)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xFFD4AF37)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                ),
-                onPressed: () async {
-                  String userInput = adminUserCtrl.text.trim();
-                  String passInput = adminPassCtrl.text.trim();
-
-                  if (userInput.isEmpty || passInput.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('يرجى ملء جميع الحقول')),
-                    );
-                    return;
-                  }
-
-                  try {
-                    var docRef = FirebaseFirestore.instance.collection('admin_credentials').doc('master');
-                    var snapshot = await docRef.get();
-
-                    String storedUser = 'admin';
-                    String storedPass = 'admin123';
-
-                    if (snapshot.exists && snapshot.data() != null) {
-                      storedUser = snapshot.data()!['username'] ?? 'admin';
-                      storedPass = snapshot.data()!['password'] ?? 'admin123';
-                    } else {
-                      await docRef.set({'username': storedUser, 'password': storedPass});
-                    }
-
-                    if (isChanging) {
-                      await docRef.set({'username': userInput, 'password': passInput});
-                      if (mounted) {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('تم تغيير بيانات الأدمن بنجاح!'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    } else {
-                      if (userInput == storedUser && passInput == storedPass) {
-                        User? currentUser = FirebaseAuth.instance.currentUser;
-                        if (currentUser != null) {
-                          await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set({
-                            'role': 'admin',
-                            'email': currentUser.email,
-                          }, SetOptions(merge: true));
-                        }
-
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('تم تفعيل صلاحيات الأدمن بنجاح لهذا الحساب!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } else {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('اسم المستخدم أو رمز الأدمن غير صحيح!'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
-                      );
-                    }
-                  }
-                },
-                child: Text(isChanging ? 'حفظ الجديد' : 'تفعيل الأدمن', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Color(0xFFD4AF37)),
-                tooltip: 'تغيير بيانات الأدمن',
-                onPressed: () {
-                  setDialogState(() {
-                    isChanging = !isChanging;
-                  });
-                },
-              )
-            ],
-          );
-        },
-      ),
-    );
   }
 
   Future<void> _resetPasswordDialog() async {
@@ -320,7 +150,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       ),
     );
   }
-    Future<void> _submitAuth() async {
+
+  Future<void> _submitAuth() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final nameInput = _nameController.text.trim();
@@ -463,23 +294,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFFD4AF37).withOpacity(0.12),
-              ),
-            ),
-          ),
-          // زر الإدارة الخفي في أعلى الشاشة جهة اليسار
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: IconButton(
-                  icon: Icon(
-                    Icons.shield_outlined,
-                    color: Colors.white.withOpacity(0.15),
-                    size: 22,
-                  ),
-                  onPressed: _showSecretAdminDialog,
-                ),
               ),
             ),
           ),
