@@ -46,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   File? _selectedLocalImage;
   final ImagePicker _picker = ImagePicker();
 
-  // بيانات الدعم الفني المسترجعة ديناميكياً
+  // بيانات الدعم والشكاوى المسترجعة ديناميكياً من السحابة
   String supportWhatsApp = '07777558324';
   String supportTelegram = 'x9.ta9';
 
@@ -118,7 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // تحميل بيانات الدعم والشكاوى ديناميكياً
+  // تحميل بيانات اتصالات الدعم الفني والشكاوى
   Future<void> _loadSupportContactInfo() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('settings').doc('support_info').get();
@@ -134,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     } catch (_) {}
   }
 
-  // اختيار صورة البروفايل من المعرض حصراً
+  // ميزة اختيار صورة البروفايل من معرض الهاتف حصراً
   Future<void> _pickImageFromGallery() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
@@ -170,7 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // دالة تحويل الرابط وفتحه بواتساب وتليجرام
+  // دالة تحويل الرابط وتوجيهه للواتساب والتليجرام
   Future<void> _launchURL(String urlString) async {
     final Uri uri = Uri.parse(urlString);
     try {
@@ -186,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  // ميزة تغيير كلمة المرور عبر إرسال البريد
+  // ميزة إرسال رابط تغيير كلمة المرور
   Future<void> _changePassword() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && user.email != null) {
@@ -195,7 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى: ${user.email}'),
+              content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك: ${user.email}'),
               backgroundColor: Colors.green,
             ),
           );
@@ -209,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       }
     }
   }
-    // واجهة تعديل البيانات الشخصية
+    // الشاشة الكاملة لتعديل كافة البيانات الشخصية
   void _openEditProfileScreen() {
     final nameCtrl = TextEditingController(text: displayName);
     final uniCtrl = TextEditingController(text: university);
@@ -349,7 +349,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // نافذة الدعم الفني والشكاوى
+  // نافذة الدعم الفني والشكاوى مع التحويل الآلي
   void _openSupportDialog() {
     showDialog(
       context: context,
@@ -370,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('اختر وسيلة التواصل المباشرة المتاحة للرد المباشر:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            const Text('اختر وسيلة التواصل المباشرة للرد الفوري:', style: TextStyle(color: Colors.white70, fontSize: 13)),
             const SizedBox(height: 15),
             ListTile(
               dense: true,
@@ -408,7 +408,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // دخول بوابة الإدارة
+  // دخول بوابة الإدارة العليا بالكلمة السرية
   void _openMasterAdminDialog() {
     final userCtrl = TextEditingController();
     final passCtrl = TextEditingController();
@@ -466,7 +466,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     );
   }
 
-  // لوحة تحكم الإدارة العليا (للتعديل الديناميكي لدعم الواتساب والتليجرام)
+  // لوحة الإدارة العليا (تحكم ديناميكي ببيانات الدعم والتوثيق والترقية)
   void _openAdminManagementPanel() {
     final targetUsernameCtrl = TextEditingController();
     final whatsappCtrl = TextEditingController(text: supportWhatsApp);
@@ -785,7 +785,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
                     const SizedBox(height: 24),
 
-                    // بطاقة الخيارات
+                    // بطاقة خيارات البروفايل الفاخرة
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -842,7 +842,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
                     const SizedBox(height: 24),
 
-                    // الأزرار السفلية
+                    // أزرار الحساب السفلية
                     Row(
                       children: [
                         Expanded(
