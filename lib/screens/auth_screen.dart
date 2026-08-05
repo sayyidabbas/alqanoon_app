@@ -49,7 +49,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _animController.forward();
   }
 
-  // إعادة تعيين كلمة المرور
   Future<void> _resetPasswordDialog() async {
     final resetEmailController = TextEditingController(text: _emailController.text.trim());
     showDialog(
@@ -75,7 +74,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور:',
+              'أدخل بريدك الإلكتروني وسيصلك رابط التعيين (يرجى مراجعة مجلد Spam/الرسائل المهملة أيضاً):',
               style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
             const SizedBox(height: 15),
@@ -122,18 +121,24 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني بنجاح'),
+                      content: Text('تم إرسال رابط إعادة التعيين! تحقق من بريدك ومجلد (Spam)'),
                       backgroundColor: Colors.green,
                     ),
+                  );
+                }
+              } on FirebaseAuthException catch (e) {
+                if (mounted) {
+                  String msg = 'حدث خطأ أثناء الإرسال';
+                  if (e.code == 'user-not-found') msg = 'هذا البريد غير مسجل بالنظام!';
+                  if (e.code == 'invalid-email') msg = 'صيغة البريد الإلكتروني غير صحيحة!';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('لم نتمكن من إرسال الرابط: $e'),
-                      backgroundColor: Colors.red.shade800,
-                    ),
+                    SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red.shade800),
                   );
                 }
               }
@@ -166,8 +171,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           password: password,
         );
 
-        String finalName = creds.user?.displayName ?? 'سيدعباس عقيل';
-        if (finalName.isEmpty) finalName = 'سيدعباس عقيل';
+        String finalName = 'سيدعباس عقيل';
+        if (creds.user != null && creds.user!.displayName != null && creds.user!.displayName!.isNotEmpty) {
+          finalName = creds.user!.displayName!;
+        } else if (nameInput.isNotEmpty) {
+          finalName = nameInput;
+        }
 
         if (widget.onAuthSuccess != null) {
           widget.onAuthSuccess!(finalName, email);
@@ -181,16 +190,16 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           return;
         }
 
-        // إنشاء الحساب بنجاح
         UserCredential creds = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
 
-        // تحديث الاسم بشكل آمن ودون التسبب بأي خطأ للمستخدم
-        try {
-          await creds.user?.updateDisplayName(nameInput);
-        } catch (_) {}
+        if (creds.user != null) {
+          try {
+            await creds.user!.updateDisplayName(nameInput);
+          } catch (_) {}
+        }
 
         if (widget.onAuthSuccess != null) {
           widget.onAuthSuccess!(nameInput, email);
@@ -250,7 +259,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     return Scaffold(
       body: Stack(
         children: [
-          // الخلفية الفخمة المتدرجة
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -260,8 +268,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          
-          // دوائر إضاءة مذهبة خفيفة خلفية
           Positioned(
             top: -50,
             right: -50,
@@ -274,19 +280,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          Positioned(
-            bottom: -80,
-            left: -80,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFD4AF37).withOpacity(0.08),
-              ),
-            ),
-          ),
-
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -296,7 +289,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // شعار ميزان العدالة المتوهج
                       Container(
                         padding: const EdgeInsets.all(22),
                         decoration: BoxDecoration(
@@ -318,8 +310,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                         ),
                       ),
                       const SizedBox(height: 24),
-
-                      // البطاقة الزجاجية الرئيسية
                       ClipRRect(
                         borderRadius: BorderRadius.circular(24),
                         child: BackdropFilter(
@@ -343,8 +333,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-
-                                // حقل الاسم الكامل (في حال إنشاء الحساب)
                                 AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 400),
                                   child: !isLogin
@@ -372,8 +360,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                         )
                                       : const SizedBox.shrink(),
                                 ),
-
-                                // حقل البريد الإلكتروني
                                 TextField(
                                   controller: _emailController,
                                   keyboardType: TextInputType.emailAddress,
@@ -395,8 +381,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-
-                                // حقل كلمة المرور
                                 TextField(
                                   controller: _passwordController,
                                   obscureText: true,
@@ -417,8 +401,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                     fillColor: Colors.black26,
                                   ),
                                 ),
-
-                                // خيار نسيت كلمة المرور
                                 if (isLogin) ...[
                                   Align(
                                     alignment: Alignment.centerLeft,
@@ -432,8 +414,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                                   ),
                                 ] else
                                   const SizedBox(height: 16),
-
-                                // زر الدخول / التسجيل الذهبي الفخم
                                 SizedBox(
                                   width: double.infinity,
                                   height: 52,
@@ -459,8 +439,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // زر التبديل السفلي
                       TextButton(
                         onPressed: _toggleMode,
                         child: Text(
