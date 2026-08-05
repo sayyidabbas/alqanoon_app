@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -10,12 +11,139 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   bool isLogin = true;
   bool isLoading = false;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _toggleMode() {
+    setState(() {
+      isLogin = !isLogin;
+    });
+    _animController.reset();
+    _animController.forward();
+  }
+
+  // إعادة تعيين كلمة المرور
+  Future<void> _resetPasswordDialog() async {
+    final resetEmailController = TextEditingController(text: _emailController.text.trim());
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_reset, color: Color(0xFFD4AF37)),
+            SizedBox(width: 8),
+            Text(
+              'استعادة كلمة المرور',
+              style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور:',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: resetEmailController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'البريد الإلكتروني',
+                labelStyle: const TextStyle(color: Colors.white60),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Color(0xFFD4AF37)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.email, color: Color(0xFFD4AF37)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              final email = resetEmailController.text.trim();
+              if (email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('يرجى كتابة البريد الإلكتروني')),
+                );
+                return;
+              }
+              try {
+                await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني بنجاح'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('لم نتمكن من إرسال الرابط: $e'),
+                      backgroundColor: Colors.red.shade800,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('إرسال الرابط', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _submitAuth() async {
     final email = _emailController.text.trim();
@@ -38,7 +166,7 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
 
-        String finalName = creds.user?.displayName ?? nameInput;
+        String finalName = creds.user?.displayName ?? 'سيدعباس عقيل';
         if (finalName.isEmpty) finalName = 'سيدعباس عقيل';
 
         if (widget.onAuthSuccess != null) {
@@ -53,14 +181,16 @@ class _AuthScreenState extends State<AuthScreen> {
           return;
         }
 
+        // إنشاء الحساب بنجاح
         UserCredential creds = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
 
-        if (creds.user != null) {
-          await creds.user!.updateDisplayName(nameInput);
-        }
+        // تحديث الاسم بشكل آمن ودون التسبب بأي خطأ للمستخدم
+        try {
+          await creds.user?.updateDisplayName(nameInput);
+        } catch (_) {}
 
         if (widget.onAuthSuccess != null) {
           widget.onAuthSuccess!(nameInput, email);
@@ -72,12 +202,11 @@ class _AuthScreenState extends State<AuthScreen> {
       switch (e.code) {
         case 'wrong-password':
         case 'invalid-credential':
-          errorMessage = 'كلمة المرور غير صحيحة، يرجى التأكد منها والتحاولة مجدداً.';
+          errorMessage = 'كلمة المرور غير صحيحة، يرجى التأكد منها وإعادة المحاولة.';
           break;
         case 'user-not-found':
           errorMessage = 'البريد الإلكتروني غير مسجل، يمكنك إنشاء حساب جديد.';
           break;
-
         case 'invalid-email':
           errorMessage = 'صيغة البريد الإلكتروني غير صحيحة.';
           break;
@@ -85,10 +214,10 @@ class _AuthScreenState extends State<AuthScreen> {
           errorMessage = 'هذا البريد الإلكتروني مسجل بالفعل.';
           break;
         case 'weak-password':
-          errorMessage = 'كلمة المرور ضعيفة جداً، يجب أن تتكون من 6 أحرف على الأقل.';
+          errorMessage = 'كلمة المرور ضعيفة، يجب أن تتكون من 6 أحرف على الأقل.';
           break;
         case 'too-many-requests':
-          errorMessage = 'تم محاولة الدخول لعدة مرات خطأ، يرجى الانتظار قليلاً وإعادة المحاولة.';
+          errorMessage = 'تم محاولة الدخول لعدة مرات خطأ، يرجى الانتظار قليلاً.';
           break;
         default:
           errorMessage = e.message ?? errorMessage;
@@ -106,7 +235,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('حدث خطأ غير متوقع: $e'),
+            content: Text('حدث خطأ: $e'),
             backgroundColor: Colors.red.shade800,
           ),
         );
@@ -119,90 +248,237 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
-                  ),
-                  child: const Icon(Icons.balance_rounded, size: 50, color: Color(0xFFD4AF37)),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  isLogin ? 'تسجيل الدخول' : 'إنشاء حساب طالب جديد',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A)),
-                ),
-                const SizedBox(height: 24),
-                if (!isLogin) ...[
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'الاسم الكامل',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person, color: Color(0xFFD4AF37)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'البريد الإلكتروني',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email, color: Color(0xFFD4AF37)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'كلمة المرور',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock, color: Color(0xFFD4AF37)),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1A1A1A),
-                      foregroundColor: const Color(0xFFD4AF37),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: isLoading ? null : _submitAuth,
-                    child: isLoading
-                        ? const CircularProgressIndicator(color: Color(0xFFD4AF37))
-                        : Text(
-                            isLogin ? 'دخول' : 'تسجيل الحساب',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => setState(() => isLogin = !isLogin),
-                  child: Text(
-                    isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك',
-                    style: const TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.w600),
-                  ),
-                )
-              ],
+      body: Stack(
+        children: [
+          // الخلفية الفخمة المتدرجة
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0A0A0A), Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
             ),
           ),
-        ),
+          
+          // دوائر إضاءة مذهبة خفيفة خلفية
+          Positioned(
+            top: -50,
+            right: -50,
+            child: Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFD4AF37).withOpacity(0.12),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -80,
+            left: -80,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFD4AF37).withOpacity(0.08),
+              ),
+            ),
+          ),
+
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // شعار ميزان العدالة المتوهج
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF1A1A1A),
+                          border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFD4AF37).withOpacity(0.3),
+                              blurRadius: 25,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.balance_rounded,
+                          size: 60,
+                          color: Color(0xFFD4AF37),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // البطاقة الزجاجية الرئيسية
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  isLogin ? 'تسجيل الدخول' : 'إنشاء حساب طالب جديد',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFD4AF37),
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+
+                                // حقل الاسم الكامل (في حال إنشاء الحساب)
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 400),
+                                  child: !isLogin
+                                      ? Padding(
+                                          padding: const EdgeInsets.only(bottom: 14),
+                                          child: TextField(
+                                            controller: _nameController,
+                                            style: const TextStyle(color: Colors.white),
+                                            decoration: InputDecoration(
+                                              labelText: 'الاسم الكامل',
+                                              labelStyle: const TextStyle(color: Colors.white60),
+                                              prefixIcon: const Icon(Icons.person, color: Color(0xFFD4AF37)),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderSide: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              filled: true,
+                                              fillColor: Colors.black26,
+                                            ),
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+
+                                // حقل البريد الإلكتروني
+                                TextField(
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'البريد الإلكتروني',
+                                    labelStyle: const TextStyle(color: Colors.white60),
+                                    prefixIcon: const Icon(Icons.email, color: Color(0xFFD4AF37)),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.black26,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                // حقل كلمة المرور
+                                TextField(
+                                  controller: _passwordController,
+                                  obscureText: true,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'كلمة المرور',
+                                    labelStyle: const TextStyle(color: Colors.white60),
+                                    prefixIcon: const Icon(Icons.lock, color: Color(0xFFD4AF37)),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderSide: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.black26,
+                                  ),
+                                ),
+
+                                // خيار نسيت كلمة المرور
+                                if (isLogin) ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton(
+                                      onPressed: _resetPasswordDialog,
+                                      child: const Text(
+                                        'نسيت كلمة المرور؟',
+                                        style: TextStyle(color: Color(0xFFD4AF37), fontSize: 13),
+                                      ),
+                                    ),
+                                  ),
+                                ] else
+                                  const SizedBox(height: 16),
+
+                                // زر الدخول / التسجيل الذهبي الفخم
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFD4AF37),
+                                      foregroundColor: Colors.black,
+                                      elevation: 5,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onPressed: isLoading ? null : _submitAuth,
+                                    child: isLoading
+                                        ? const CircularProgressIndicator(color: Colors.black)
+                                        : Text(
+                                            isLogin ? 'تسجيل الدخول' : 'إنشاء الحساب',
+                                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // زر التبديل السفلي
+                      TextButton(
+                        onPressed: _toggleMode,
+                        child: Text(
+                          isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
