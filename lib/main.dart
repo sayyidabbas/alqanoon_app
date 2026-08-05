@@ -109,24 +109,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         if (user != null) {
           isLoggedInGlobal = true;
           currentUserEmail = user.email ?? currentUserEmail;
-          currentUserAccountName = (user.displayName != null && user.displayName!.isNotEmpty)
-              ? user.displayName!
-              : currentUserAccountName;
+          if (user.displayName != null && user.displayName!.isNotEmpty) {
+            currentUserAccountName = user.displayName!;
+          } else {
+            currentUserAccountName = 'سيدعباس عقيل';
+          }
         }
 
         Widget target = isLoggedInGlobal
             ? const MainNavigationHolder()
-            : AuthScreen(
-                onAuthSuccess: (name, email) {
-                  isLoggedInGlobal = true;
-                  currentUserAccountName = name.isEmpty ? 'سيدعباس عقيل' : name;
-                  currentUserEmail = email;
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-                  );
-                },
-              );
+            : const AuthScreen();
 
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => target));
       }
@@ -269,17 +261,7 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => AuthScreen(
-                  onAuthSuccess: (name, email) {
-                    isLoggedInGlobal = true;
-                    currentUserAccountName = name.isEmpty ? 'سيدعباس عقيل' : name;
-                    currentUserEmail = email;
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MainNavigationHolder()),
-                    );
-                  },
-                ),
+                builder: (context) => const AuthScreen(),
               ),
             );
           }
