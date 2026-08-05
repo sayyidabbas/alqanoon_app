@@ -1,108 +1,3 @@
-import 'dartd:io';
-import 'dart:ui';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-class ProfileScreen extends StatefulWidget {
-  final String currentUserAccountName;
-  final String currentUserEmail;
-  final String currentUserUniversity;
-  final String currentUserCollege;
-  final Function onLogout;
-
-  const ProfileScreen({
-    super.key,
-    required this.currentUserAccountName,
-    required this.currentUserEmail,
-    required this.currentUserUniversity,
-    required this.currentUserCollege,
-    required this.onLogout,
-  });
-
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateMixin {
-  late AnimationController _bgAnimationController;
-  late AnimationController _glowController;
-  late Animation<double> _glowAnimation;
-  late AnimationController _entranceController;
-
-  String username = '';
-  String profileImageUrl = '';
-  String displayName = '';
-  String university = '';
-  String college = '';
-  String academicYear = 'المرحلة الأولى';
-  bool isVerified = false;
-  bool notificationsEnabled = true;
-  bool isLoading = true;
-  bool isMasterAdmin = false;
-
-  File? _selectedLocalImage;
-  final ImagePicker _picker = ImagePicker();
-
-  String supportWhatsApp = '07777558324';
-  String supportTelegram = 'x9.ta9';
-
-  @override
-  void initState() {
-    super.initState();
-    displayName = widget.currentUserAccountName;
-    university = widget.currentUserUniversity;
-    college = widget.currentUserCollege;
-
-    _bgAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 6),
-    )..repeat(reverse: true);
-
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-
-    _glowAnimation = Tween<double>(begin: 0.35, end: 0.85).animate(
-      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
-    );
-
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..forward();
-
-    _loadUserData();
-    _loadSupportContactInfo();
-    _checkMasterAdminStatus();
-  }
-
-  @override
-  void dispose() {
-    _bgAnimationController.dispose();
-    _glowController.dispose();
-    _entranceController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _checkMasterAdminStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        isMasterAdmin = prefs.getBool('isMasterAdminUnlocked') ?? false;
-      });
-    }
-  }
-
-  Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedImagePath = prefs.getString('saved_profile_image_path');
-    if (savedImagePath != null && File(savedImagePath).existsSync()) {
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -300,7 +195,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       );
     }
   }
-  }Future<void> _launchURL(String urlString) async {
+
+  Future<void> _launchURL(String urlString) async {
     final Uri uri = Uri.parse(urlString);
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -314,8 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       }
     }
   }
-
-  void _openChangePasswordDialog() {
+    void _openChangePasswordDialog() {
     final newPassCtrl = TextEditingController();
     final confirmPassCtrl = TextEditingController();
     bool isSubmitting = false;
@@ -593,7 +488,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-  void _openMasterAdminDialog() async {
+    void _openMasterAdminDialog() async {
     if (isMasterAdmin) {
       _openAdminManagementPanel();
       return;
@@ -807,24 +702,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (isAdmin)
-                                    IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
-                                      tooltip: 'سحب الإشراف',
-                                      onPressed: () async {
-                                        await FirebaseFirestore.instance.collection('users').doc(docs[i].id).update({'role': 'user'});
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم سحب الإشراف من @${uData['username']}')));
-                                      },
-                                    ),
-                                  if (isVerif)
-                                    IconButton(
-                                      icon: const Icon(Icons.do_not_disturb_on_outlined, color: Colors.blueAccent, size: 20),
-                                      tooltip: 'إزالة التوثيق',
-                                      onPressed: () async {
-                                        await FirebaseFirestore.instance.collection('users').doc(docs[i].id).update({'isVerified': false});
-                                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم إلغاء توثيق @${uData['username']}')));
-                                      },
-                                    ),
+                                  if (isAdmin) const Chip(label: Text('مشرف', style: TextStyle(fontSize: 10, color: Colors.black)), backgroundColor: Color(0xFFD4AF37)),
+                                  if (isVerif) const Icon(Icons.verified, color: Colors.blueAccent, size: 18),
                                 ],
                               ),
                             );
@@ -841,7 +720,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-  void _confirmDeleteAccount() {
+    void _confirmDeleteAccount() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -983,7 +862,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                     children: [
                       Center(
                         child: Stack(
-                          clipBehavior: Clip.none,
                           children: [
                             AnimatedBuilder(
                               animation: _glowAnimation,
@@ -1017,13 +895,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                                 );
                               },
                             ),
-                            if (isMasterAdmin)
-                              const Positioned(
-                                top: -14,
-                                right: 0,
-                                left: 0,
-                                child: Icon(Icons.workspace_premium, color: Color(0xFFD4AF37), size: 28),
-                              ),
                             Positioned(
                               bottom: 0,
                               right: 0,
