@@ -1,11 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String currentUserAccountName;
@@ -39,8 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   bool isVerified = false;
   bool notificationsEnabled = true;
   bool isLoading = true;
-
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -95,41 +90,67 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     }
   }
 
-  // تغيير صورة البروفايل عبر ألبوم الهاتف مباشرة
-  Future<void> _pickImageFromGallery() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 600,
-        maxHeight: 600,
-        imageQuality: 75,
-      );
-
-      if (pickedFile != null) {
-        final bytes = await File(pickedFile.path).readAsBytes();
-        final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid != null) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatar': base64Image});
-          setState(() => profileImageUrl = base64Image);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تم تحديث صورة البروفايل بنجاح!'), backgroundColor: Colors.green),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل اختيار الصورة: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+  // تغيير صورة البروفايل عبر رابط آمن مع تحسين الفحص
+  void _changeProfileAvatarDialog() {
+    final imgController = TextEditingController(text: profileImageUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        title: const Text('تحديث صورة البروفايل', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'أدخل رابط صورة مباشر (http أو https):',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: imgController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'https://example.com/image.jpg',
+                hintStyle: TextStyle(color: Colors.white38),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              final url = imgController.text.trim();
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid != null) {
+                  await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatar': url});
+                  setState(() => profileImageUrl = url);
+                }
+                if (mounted) Navigator.pop(ctx);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('يرجى وضع رابط صورة صحيح يبتدأ بـ http أو https')),
+                );
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
   }
 
-  // واجهة جديدة كاملة لتعديل البيانات الشخصية
+  // واجهة تعديل البيانات الشخصية
   void _openEditProfileScreen() {
     final nameCtrl = TextEditingController(text: displayName);
     final uniCtrl = TextEditingController(text: university);
@@ -222,8 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
     );
   }
-    // فتح واجهة معلومات الدعم الفني
-  void _openSupportDialog() {
+    void _openSupportDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -334,7 +354,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  // لوحة تعيين المشرفين وتوثيق الحسابات
   void _openAdminManagementPanel() {
     final targetUsernameCtrl = TextEditingController();
 
@@ -498,14 +517,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     }
 
     bool hasNetworkImage = profileImageUrl.startsWith('http://') || profileImageUrl.startsWith('https://');
-    bool hasBase64Image = profileImageUrl.startsWith('data:image');
-
-    ImageProvider? avatarImage;
-    if (hasNetworkImage) {
-      avatarImage = NetworkImage(profileImageUrl);
-    } else if (hasBase64Image) {
-      avatarImage = MemoryImage(base64Decode(profileImageUrl.split(',').last));
-    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -526,7 +537,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
           : Stack(
               children: [
-                // عناصر متدرجة متحركة في الخلفية
                 Positioned(
                   top: -40,
                   left: -40,
@@ -566,8 +576,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             child: CircleAvatar(
                               radius: 46,
                               backgroundColor: const Color(0xFF1A1A1A),
-                              backgroundImage: avatarImage,
-                              child: avatarImage == null
+                              backgroundImage: hasNetworkImage ? NetworkImage(profileImageUrl) : null,
+                              child: !hasNetworkImage
                                   ? Text(
                                       displayName.isNotEmpty ? displayName[0].toUpperCase() : 'س',
                                       style: const TextStyle(fontSize: 34, color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
@@ -579,11 +589,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             bottom: 0,
                             right: 0,
                             child: InkWell(
-                              onTap: _pickImageFromGallery,
+                              onTap: _changeProfileAvatarDialog,
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: const BoxDecoration(color: Color(0xFFD4AF37), shape: BoxShape.circle),
-                                child: const Icon(Icons.photo_camera, size: 18, color: Colors.black),
+                                child: const Icon(Icons.camera_alt, size: 18, color: Colors.black),
                               ),
                             ),
                           ),
@@ -627,7 +637,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     
                     const SizedBox(height: 24),
                     
-                    // خانات بألوان مميزة ومتدرجة
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
