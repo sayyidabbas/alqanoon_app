@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthScreen extends StatefulWidget {
-  final Function(String name, String email) onAuthSuccess;
+  final Function(String name, String email)? onAuthSuccess;
 
-  const AuthScreen({super.key, required this.onAuthSuccess});
+  const AuthScreen({super.key, this.onAuthSuccess});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -18,7 +18,11 @@ class _AuthScreenState extends State<AuthScreen> {
   final _nameController = TextEditingController();
 
   Future<void> _submitAuth() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final nameInput = _nameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الرجاء إدخال البريد الإلكتروني وكلمة المرور')),
       );
@@ -26,37 +30,85 @@ class _AuthScreenState extends State<AuthScreen> {
     }
 
     setState(() => isLoading = true);
+
     try {
       if (isLogin) {
         UserCredential creds = await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+          email: email,
+          password: password,
         );
-        
-        // التحقق الآمن من الاسم لعدم حدوث خطأ Null
-        String name = creds.user?.displayName ?? 'سيدعباس عقيل';
-        if (name.isEmpty) name = 'سيدعباس عقيل';
-        
-        widget.onAuthSuccess(name, _emailController.text.trim());
+
+        String finalName = creds.user?.displayName ?? nameInput;
+        if (finalName.isEmpty) finalName = 'سيدعباس عقيل';
+
+        if (widget.onAuthSuccess != null) {
+          widget.onAuthSuccess!(finalName, email);
+        }
       } else {
-        if (_nameController.text.trim().isEmpty) {
+        if (nameInput.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('الرجاء إدخال الاسم الكامل')),
           );
           setState(() => isLoading = false);
           return;
         }
+
         UserCredential creds = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+          email: email,
+          password: password,
         );
-        await creds.user?.updateDisplayName(_nameController.text.trim());
-        widget.onAuthSuccess(_nameController.text.trim(), _emailController.text.trim());
+
+        if (creds.user != null) {
+          await creds.user!.updateDisplayName(nameInput);
+        }
+
+        if (widget.onAuthSuccess != null) {
+          widget.onAuthSuccess!(nameInput, email);
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'حدث خطأ أثناء الاتصال بالخادم';
+
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          errorMessage = 'كلمة المرور غير صحيحة، يرجى التأكد منها والتحاولة مجدداً.';
+          break;
+        case 'user-not-found':
+          errorMessage = 'البريد الإلكتروني غير مسجل، يمكنك إنشاء حساب جديد.';
+          break;
+
+        case 'invalid-email':
+          errorMessage = 'صيغة البريد الإلكتروني غير صحيحة.';
+          break;
+        case 'email-already-in-use':
+          errorMessage = 'هذا البريد الإلكتروني مسجل بالفعل.';
+          break;
+        case 'weak-password':
+          errorMessage = 'كلمة المرور ضعيفة جداً، يجب أن تتكون من 6 أحرف على الأقل.';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'تم محاولة الدخول لعدة مرات خطأ، يرجى الانتظار قليلاً وإعادة المحاولة.';
+          break;
+        default:
+          errorMessage = e.message ?? errorMessage;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ في عملية التسجيل: $e')),
+          SnackBar(
+            content: Text('حدث خطأ غير متوقع: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
         );
       }
     } finally {
