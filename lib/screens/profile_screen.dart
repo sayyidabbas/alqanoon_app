@@ -1,5 +1,4 @@
-import 'dart:io';
-import ' meui/ui.dart' if (dart.library.html) 'html'; // للتوافقية
+import 'dartd:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -195,8 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         SnackBar(content: Text('تعذر اختيار الصورة: $e'), backgroundColor: Colors.red),
       );
     }
-  }
-    Future<void> _launchURL(String urlString) async {
+  }Future<void> _launchURL(String urlString) async {
     final Uri uri = Uri.parse(urlString);
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -489,7 +487,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-    void _openMasterAdminDialog() async {
+  void _openMasterAdminDialog() async {
     if (isMasterAdmin) {
       _openAdminManagementPanel();
       return;
@@ -737,7 +735,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       ),
     );
   }
-    void _confirmDeleteAccount() {
+  void _confirmDeleteAccount() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
