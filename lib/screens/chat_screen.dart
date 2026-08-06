@@ -484,7 +484,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
-            backgroundColor: const Color(0xFF1A1A1A),
+            color: const Color(0xFF1A1A1A),
             onSelected: (value) {
               if (value == 'leave') {
                 widget.onLeaveChat();
