@@ -27,17 +27,37 @@ class StudentForumScreen extends StatefulWidget {
 class _StudentForumScreenState extends State<StudentForumScreen> {
   bool _hasJoinedChat = false;
   bool _isCheckingJoinStatus = true;
-  late bool _isAdminSession;
+  bool _isAdminSession = false;
   late String _userUid;
 
   @override
   void initState() {
     super.initState();
-    _isAdminSession = widget.isAdmin;
     _userUid = widget.currentUserUid.isNotEmpty 
         ? widget.currentUserUid 
         : widget.currentUserAccountName;
+    
+    _checkAdminRole();
     _checkJoinStatus();
+  }
+
+  // التعرف التلقائي والدائم على الأدمن بدون الحاجة لكلمة سر تكرارية
+  void _checkAdminRole() {
+    if (widget.isAdmin || widget.currentUserAccountName == 'x9.ta9' || _userUid == 'x9.ta9') {
+      setState(() {
+        _isAdminSession = true;
+      });
+    } else {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userUid)
+          .get()
+          .then((doc) {
+        if (doc.exists && doc.data()?['role'] == 'admin') {
+          if (mounted) setState(() => _isAdminSession = true);
+        }
+      });
+    }
   }
 
   Future<void> _checkJoinStatus() async {
@@ -67,80 +87,8 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     if (mounted) {
       setState(() {
         _hasJoinedChat = false;
-        _isAdminSession = false;
       });
     }
-  }
-
-  void _showAdminLoginDialog() {
-    final userController = TextEditingController();
-    final passController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.admin_panel_settings, color: Color(0xFFD4AF37)),
-            SizedBox(width: 8),
-            Text('بوابة الإدارة العليا', style: TextStyle(color: Colors.white, fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: userController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'اسم المستخدم (User)',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD4AF37))),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: passController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'كلمة السر',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD4AF37))),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () {
-              if (userController.text.trim() == 'x9.ta9' &&
-                  passController.text.trim() == 'Abbas312004') {
-                setState(() => _isAdminSession = true);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم تسجيل الدخول كـ أدمن بنجاح')),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('بيانات الدخول غير صحيحة!')),
-                );
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -155,7 +103,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     if (!_hasJoinedChat) {
       return JoinWelcomeScreen(
         onJoin: _joinForum,
-        onAdminTap: _showAdminLoginDialog,
+        isAdmin: _isAdminSession,
       );
     }
 
@@ -164,50 +112,15 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
       currentUserAccountName: widget.currentUserAccountName,
       isAdmin: _isAdminSession,
       onLeaveChat: _leaveForum,
-      onOpenAdminLogin: _showAdminLoginDialog,
     );
   }
 }
 
-class JoinWelcomeScreen extends StatefulWidget {
+class JoinWelcomeScreen extends StatelessWidget {
   final VoidCallback onJoin;
-  final VoidCallback onAdminTap;
-  const JoinWelcomeScreen({super.key, required this.onJoin, required this.onAdminTap});
+  final bool isAdmin;
 
-  @override
-  State<JoinWelcomeScreen> createState() => _JoinWelcomeScreenState();
-}
-
-class _JoinWelcomeScreenState extends State<JoinWelcomeScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOutBack),
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeIn),
-    );
-
-    _animController.forward();
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
-  }
+  const JoinWelcomeScreen({super.key, required this.onJoin, required this.isAdmin});
 
   @override
   Widget build(BuildContext context) {
@@ -217,106 +130,88 @@ class _JoinWelcomeScreenState extends State<JoinWelcomeScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.security, color: Color(0xFFD4AF37)),
-            onPressed: widget.onAdminTap,
-          ),
+          if (isAdmin)
+            const Padding(
+              padding: EdgeInsets.all(12.0),
+              child: Chip(
+                backgroundColor: Color(0xFFD4AF37),
+                label: Text('حساب إدارة', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ),
         ],
       ),
-      body: Stack(
-        children: [
-          Positioned(
-            top: -80,
-            right: -80,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFD4AF37).withOpacity(0.12),
-              ),
-            ),
-          ),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(22),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF1A1A1A),
-                          border: Border.all(color: const Color(0xFFD4AF37), width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD4AF37).withOpacity(0.25),
-                              blurRadius: 18,
-                              spreadRadius: 2,
-                            )
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.forum_rounded,
-                          size: 64,
-                          color: Color(0xFFD4AF37),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      const Text(
-                        'مرحباً بك في الدردشة العامة',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'انضم للمناقشات المباشرة، تبادل المستندات والخبرات مع باقي الأعضاء.',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 13,
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 40),
-                      ElevatedButton(
-                        onPressed: widget.onJoin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD4AF37),
-                          foregroundColor: Colors.black,
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'انضم إلى الدردشة',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward, size: 18),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF1A1A1A),
+                  border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD4AF37).withOpacity(0.25),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    )
+                  ],
+                ),
+                child: const Icon(
+                  Icons.forum_rounded,
+                  size: 64,
+                  color: Color(0xFFD4AF37),
                 ),
               ),
-            ),
+              const SizedBox(height: 28),
+              const Text(
+                'مرحباً بك في الدردشة العامة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'انضم للمناقشات المباشرة، تبادل المستندات والخبرات مع باقي الأعضاء.',
+                style: TextStyle(
+                  color: Colors.grey.shade400,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: onJoin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD4AF37),
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'انضم إلى الدردشة',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward, size: 18),
+                  ],
+                ),
+              )
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -326,7 +221,6 @@ class MainForumChatView extends StatefulWidget {
   final String currentUserAccountName;
   final bool isAdmin;
   final VoidCallback onLeaveChat;
-  final VoidCallback onOpenAdminLogin;
 
   const MainForumChatView({
     super.key,
@@ -334,7 +228,6 @@ class MainForumChatView extends StatefulWidget {
     required this.currentUserAccountName,
     required this.isAdmin,
     required this.onLeaveChat,
-    required this.onOpenAdminLogin,
   });
 
   @override
@@ -351,7 +244,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
   bool _isUploading = false;
   bool _isMuted = false;
   List<String> _bannedUsers = [];
-  int _documentLimit = 30;
+  int _documentLimit = 40;
 
   @override
   void initState() {
@@ -469,19 +362,12 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              widget.isAdmin ? Icons.admin_panel_settings : Icons.security,
-              color: widget.isAdmin ? Colors.greenAccent : const Color(0xFFD4AF37),
+          // لوحة التحكم تظهر فقط للأدمن وتفتح بضغطة واحدة دون كلمة سر
+          if (widget.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings, color: Colors.greenAccent),
+              onPressed: _showAdminDashboard,
             ),
-            onPressed: () {
-              if (widget.isAdmin) {
-                _showAdminDashboard();
-              } else {
-                widget.onOpenAdminLogin();
-              }
-            },
-          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             color: const Color(0xFF1A1A1A),
@@ -491,8 +377,6 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
               } else if (value == 'mute') {
                 setState(() => _isMuted = !_isMuted);
                 _showSnackBar(_isMuted ? 'تم كتم التنبيهات' : 'تم تفعيل التنبيهات');
-              } else if (value == 'report') {
-                _showSnackBar('تم إرسال بلاغك للإدارة');
               }
             },
             itemBuilder: (context) => [
@@ -503,16 +387,6 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
                     Icon(_isMuted ? Icons.notifications_off : Icons.notifications, color: Colors.white),
                     const SizedBox(width: 8),
                     Text(_isMuted ? 'إلغاء الكتم' : 'كتم الدردشة', style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'report',
-                child: Row(
-                  children: [
-                    Icon(Icons.report_problem, color: Colors.amber),
-                    SizedBox(width: 8),
-                    Text('إبلاغ عن محتوى', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -801,6 +675,15 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
                 _showSnackBar('تم نسخ النص');
               },
             ),
+            if (!isMe)
+              ListTile(
+                leading: const Icon(Icons.report, color: Colors.amber),
+                title: const Text('إبلاغ عن هذه الرسالة للإدارة', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _reportMessageToAdmin(docId, msg);
+                },
+              ),
             if (isMe || widget.isAdmin)
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.redAccent),
@@ -826,6 +709,19 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
         ),
       ),
     );
+  }
+
+  // إرسال البلاغ لقاعدة بيانات الإدارة
+  void _reportMessageToAdmin(String docId, Map<String, dynamic> msg) {
+    FirebaseFirestore.instance.collection('chat_reports').add({
+      'messageId': docId,
+      'reportedMessage': msg['text'] ?? msg['fileName'] ?? 'محتوى وسائط',
+      'offenderName': msg['sender'] ?? 'مجهول',
+      'offenderUid': msg['senderUid'] ?? '',
+      'reporterName': widget.currentUserAccountName,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    _showSnackBar('تم إرسال البلاغ بنجاح للإدارة');
   }
     Future<void> _pickAndUploadFile(String type) async {
     File? file;
@@ -853,10 +749,11 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     setState(() => _isUploading = true);
 
     try {
-      String storagePath = 'forum_uploads/${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      Reference ref = FirebaseStorage.instance.ref().child(storagePath);
+      // إصلاح مسار الرفع بملفات أندرويد لإنهاء خطأ object-not-found
+      String cleanFileName = DateTime.now().millisecondsSinceEpoch.toString() + "_" + fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
+      Reference ref = FirebaseStorage.instance.ref().child('forum_uploads').child(cleanFileName);
+      
       UploadTask uploadTask = ref.putFile(file);
-
       TaskSnapshot snapshot = await uploadTask;
       String downloadUrl = await snapshot.ref.getDownloadURL();
 
@@ -982,7 +879,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
               Navigator.pop(context);
               _pickAndUploadFile('image');
             }),
-            _attachmentOption(Icons.mic, 'تسجيل صوتي', () {
+            _attachmentOption(Icons.mic, 'ملف صوتي', () {
               Navigator.pop(context);
               _pickAndUploadFile('audio');
             }),
@@ -1014,6 +911,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     );
   }
 
+  // لوحة التحكم تظهر فقط للأدمن وتحوي خيارات الإدارة وسجل البلاغات
   void _showAdminDashboard() {
     final banController = TextEditingController();
 
@@ -1032,11 +930,11 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('لوحة التحكم الكاملة للإدارة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('لوحة التحكم الإدارية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
             const Divider(color: Colors.white10),
             ListTile(
               leading: Icon(_isChatDisabled ? Icons.lock_open : Icons.lock, color: const Color(0xFFD4AF37)),
-              title: Text(_isChatDisabled ? 'تفعيل الدردشة للجميع' : 'قفل الدردشة مؤقتاً', style: const TextStyle(color: Colors.white)),
+              title: Text(_isChatDisabled ? 'فتح الدردشة للجميع' : 'قفل الدردشة مؤقتاً', style: const TextStyle(color: Colors.white)),
               onTap: () {
                 FirebaseFirestore.instance
                     .collection('chat_settings')
@@ -1046,8 +944,16 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
               },
             ),
             ListTile(
+              leading: const Icon(Icons.report, color: Colors.amber),
+              title: const Text('عرض البلاغات المستلمة', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _showReportsDialog();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.block, color: Colors.redAccent),
-              title: const Text('حظر / إلغاء حظر مستخدم (يوزر أو Uid)', style: TextStyle(color: Colors.white)),
+              title: const Text('حظر / إلغاء حظر (يوزر)', style: TextStyle(color: Colors.white)),
               onTap: () {
                 showDialog(
                   context: context,
@@ -1057,7 +963,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
                     content: TextField(
                       controller: banController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(hintText: 'ادخل اليوزر أو Uid', hintStyle: TextStyle(color: Colors.grey)),
+                      decoration: const InputDecoration(hintText: 'ادخل اسم المستخدم', hintStyle: TextStyle(color: Colors.grey)),
                     ),
                     actions: [
                       ElevatedButton(
@@ -1086,7 +992,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
             ),
             ListTile(
               leading: const Icon(Icons.delete_sweep, color: Colors.red),
-              title: const Text('مسح جميع الرسائل في الشات', style: TextStyle(color: Colors.red)),
+              title: const Text('مسح جميع الرسائل', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 var snapshot = await FirebaseFirestore.instance.collection('forum_chats').get();
                 for (var doc in snapshot.docs) {
@@ -1096,6 +1002,43 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // عرض قائمة البلاغات للأدمن
+  void _showReportsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('قائمة البلاغات', style: TextStyle(color: Colors.white)),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('chat_reports').orderBy('timestamp', descending: true).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+              var docs = snapshot.data!.docs;
+              if (docs.isEmpty) return const Center(child: Text('لا توجد بلاغات حالياً', style: TextStyle(color: Colors.grey)));
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (context, idx) {
+                  var data = docs[idx].data() as Map<String, dynamic>;
+                  return ListTile(
+                    title: Text('المُخالف: ${data['offenderName']}', style: const TextStyle(color: Colors.amber, fontSize: 12)),
+                    subtitle: Text('الرسالة: ${data['reportedMessage']}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.check, color: Colors.green),
+                      onPressed: () => docs[idx].reference.delete(),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -1268,7 +1211,7 @@ class _AudioBubblePlayerState extends State<AudioBubblePlayer> {
           onPressed: _togglePlay,
         ),
         Text(
-          'تسجيل صوتي',
+          'مقطع صوتي',
           style: TextStyle(
             color: widget.isMe ? Colors.black : Colors.white,
             fontSize: 12,
