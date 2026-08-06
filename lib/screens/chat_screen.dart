@@ -120,7 +120,6 @@ class _JoinWelcomeScreenState extends State<JoinWelcomeScreen>
       backgroundColor: const Color(0xFF121212),
       body: Stack(
         children: [
-          // خلفية بتدرج إضاءة أنيق
           Positioned(
             top: -100,
             right: -100,
@@ -591,14 +590,18 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
             borderRadius: BorderRadius.circular(10),
             child: Image.network(
               url,
-              maxHeight: 200,
+              height: 200,
               width: double.infinity,
               fit: BoxFit.cover,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
-                return const Container(
+                return SizedBox(
                   height: 150,
-                  child: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: isMe ? Colors.black : const Color(0xFFD4AF37),
+                    ),
+                  ),
                 );
               },
             ),
