@@ -1,144 +1,140 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart';
 
+// --- Data Models ---
+class NewsBanner {
+  final String id;
+  final String title;
+  final String imageUrl;
+
+  NewsBanner({required this.id, required this.title, required this.imageUrl});
+}
+
+class EventData {
+  String title;
+  DateTime targetDate;
+
+  EventData({required this.title, required this.targetDate});
+}
+
+class PostComment {
+  final String userName;
+  final String text;
+  final DateTime date;
+
+  PostComment({required this.userName, required this.text, required this.date});
+}
+
+class AppPost {
+  final String id;
+  String content;
+  final DateTime createdAt;
+  bool isPinned;
+  int likesCount;
+  bool isLiked;
+  List<PostComment> comments;
+
+  AppPost({
+    required this.id,
+    required this.content,
+    required this.createdAt,
+    this.isPinned = false,
+    this.likesCount = 0,
+    this.isLiked = false,
+    List<PostComment>? comments,
+  }) : comments = comments ?? [];
+}
+
+// --- Auth Credentials ---
+const String kAdminUsername = "admin";
+const String kAdminPassword = "123456";
 class HomeScreen extends StatefulWidget {
-  final String currentUserAccountName;
-  final bool isAdmin;
-
-  const HomeScreen({
-    super.key,
-    required this.currentUserAccountName,
-    required this.isAdmin,
-  });
+  const HomeScreen({Key? key}) : super(key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late Timer _timer;
-  Duration _timeRemaining = Duration.zero;
-  String _eventName = '';
-  bool _hasActiveEvent = false;
+  // State Data
+  EventData currentEvent = EventData(
+    title: "بدأ الدوام الرسمي للمرحلة الثانية ⏳",
+    targetDate: DateTime.now().add(const Duration(days: 44, hours: 23, minutes: 58, seconds: 3)),
+  );
 
-  // كلمة السر واليوزر الافتراضيان للأدمن
-  String _adminUsernameConfig = 'x9.ta9';
-  String _adminPasswordConfig = 'Abbas312004';
-  bool _isAdminLoggedInSession = false;
+  List<NewsBanner> banners = [
+    NewsBanner(id: '1', title: 'عاجل: السلام عليكم طلاب هذا منستكم ان شاء الله', imageUrl: ''),
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchAdminCredentials();
-    _fetchEventData();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _fetchEventData();
-    });
-  }
+  List<AppPost> posts = [];
 
-  void _fetchAdminCredentials() async {
-    try {
-      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('app_config').doc('admin_credentials').get();
-      if (doc.exists && doc.data() != null) {
-        var data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _adminUsernameConfig = data['username'] ?? 'x9.ta9';
-          _adminPasswordConfig = data['password'] ?? 'Abbas312004';
-        });
-      }
-    } catch (e) {
-      debugPrint("Credentials fetch error: $e");
-    }
-  }
-
-  void _fetchEventData() async {
-    try {
-      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('app_config').doc('event').get();
-      if (doc.exists && doc.data() != null) {
-        var data = doc.data() as Map<String, dynamic>;
-        bool active = data['active'] ?? false;
-        Timestamp? targetTimestamp = data['targetDate'];
-
-        if (active && targetTimestamp != null && mounted) {
-          DateTime targetDate = targetTimestamp.toDate();
-          final difference = targetDate.difference(DateTime.now());
-          setState(() {
-            _hasActiveEvent = true;
-            _eventName = data['eventName'] ?? 'الحدث القادم';
-            _timeRemaining = difference.isNegative ? Duration.zero : difference;
-          });
-        } else if (mounted) {
-          setState(() => _hasActiveEvent = false);
-        }
-      } else if (mounted) {
-        setState(() => _hasActiveEvent = false);
-      }
-    } catch (e) {
-      debugPrint("Event fetch error: $e");
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  // -------------------------------------------------------------
-  // المصادقة والحماية للوحة التحكم
-  // -------------------------------------------------------------
-  void _accessAdminPanel() {
-    if (_isAdminLoggedInSession || currentUsername == _adminUsernameConfig) {
-      _showAdminControlPanel();
-      return;
-    }
-
+  void _showLoginDialog() {
     final userController = TextEditingController();
     final passController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('تسجيل دخول لوحة التحكم 🛡️', style: TextStyle(color: Color(0xFFD4AF37))),
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.security, color: Colors.amber),
+            SizedBox(width: 10),
+            Text('البوابة الآمنة 🛡️', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: userController,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'اسم المستخدم (اليوزر)', labelStyle: TextStyle(color: Colors.grey)),
+              decoration: InputDecoration(
+                labelText: 'اسم المستخدم',
+                labelStyle: const TextStyle(color: Colors.amber),
+                enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.amber), borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.amberAccent), borderRadius: BorderRadius.circular(10)),
+              ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 15),
             TextField(
               controller: passController,
               obscureText: true,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'كلمة المرور', labelStyle: TextStyle(color: Colors.grey)),
+              decoration: InputDecoration(
+                labelText: 'كلمة السر',
+                labelStyle: const TextStyle(color: Colors.amber),
+                enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.amber), borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.amberAccent), borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
             onPressed: () {
-              if (userController.text.trim() == _adminUsernameConfig && passController.text.trim() == _adminPasswordConfig) {
-                setState(() {
-                  _isAdminLoggedInSession = true;
-                  isCurrentUserAdmin = true;
-                });
+              if (userController.text == kAdminUsername && passController.text == kAdminPassword) {
                 Navigator.pop(context);
-                _showAdminControlPanel();
-              } else {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('عذراً، غير مصرح لك بالدخول إلى لوحة التحكم والتوجيه ❌'),
-                    backgroundColor: Colors.red,
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AdminDashboardScreen(
+                      eventData: currentEvent,
+                      posts: posts,
+                      banners: banners,
+                      onUpdate: () => setState(() {}),
+                    ),
                   ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('بيانات الدخول غير صحيحة!'), backgroundColor: Colors.red),
                 );
               }
             },
@@ -148,568 +144,122 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-    // -------------------------------------------------------------
-  // لوحة التحكم الموحدة والشاملة
-  // -------------------------------------------------------------
-  void _showAdminControlPanel() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('لوحة التحكم والتوجيه المركزية 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 15),
-              _buildAdminTile(Icons.campaign, 'إدارة الشريط العاجل', 'إضافة / تعديل / حذف الخبر', () {
-                Navigator.pop(context);
-                _showTickerManager();
-              }),
-              _buildAdminTile(Icons.timer, 'إدارة العداد التنازلي', 'إضافة / تعديل / حذف الحدث', () {
-                Navigator.pop(context);
-                _showEventManager();
-              }),
-              _buildAdminTile(Icons.add_comment, 'إضافة منشور جديد', 'نشر في الخلاصة الرئيسية', () {
-                Navigator.pop(context);
-                _showAddPostDialog();
-              }),
-              _buildAdminTile(Icons.manage_accounts, 'طلبات تغيير اسم المستخدم', 'الموافقة أو الرفض على الطلبات', () {
-                Navigator.pop(context);
-                _showUsernameRequestsDialog();
-              }),
-              _buildAdminTile(Icons.security, 'تغيير بيانات دخول الأدمن', 'تعديل اليوزر والباسوورد', () {
-                Navigator.pop(context);
-                _showChangeAdminCredentialsDialog();
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
-  Widget _buildAdminTile(IconData icon, String title, String sub, VoidCallback onTap) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E24), borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Icon(icon, color: const Color(0xFFD4AF37)),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  // إدارة الشريط العاجل
-  void _showTickerManager() {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('إدارة الشريط العاجل 🔴', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: TextField(
-          controller: textController,
-          maxLines: 2,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'اكتب نص الخبر الجديد...', hintStyle: TextStyle(color: Colors.grey)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('ticker').delete();
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حذف العاجل 🗑️', style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              if (textController.text.trim().isNotEmpty) {
-                await FirebaseFirestore.instance.collection('app_config').doc('ticker').set({
-                  'text': textController.text.trim(),
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-                if (mounted) Navigator.pop(context);
-              }
-            },
-            child: const Text('حفظ / نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // إدارة العداد
-  void _showEventManager() {
-    final nameController = TextEditingController();
-    final daysController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('إدارة العداد التنازلي ⏳', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الحدث', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: daysController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'عدد الأيام من الآن', labelStyle: TextStyle(color: Colors.grey))),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('event').set({'active': false});
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حذف الحدث 🗑️', style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              int days = int.tryParse(daysController.text.trim()) ?? 1;
-              DateTime futureDate = DateTime.now().add(Duration(days: days));
-              await FirebaseFirestore.instance.collection('app_config').doc('event').set({
-                'eventName': nameController.text.trim().isEmpty ? 'الحدث القادم' : nameController.text.trim(),
-                'targetDate': Timestamp.fromDate(futureDate),
-                'active': true,
-              });
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('تفعيل / حفظ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // إدارة طلبات تغيير اليوزر
-  void _showUsernameRequestsDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            children: [
-              const Text('طلبات تغيير اسم المستخدم 📩', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-              const Divider(color: Colors.white10),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('username_requests').where('status', isEqualTo: 'pending').snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                    var docs = snapshot.data!.docs;
-                    if (docs.isEmpty) return const Center(child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
-
-                    return ListView.builder(
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        var req = docs[index];
-                        var data = req.data() as Map<String, dynamic>;
-
-                        return Card(
-                          color: const Color(0xFF1E1E24),
-                          child: ListTile(
-                            title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            subtitle: Text('اليوزر المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
-                            isThreeLine: true,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                                  onPressed: () async {
-                                    // قبول الطلب وتحديث يوزر الطالب
-                                    await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
-                                    await req.reference.update({'status': 'approved'});
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.cancel, color: Colors.red),
-                                  onPressed: () async {
-                                    // رفض الطلب
-                                    await req.reference.update({'status': 'rejected'});
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // تغيير يوزر وباسوورد الأدمن
-  void _showChangeAdminCredentialsDialog() {
-    final newUser = TextEditingController(text: _adminUsernameConfig);
-    final newPass = TextEditingController(text: _adminPasswordConfig);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('تغيير بيانات دخول الأدمن 🔑', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: newUser, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اليوزر الجديد', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: newPass, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة', labelStyle: TextStyle(color: Colors.grey))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('admin_credentials').set({
-                'username': newUser.text.trim(),
-                'password': newPass.text.trim(),
-              });
-              setState(() {
-                _adminUsernameConfig = newUser.text.trim();
-                _adminPasswordConfig = newPass.text.trim();
-              });
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حفظ البيانات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // إضافة منشور
-  void _showAddPostDialog() {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('إضافة منشور جديد 📢', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            TextField(controller: titleController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'العنوان', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: contentController, maxLines: 3, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'المحتوى...', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-                onPressed: () async {
-                  if (contentController.text.trim().isNotEmpty) {
-                    await FirebaseFirestore.instance.collection('posts').add({
-                      'title': titleController.text.trim(),
-                      'content': contentController.text.trim(),
-                      'author': widget.currentUserAccountName,
-                      'likedBy': [],
-                      'savedBy': [],
-                      'timestamp': FieldValue.serverTimestamp(),
-                    });
-                    if (mounted) Navigator.pop(context);
-                  }
-                },
-                child: const Text('نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // عرض التعليقات مثل الفيسبوك
-  void _showCommentsDialog(String postId) {
-    final commentController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.65,
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          children: [
-            const Padding(padding: EdgeInsets.all(12), child: Text('التعليقات 💬', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold))),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').orderBy('timestamp', descending: true).snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                  var comments = snapshot.data!.docs;
-                  return ListView.builder(
-                    itemCount: comments.length,
-                    itemBuilder: (context, index) {
-                      var c = comments[index].data() as Map<String, dynamic>;
-                      return ListTile(
-                        title: Text(c['userName'] ?? 'طالب', style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
-                        subtitle: Text(c['text'] ?? '', style: const TextStyle(color: Colors.white)),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: commentController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(hintText: 'اكتب تعليقاً...', hintStyle: TextStyle(color: Colors.grey)),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Color(0xFFD4AF37)),
-                    onPressed: () async {
-                      if (commentController.text.trim().isNotEmpty) {
-                        await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
-                          'userName': widget.currentUserAccountName,
-                          'text': commentController.text.trim(),
-                          'timestamp': FieldValue.serverTimestamp(),
-                        });
-                        commentController.clear();
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-    @override
+  @override
   Widget build(BuildContext context) {
+    // Sort posts (Pinned first)
+    posts.sort((a, b) => (b.isPinned ? 1 : 0).compareTo(a.isPinned ? 1 : 0));
+
     return Scaffold(
+      backgroundColor: const Color(0xFF121218),
       appBar: AppBar(
-        title: const Text('منصة القانون الخاصة', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF121216),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune_rounded, color: Color(0xFFD4AF37)),
-            onPressed: _accessAdminPanel,
-          ),
-        ],
+        backgroundColor: const Color(0xFF1E1E2C),
+        title: const Text('منصة القانون الخاصة ⚖️', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+        centerTitle: true,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _accessAdminPanel,
-        backgroundColor: const Color(0xFFD4AF37),
-        child: const Icon(Icons.admin_panel_settings, color: Colors.black),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showLoginDialog,
+        backgroundColor: Colors.amber,
+        icon: const Icon(Icons.shield, color: Colors.black),
+        label: const Text('البوابة الآمنة', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. الشريط العاجل الديناميكي
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance.collection('app_config').doc('ticker').snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data!.exists) {
-                  var data = snapshot.data!.data() as Map<String, dynamic>;
-                  String text = data['text'] ?? '';
-                  if (text.isNotEmpty) {
-                    return Container(
-                      width: double.infinity,
-                      color: const Color(0xFF1E1E24),
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(6)),
-                            child: const Text('عاجل 🔴', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Text(text, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.w500)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                }
-                return const SizedBox.shrink(); // إخفاء الشريط إذا تم حذفه
-              },
-            ),
+            // Banners Section
+            if (banners.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.2), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.redAccent)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.campaign, color: Colors.redAccent),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(banners.last.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
+            // Event Countdown Widget
+            EventCountdownWidget(event: currentEvent),
+            const SizedBox(height: 25),
+
+            // Posts Header
+            const Text('الأخبار والمنشورات 📜', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
 
-            // 2. العداد التنازلي للحدث
-            if (_hasActiveEvent) _buildCountdownWidget(),
-
-            const SizedBox(height: 20),
-
-            // 3. خلاصة المنشورات
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: const [
-                  Icon(Icons.dynamic_feed, color: Color(0xFFD4AF37), size: 22),
-                  SizedBox(width: 8),
-                  Text('الأخبار والمنشورات', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('posts').orderBy('timestamp', descending: true).snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                var posts = snapshot.data!.docs;
-                if (posts.isEmpty) return const Padding(padding: EdgeInsets.all(40), child: Text('لا توجد منشورات حالياً', style: TextStyle(color: Colors.grey)));
-
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: posts.length,
-                  itemBuilder: (context, index) {
-                    var post = posts[index];
-                    var data = post.data() as Map<String, dynamic>;
-                    List likedBy = data['likedBy'] ?? [];
-                    bool isLiked = likedBy.contains(widget.currentUserAccountName);
-
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: const Color(0xFF16161C), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const CircleAvatar(backgroundColor: Color(0xFFD4AF37), radius: 16, child: Icon(Icons.star, color: Colors.black, size: 18)),
-                              const SizedBox(width: 10),
-                              Text(data['author'] ?? 'الأدمن', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              if (isCurrentUserAdmin)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                                  onPressed: () async => await FirebaseFirestore.instance.collection('posts').doc(post.id).delete(),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          if ((data['title'] ?? '').isNotEmpty) Text(data['title'], style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 5),
-                          Text(data['content'] ?? '', style: const TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 15),
-                          const Divider(color: Colors.white10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              // زر الإعجاب
-                              InkWell(
-                                onTap: () async {
-                                  DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(post.id);
-                                  if (isLiked) {
-                                    await ref.update({'likedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
-                                  } else {
-                                    await ref.update({'likedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
-                                  }
-                                },
-                                child: Row(
-                                  children: [
-                                    Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.redAccent : Colors.grey, size: 18),
-                                    const SizedBox(width: 4),
-                                    Text('${likedBy.length}', style: TextStyle(color: isLiked ? Colors.redAccent : Colors.grey)),
-                                  ],
-                                ),
-                              ),
-
-                              // زر التعليقات مثل الفيسبوك
-                              StreamBuilder<QuerySnapshot>(
-                                stream: FirebaseFirestore.instance.collection('posts').doc(post.id).collection('comments').snapshots(),
-                                builder: (context, commentSnap) {
-                                  int count = commentSnap.hasData ? commentSnap.data!.docs.length : 0;
-                                  return InkWell(
-                                    onTap: () => _showCommentsDialog(post.id),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.mode_comment_outlined, color: Colors.grey, size: 18),
-                                        const SizedBox(width: 4),
-                                        Text('$count تعليق', style: const TextStyle(color: Colors.grey)),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+            // Posts List
+            posts.isEmpty
+                ? const Center(child: Padding(padding: EdgeInsets.all(30), child: Text('لا توجد منشورات حالياً', style: TextStyle(color: Colors.grey))))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: posts.length,
+                    itemBuilder: (context, index) => PostCard(post: posts[index], onStateChange: () => setState(() {})),
+                  ),
           ],
         ),
       ),
     );
   }
+}
+class EventCountdownWidget extends StatefulWidget {
+  final EventData event;
+  const EventCountdownWidget({Key? key, required this.event}) : super(key: key);
 
-  Widget _buildCountdownWidget() {
-    int days = _timeRemaining.inDays;
-    int hours = _timeRemaining.inHours % 24;
-    int minutes = _timeRemaining.inMinutes % 60;
-    int seconds = _timeRemaining.inSeconds % 60;
+  @override
+  State<EventCountdownWidget> createState() => _EventCountdownWidgetState();
+}
 
+class _EventCountdownWidgetState extends State<EventCountdownWidget> {
+  late Timer _timer;
+  Duration _difference = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final now = DateTime.now();
+      setState(() {
+        _difference = widget.event.targetDate.isAfter(now) ? widget.event.targetDate.difference(now) : Duration.zero;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF16161C), Color(0xFF22222A)]),
+        color: const Color(0xFF1E1E2C),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.4)),
+        border: Border.all(color: Colors.amber.withOpacity(0.5)),
       ),
       child: Column(
         children: [
-          Text('الحدث: $_eventName ⏳', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(widget.event.title, style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildTimeUnit('$days', 'يوم'),
-              _buildTimeUnit('$hours', 'ساعة'),
-              _buildTimeUnit('$minutes', 'دقيقة'),
-              _buildTimeUnit('$seconds', 'ثانية'),
+              _timeBox(_difference.inDays.toString().padLeft(2, '0'), 'يوم'),
+              _timeBox((_difference.inHours % 24).toString().padLeft(2, '0'), 'ساعة'),
+              _timeBox((_difference.inMinutes % 60).toString().padLeft(2, '0'), 'دقيقة'),
+              _timeBox((_difference.inSeconds % 60).toString().padLeft(2, '0'), 'ثانية'),
             ],
           ),
         ],
@@ -717,16 +267,300 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTimeUnit(String val, String label) {
+  Widget _timeBox(String time, String label) {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(color: const Color(0xFF0F0F12), borderRadius: BorderRadius.circular(8)),
-          child: Text(val.padLeft(2, '0'), style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber)),
+          child: Text(time, style: const TextStyle(color: Colors.amber, fontSize: 20, fontWeight: FontWeight.bold)),
         ),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
+    );
+  }
+}
+
+// --- Post Card (Facebook-Like) ---
+class PostCard extends StatelessWidget {
+  final AppPost post;
+  final VoidCallback onStateChange;
+
+  const PostCard({Key? key, required this.post, required this.onStateChange}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFF1E1E2C),
+      margin: const EdgeInsets.only(bottom: 15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (post.isPinned)
+              Row(
+                children: const [
+                  Icon(Icons.push_pin, color: Colors.amber, size: 16),
+                  SizedBox(width: 5),
+                  Text('منشور مثبت', style: TextStyle(color: Colors.amber, fontSize: 12)),
+                ],
+              ),
+            Text(post.content, style: const TextStyle(color: Colors.white, fontSize: 15)),
+            const Divider(color: Colors.white12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    post.isLiked = !post.isLiked;
+                    post.isLiked ? post.likesCount++ : post.likesCount--;
+                    onStateChange();
+                  },
+                  icon: Icon(post.isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, color: post.isLiked ? Colors.amber : Colors.grey),
+                  label: Text('${post.likesCount} إعجاب', style: const TextStyle(color: Colors.grey)),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showCommentsDialog(context),
+                  icon: const Icon(Icons.comment_outlined, color: Colors.grey),
+                  label: Text('${post.comments.length} تعليق', style: const TextStyle(color: Colors.grey)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCommentsDialog(BuildContext context) {
+    final commentController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2C),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('التعليقات', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: ListView.builder(
+                itemCount: post.comments.length,
+                itemBuilder: (context, i) => ListTile(
+                  title: Text(post.comments[i].userName, style: const TextStyle(color: Colors.amber)),
+                  subtitle: Text(post.comments[i].text, style: const TextStyle(color: Colors.white)),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: commentController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'اكتب تعليقاً...', hintStyle: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.amber),
+                  onPressed: () {
+                    if (commentController.text.isNotEmpty) {
+                      post.comments.add(PostComment(userName: 'طالب', text: commentController.text, date: DateTime.now()));
+                      commentController.clear();
+                      onStateChange();
+                      Navigator.pop(context);
+                    }
+                  },
+                )
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+class AdminDashboardScreen extends StatefulWidget {
+  final EventData eventData;
+  final List<AppPost> posts;
+  final List<NewsBanner> banners;
+  final VoidCallback onUpdate;
+
+  const AdminDashboardScreen({
+    Key? key,
+    required this.eventData,
+    required this.posts,
+    required this.banners,
+    required this.onUpdate,
+  }) : super(key: key);
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final _postController = TextEditingController();
+  final _eventTitleController = TextEditingController();
+  final _bannerController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _eventTitleController.text = widget.eventData.title;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121218),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1E1E2C),
+        title: const Text('لوحة سيطرة البوابة الآمنة 👑', style: TextStyle(color: Colors.amber)),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Control Event Countdown
+            _buildAdminSection(
+              title: 'تعديل الحدث القادم (العداد)',
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _eventTitleController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'عنوان الحدث', labelStyle: TextStyle(color: Colors.amber)),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                    onPressed: () {
+                      setState(() {
+                        widget.eventData.title = _eventTitleController.text;
+                        widget.eventData.targetDate = DateTime.now().add(const Duration(days: 30)); // إضافة شهر مثالاً
+                      });
+                      widget.onUpdate();
+                    },
+                    child: const Text('تحديث بيانات الحدث', style: TextStyle(color: Colors.black)),
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 2. Control News Banner
+            _buildAdminSection(
+              title: 'إضافة إعلان عاجل',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _bannerController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(hintText: 'اكتب الشريط الإخباري...', hintStyle: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle, color: Colors.amber),
+                    onPressed: () {
+                      if (_bannerController.text.isNotEmpty) {
+                        setState(() {
+                          widget.banners.add(NewsBanner(id: DateTime.now().toString(), title: _bannerController.text, imageUrl: ''));
+                          _bannerController.clear();
+                        });
+                        widget.onUpdate();
+                      }
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 3. Create & Manage Posts
+            _buildAdminSection(
+              title: 'إنشاء منشور جديد',
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _postController,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'اكتب المنشور هنا...', hintStyle: TextStyle(color: Colors.grey)),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                    icon: const Icon(Icons.publish, color: Colors.black),
+                    label: const Text('نشر الآن', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      if (_postController.text.isNotEmpty) {
+                        setState(() {
+                          widget.posts.insert(0, AppPost(id: DateTime.now().toString(), content: _postController.text, createdAt: DateTime.now()));
+                          _postController.clear();
+                        });
+                        widget.onUpdate();
+                      }
+                    },
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Manage Existing Posts List
+            const Text('إدارة المنشورات الحالية', style: TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: widget.posts.length,
+              itemBuilder: (context, i) {
+                final p = widget.posts[i];
+                return ListTile(
+                  title: Text(p.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(p.isPinned ? Icons.push_pin : Icons.push_pin_outlined, color: Colors.amber),
+                        onPressed: () {
+                          setState(() => p.isPinned = !p.isPinned);
+                          widget.onUpdate();
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.redAccent),
+                        onPressed: () {
+                          setState(() => widget.posts.removeAt(i));
+                          widget.onUpdate();
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminSection({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.withOpacity(0.3))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
     );
   }
 }
