@@ -247,7 +247,10 @@ class _MainNavigationHolderState extends State<MainNavigationHolder> {
   Widget build(BuildContext context) {
     List<Widget> screens = [
       HomeScreen(currentUserAccountName: currentUserAccountName),
-      StudentForumScreen(currentUserAccountName: currentUserAccountName),
+      StudentForumScreen(
+        currentUserAccountName: currentUserAccountName,
+        isAdmin: true, // مفعل للأدمن بشكل مباشر
+      ),
       ServicesScreen(currentUserAccountName: currentUserAccountName),
       ProfileScreen(
         currentUserAccountName: currentUserAccountName,
