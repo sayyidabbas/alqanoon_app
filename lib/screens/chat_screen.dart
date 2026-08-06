@@ -528,7 +528,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
                   _buildMessageMediaContent(msg, isMe),
                   const SizedBox(height: 4),
                   Row(
-                    mainAxisSize: minAxis,
+                    mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
