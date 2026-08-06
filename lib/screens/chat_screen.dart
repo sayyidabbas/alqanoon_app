@@ -9,13 +9,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class StudentForumScreen extends StatefulWidget {
-  final String currentUserUid;
   final String currentUserAccountName;
+  final String currentUserUid;
+  final bool isAdmin;
 
   const StudentForumScreen({
     super.key,
-    required this.currentUserUid,
     required this.currentUserAccountName,
+    this.currentUserUid = '',
+    this.isAdmin = false,
   });
 
   @override
@@ -25,17 +27,22 @@ class StudentForumScreen extends StatefulWidget {
 class _StudentForumScreenState extends State<StudentForumScreen> {
   bool _hasJoinedChat = false;
   bool _isCheckingJoinStatus = true;
-  bool _isAdminSession = false;
+  late bool _isAdminSession;
+  late String _userUid;
 
   @override
   void initState() {
     super.initState();
+    _isAdminSession = widget.isAdmin;
+    _userUid = widget.currentUserUid.isNotEmpty 
+        ? widget.currentUserUid 
+        : widget.currentUserAccountName;
     _checkJoinStatus();
   }
 
   Future<void> _checkJoinStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    bool joined = prefs.getBool('joined_forum_${widget.currentUserUid}') ?? false;
+    bool joined = prefs.getBool('joined_forum_$_userUid') ?? false;
     if (mounted) {
       setState(() {
         _hasJoinedChat = joined;
@@ -46,7 +53,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
 
   Future<void> _joinForum() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('joined_forum_${widget.currentUserUid}', true);
+    await prefs.setBool('joined_forum_$_userUid', true);
     if (mounted) {
       setState(() {
         _hasJoinedChat = true;
@@ -56,7 +63,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
 
   Future<void> _leaveForum() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('joined_forum_${widget.currentUserUid}', false);
+    await prefs.setBool('joined_forum_$_userUid', false);
     if (mounted) {
       setState(() {
         _hasJoinedChat = false;
@@ -153,7 +160,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     }
 
     return MainForumChatView(
-      currentUserUid: widget.currentUserUid,
+      currentUserUid: _userUid,
       currentUserAccountName: widget.currentUserAccountName,
       isAdmin: _isAdminSession,
       onLeaveChat: _leaveForum,
