@@ -9,37 +9,45 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.currentUserAccountName,
-    this.isAdmin = true, // مفعل للأدمن تلقائياً
+    this.isAdmin = true,
   });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  // -------------------------------------------------------------
-  // إعدادات العداد التنازلي للحدث القريب (مثال: الامتحانات النهائية)
-  // -------------------------------------------------------------
-  final DateTime _targetEventDate = DateTime.now().add(const Duration(days: 12, hours: 5, minutes: 30));
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late Timer _timer;
   Duration _timeRemaining = Duration.zero;
+  String _eventName = 'الحدث القادم';
 
   @override
   void initState() {
     super.initState();
-    _updateRemainingTime();
+    _fetchEventData();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _updateRemainingTime();
+      _fetchEventData();
     });
   }
 
-  void _updateRemainingTime() {
-    final now = DateTime.now();
-    final difference = _targetEventDate.difference(now);
-    if (mounted) {
-      setState(() {
-        _timeRemaining = difference.isNegative ? Duration.zero : difference;
-      });
+  // جلب وقت وتفاصيل الحدث التنازلي ديناميكياً من Firebase
+  void _fetchEventData() async {
+    try {
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('app_config').doc('event').get();
+      if (doc.exists && doc.data() != null) {
+        var data = doc.data() as Map<String, dynamic>;
+        Timestamp? targetTimestamp = data['targetDate'];
+        if (targetTimestamp != null && mounted) {
+          DateTime targetDate = targetTimestamp.toDate();
+          final difference = targetDate.difference(DateTime.now());
+          setState(() {
+            _eventName = data['eventName'] ?? 'الحدث القادم';
+            _timeRemaining = difference.isNegative ? Duration.zero : difference;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Event timer error: $e");
     }
   }
 
@@ -50,8 +58,154 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // -------------------------------------------------------------
-  // إضافة منشور جديد (خاص بالأدمن فقط)
+  // نافذة لوحة تحكم الأدمن (للأخبار، الإعلانات، والعداد)
   // -------------------------------------------------------------
+  void _showAdminControlPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF16161C),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('لوحة تحكم وتوجيه التطبيق 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 15),
+              _buildAdminOptionTile(
+                icon: Icons.campaign_rounded,
+                title: 'تحديث الخبر العاجل',
+                subtitle: 'تغيير الشريط المتحرك العلوي',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showUpdateNewsTickerDialog();
+                },
+              ),
+              _buildAdminOptionTile(
+                icon: Icons.timer_rounded,
+                title: 'تعديل العداد التنازلي',
+                subtitle: 'تعديل موعد واسم الحدث المباشر',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showUpdateEventDialog();
+                },
+              ),
+              _buildAdminOptionTile(
+                icon: Icons.post_add_rounded,
+                title: 'إضافة منشور جديد',
+                subtitle: 'نشر خبر أو إعلان في الخلاصة',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddPostDialog();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAdminOptionTile({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: const Color(0xFF1E1E24), borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFFD4AF37)),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  // تعديل الشريط العاجل
+  void _showUpdateNewsTickerDialog() {
+    final TextEditingController tickerController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF16161C),
+        title: const Text('تحديث الشريط العاجل 🔴', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: TextField(
+          controller: tickerController,
+          maxLines: 2,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(hintText: 'اكتب نص الخبر العاجل...', hintStyle: TextStyle(color: Colors.grey)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              if (tickerController.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance.collection('app_config').doc('ticker').set({
+                  'text': tickerController.text.trim(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('حفظ التغيير', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // تعديل العداد التنازلي
+  void _showUpdateEventDialog() {
+    final TextEditingController nameController = TextEditingController();
+    final TextEditingController daysController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF16161C),
+        title: const Text('تعديل الحدث والعداد ⏳', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'اسم الحدث (مثال: بدء امتحانات الماستر)', labelStyle: TextStyle(color: Colors.grey)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: daysController,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'عدد الأيام المتبقية من الآن', labelStyle: TextStyle(color: Colors.grey)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              int days = int.tryParse(daysController.text.trim()) ?? 1;
+              DateTime futureDate = DateTime.now().add(Duration(days: days));
+
+              await FirebaseFirestore.instance.collection('app_config').doc('event').set({
+                'eventName': nameController.text.trim().isEmpty ? 'الحدث القادم' : nameController.text.trim(),
+                'targetDate': Timestamp.fromDate(futureDate),
+              });
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('تحديث العداد', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // إضافة منشور
   void _showAddPostDialog() {
     final TextEditingController contentController = TextEditingController();
     final TextEditingController titleController = TextEditingController();
@@ -60,46 +214,26 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            top: 20,
-            left: 20,
-            right: 20,
-          ),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('إضافة منشور جديد 📢', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
               TextField(
                 controller: titleController,
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'عنوان المنشور / الإعلان',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  filled: true,
-                  fillColor: const Color(0xFF1E1E24),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+                decoration: InputDecoration(labelText: 'العنوان الرئيسي', labelStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: const Color(0xFF1E1E24), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: contentController,
                 maxLines: 4,
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'محتوى المنشور...',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  filled: true,
-                  fillColor: const Color(0xFF1E1E24),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
+                decoration: InputDecoration(labelText: 'محتوى المنشور...', labelStyle: const TextStyle(color: Colors.grey), filled: true, fillColor: const Color(0xFF1E1E24), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               ),
               const SizedBox(height: 20),
               SizedBox(
@@ -121,100 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (context.mounted) Navigator.pop(context);
                     }
                   },
-                  child: const Text('نشر الآن', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // -------------------------------------------------------------
-  // نافذة التعليقات
-  // -------------------------------------------------------------
-  void _showCommentsDialog(String postId) {
-    final TextEditingController commentController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.65,
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
-              const Padding(
-                padding: EdgeInsets.all(15),
-                child: Text('التعليقات 💬', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-              const Divider(color: Colors.white10),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('posts')
-                      .doc(postId)
-                      .collection('comments')
-                      .orderBy('timestamp', descending: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                    var comments = snapshot.data!.docs;
-                    if (comments.isEmpty) {
-                      return const Center(child: Text('لا توجد تعليقات بعد، كن أول المعلقين!', style: TextStyle(color: Colors.grey)));
-                    }
-                    return ListView.builder(
-                      itemCount: comments.length,
-                      itemBuilder: (context, index) {
-                        var c = comments[index].data() as Map<String, dynamic>;
-                        return ListTile(
-                          leading: const CircleAvatar(backgroundColor: Color(0xFF1E1E24), child: Icon(Icons.person, color: Color(0xFFD4AF37), size: 20)),
-                          title: Text(c['userName'] ?? 'طالب', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
-                          subtitle: Text(c['text'] ?? '', style: const TextStyle(color: Colors.white)),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: commentController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'اكتب تعليقاً...',
-                          hintStyle: const TextStyle(color: Colors.grey),
-                          filled: true,
-                          fillColor: const Color(0xFF1E1E24),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.send_rounded, color: Color(0xFFD4AF37)),
-                      onPressed: () async {
-                        if (commentController.text.trim().isNotEmpty) {
-                          await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
-                            'userName': widget.currentUserAccountName,
-                            'text': commentController.text.trim(),
-                            'timestamp': FieldValue.serverTimestamp(),
-                          });
-                          commentController.clear();
-                        }
-                      },
-                    ),
-                  ],
+                  child: const Text('نشر الان', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -227,45 +268,80 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('لوحة الإعلانات والأخبار', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+        title: const Text('منصة القانون الخاصة', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF121216),
         elevation: 0,
+        actions: [
+          if (widget.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.tune_rounded, color: Color(0xFFD4AF37)),
+              onPressed: _showAdminControlPanel,
+            ),
+        ],
       ),
       floatingActionButton: widget.isAdmin
-          ? FloatingActionButton.extended(
-              onPressed: _showAddPostDialog,
+          ? FloatingActionButton(
+              onPressed: _showAdminControlPanel,
               backgroundColor: const Color(0xFFD4AF37),
-              icon: const Icon(Icons.add_rounded, color: Colors.black),
-              label: const Text('إضافة منشور', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.black, size: 28),
             )
           : null,
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. شريط الإعلانات المتحرك (Ticker Bar)
-            _buildTickerMarqueeBar(),
+            // 1. الشريط العاجل الديناميكي
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('app_config').doc('ticker').snapshots(),
+              builder: (context, snapshot) {
+                String tickerText = 'مرحباً بكم في المنصة | ترقبوا أحدث الأخبار والفعاليات هنا.';
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  var data = snapshot.data!.data() as Map<String, dynamic>;
+                  tickerText = data['text'] ?? tickerText;
+                }
+                return Container(
+                  width: double.infinity,
+                  color: const Color(0xFF1E1E24),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(6)),
+                        child: const Text('عاجل 🔴', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Text(tickerText, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
 
             const SizedBox(height: 15),
 
-            // 2. كارت العداد التنازلي للحدث
+            // 2. العداد التنازلي المباشر للحدث
             _buildCountdownWidget(),
 
             const SizedBox(height: 20),
 
-            // 3. قسم المنشورات الأخبارية
+            // 3. خلاصة المنشورات
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: const [
-                  Icon(Icons.newspaper_rounded, color: Color(0xFFD4AF37), size: 22),
+                  Icon(Icons.dynamic_feed_rounded, color: Color(0xFFD4AF37), size: 22),
                   SizedBox(width: 8),
-                  Text('المنشورات الرسمية', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('الأخبار والمنشورات', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
             const SizedBox(height: 10),
 
-            // قائمة المنشورات الحية من Firestore
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('posts').orderBy('timestamp', descending: true).snapshots(),
               builder: (context, snapshot) {
@@ -292,14 +368,86 @@ class _HomeScreenState extends State<HomeScreen> {
                     bool isLiked = likedBy.contains(widget.currentUserAccountName);
                     bool isSaved = savedBy.contains(widget.currentUserAccountName);
 
-                    return _buildPostCard(
-                      postId: post.id,
-                      author: data['author'] ?? 'الأدمن',
-                      title: data['title'] ?? '',
-                      content: data['content'] ?? '',
-                      likesCount: likedBy.length,
-                      isLiked: isLiked,
-                      isSaved: isSaved,
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16161C),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const CircleAvatar(backgroundColor: Color(0xFFD4AF37), radius: 18, child: Icon(Icons.star, color: Colors.black, size: 20)),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(data['author'] ?? 'منشئ المنصة', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                  const Text('منشور رسمي', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                ],
+                              ),
+                              const Spacer(),
+                              if (widget.isAdmin)
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                  onPressed: () async {
+                                    await FirebaseFirestore.instance.collection('posts').doc(post.id).delete();
+                                  },
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if ((data['title'] ?? '').isNotEmpty)
+                            Text(data['title'], style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Text(data['content'] ?? '', style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
+                          const SizedBox(height: 15),
+                          const Divider(color: Colors.white10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              InkWell(
+                                onTap: () async {
+                                  DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(post.id);
+                                  if (isLiked) {
+                                    await ref.update({'likedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
+                                  } else {
+                                    await ref.update({'likedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
+                                  }
+                                },
+                                child: Row(
+                                  children: [
+                                    Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.redAccent : Colors.grey, size: 20),
+                                    const SizedBox(width: 6),
+                                    Text('${likedBy.length}', style: TextStyle(color: isLiked ? Colors.redAccent : Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () async {
+                                  DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(post.id);
+                                  if (isSaved) {
+                                    await ref.update({'savedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
+                                  } else {
+                                    await ref.update({'savedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
+                                  }
+                                },
+                                child: Row(
+                                  children: [
+                                    Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey, size: 20),
+                                    const SizedBox(width: 6),
+                                    Text(isSaved ? 'محفوظ' : 'حفظ', style: TextStyle(color: isSaved ? const Color(0xFFD4AF37) : Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     );
                   },
                 );
@@ -311,39 +459,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // -------------------------------------------------------------
-  // تصميم شريط التلفاز المتحرك للاعلانات
-  // -------------------------------------------------------------
-  Widget _buildTickerMarqueeBar() {
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFF1E1E24),
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(6)),
-            child: const Text('عاجل 🔴', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Text(
-                '📢 تذكير: بدء التقديم على الامتحانات النهائية لجميع المراحل في كلية الحقوق - جامعة الموصل | برجاء مراجعة التسجيل قبل نهاية الأسبوع.',
-                style: TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // -------------------------------------------------------------
-  // تصميم العداد التنازلي المباشر
-  // -------------------------------------------------------------
   Widget _buildCountdownWidget() {
     int days = _timeRemaining.inDays;
     int hours = _timeRemaining.inHours % 24;
@@ -362,12 +477,12 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.timer_outlined, color: Color(0xFFD4AF37), size: 20),
-              SizedBox(width: 8),
+            children: [
+              const Icon(Icons.timer_outlined, color: Color(0xFFD4AF37), size: 20),
+              const SizedBox(width: 8),
               Text(
-                'الحدث القادم: الامتحانات الفصلية ⏳',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                'الحدث: $_eventName ⏳',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
               ),
             ],
           ),
@@ -404,120 +519,6 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
       ],
-    );
-  }
-
-  // -------------------------------------------------------------
-  // تصميم كارت المنشور (مثل الفيسبوك)
-  // -------------------------------------------------------------
-  Widget _buildPostCard({
-    required String postId,
-    required String author,
-    required String title,
-    required String content,
-    required int likesCount,
-    required bool isLiked,
-    required bool isSaved,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF16161C),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                backgroundColor: Color(0xFFD4AF37),
-                radius: 18,
-                child: Icon(Icons.shield, color: Colors.black, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(author, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  const Text('إعلان رسمي • الآن', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                ],
-              ),
-              const Spacer(),
-              if (widget.isAdmin)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                  onPressed: () async {
-                    await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (title.isNotEmpty)
-            Text(title, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(content, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
-          const SizedBox(height: 15),
-          const Divider(color: Colors.white10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              // زر الإعجاب (Like)
-              InkWell(
-                onTap: () async {
-                  DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(postId);
-                  if (isLiked) {
-                    await ref.update({'likedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
-                  } else {
-                    await ref.update({'likedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
-                  }
-                },
-                child: Row(
-                  children: [
-                    Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.redAccent : Colors.grey, size: 20),
-                    const SizedBox(width: 6),
-                    Text('$likesCount', style: TextStyle(color: isLiked ? Colors.redAccent : Colors.grey)),
-                  ],
-                ),
-              ),
-
-              // زر التعليقات (Comments)
-              InkWell(
-                onTap: () => _showCommentsDialog(postId),
-                child: Row(
-                  children: const [
-                    Icon(Icons.mode_comment_outlined, color: Colors.grey, size: 20),
-                    SizedBox(width: 6),
-                    Text('تعليق', style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              ),
-
-              // زر الحفظ (Save)
-              InkWell(
-                onTap: () async {
-                  DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(postId);
-                  if (isSaved) {
-                    await ref.update({'savedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
-                  } else {
-                    await ref.update({'savedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
-                  }
-                },
-                child: Row(
-                  children: [
-                    Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? const Color(0xFFD4AF37) : Colors.grey, size: 20),
-                    const SizedBox(width: 6),
-                    Text(isSaved ? 'محفوظ' : 'حفظ', style: TextStyle(color: isSaved ? const Color(0xFFD4AF37) : Colors.grey)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
