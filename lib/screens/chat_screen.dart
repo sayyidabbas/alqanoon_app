@@ -41,7 +41,7 @@ class _StudentForumScreenState extends State<StudentForumScreen> {
     _checkJoinStatus();
   }
 
-  // التعرف التلقائي والدائم على الأدمن بدون الحاجة لكلمة سر تكرارية
+  // التعرف التلقائي على الأدمن عبر اليوزر x9.ta9 أو حقل role في Firestore
   void _checkAdminRole() {
     if (widget.isAdmin || widget.currentUserAccountName == 'x9.ta9' || _userUid == 'x9.ta9') {
       setState(() {
@@ -135,7 +135,7 @@ class JoinWelcomeScreen extends StatelessWidget {
               padding: EdgeInsets.all(12.0),
               child: Chip(
                 backgroundColor: Color(0xFFD4AF37),
-                label: Text('حساب إدارة', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
+                label: Text('حساب إدارة 🛡️', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ),
         ],
@@ -362,7 +362,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
           ],
         ),
         actions: [
-          // لوحة التحكم تظهر فقط للأدمن وتفتح بضغطة واحدة دون كلمة سر
+          // تظهر أيقونة التحكم بضغطة واحدة للأدمن بدون الحاجة لإدخال كلمة سر
           if (widget.isAdmin)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings, color: Colors.greenAccent),
@@ -460,6 +460,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
           mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            // جلب الصورة الشخصية ديناميكياً من مجموعة users حسب senderUid
             if (!isMe) ...[
               StreamBuilder<DocumentSnapshot>(
                 stream: senderUid.isNotEmpty
@@ -501,6 +502,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // جلب اسم المستخدم ديناميكياً ليحدث تلقائياً فور تعديله في البروفايل
                   if (!isMe)
                     StreamBuilder<DocumentSnapshot>(
                       stream: senderUid.isNotEmpty
@@ -526,7 +528,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
                   _buildMessageMediaContent(msg, isMe),
                   const SizedBox(height: 4),
                   Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: minAxis,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
@@ -711,7 +713,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     );
   }
 
-  // إرسال البلاغ لقاعدة بيانات الإدارة
+  // حفظ البلاغ في مجموعة chat_reports ليظهر في لوحة الأدمن
   void _reportMessageToAdmin(String docId, Map<String, dynamic> msg) {
     FirebaseFirestore.instance.collection('chat_reports').add({
       'messageId': docId,
@@ -749,7 +751,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     setState(() => _isUploading = true);
 
     try {
-      // إصلاح مسار الرفع بملفات أندرويد لإنهاء خطأ object-not-found
+      // معالجة واسم الملف لتفادي خطأ object-not-found
       String cleanFileName = DateTime.now().millisecondsSinceEpoch.toString() + "_" + fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
       Reference ref = FirebaseStorage.instance.ref().child('forum_uploads').child(cleanFileName);
       
@@ -911,7 +913,7 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     );
   }
 
-  // لوحة التحكم تظهر فقط للأدمن وتحوي خيارات الإدارة وسجل البلاغات
+  // لوحة التحكّم الشاملة للأدمن
   void _showAdminDashboard() {
     final banController = TextEditingController();
 
@@ -1007,13 +1009,13 @@ class _MainForumChatViewState extends State<MainForumChatView> with WidgetsBindi
     );
   }
 
-  // عرض قائمة البلاغات للأدمن
+  // عرض قائمة البلاغات للأدمن مع خيار المسح والتنظيف
   void _showReportsDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('قائمة البلاغات', style: TextStyle(color: Colors.white)),
+        title: const Text('قائمة البلاغات المستلمة', style: TextStyle(color: Colors.white)),
         content: SizedBox(
           width: double.maxFinite,
           height: 300,
