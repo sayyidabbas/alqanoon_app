@@ -1,36 +1,42 @@
 import 'package:flutter/material.dart';
-import 'chat_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   final String currentUserAccountName;
+
   const ServicesScreen({super.key, required this.currentUserAccountName});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الخدمات والكلية'),
-        backgroundColor: const Color(0xFF1A1A1A),
-        foregroundColor: Colors.white,
+        title: const Text('الخدمات الطلابية', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF121216),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20),
         children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              leading: const Icon(Icons.forum, size: 40, color: Colors.green),
-              title: const Text('منتدى الطلبة والدردشة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              subtitle: const Text('غرف المحادثة المباشرة بين الطلبة'),
-              trailing: const Icon(Icons.arrow_forward_ios),
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (c) => StudentForumScreen(currentUserAccountName: currentUserAccountName)));
-              },
-            ),
-          ),
+          _buildServiceTile('طلب كتاب تأييد', 'استخراج تأييد استمرار بالدراسة', Icons.description_outlined),
+          _buildServiceTile('النتائج الامتحانية', 'الاستعلام عن نتائج الفصل الدراسي', Icons.grade_outlined),
+          _buildServiceTile('المحاكم الافتراضية', 'التسجيل في جلسات المحاكاة القانونية', Icons.balance_outlined),
         ],
+      ),
+    );
+  }
+
+  Widget _buildServiceTile(String title, String subtitle, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16161C),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFFD4AF37)),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+        onTap: () {},
       ),
     );
   }
