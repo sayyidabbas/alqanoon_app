@@ -23,11 +23,39 @@ class _HomeScreenState extends State<HomeScreen> {
   Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
   Timer? _countdownTimer;
 
+  // متحكمات حركة شريط الإعلانات الأخبار
+  late ScrollController _tickerScrollController;
+  Timer? _tickerTimer;
+
   final TextEditingController _searchController = TextEditingController();
 
   List<String> _announcements = [
-    "مرحباً بكم في منصة القانون - النسخة الرسمية!",
-    "تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.",
+    "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
+  ];
+
+  // قائمة محادثات تجريبية للدردشة
+  final List<Map<String, dynamic>> _chatList = [
+    {
+      'username': 'ahmed_legal',
+      'fullName': 'أحمد علي',
+      'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
+      'time': '10:30 ص',
+      'bio': 'باحث قانوني متقدم',
+      'messages': [
+        {'sender': 'ahmed_legal', 'text': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟', 'time': '10:30 ص'},
+      ]
+    },
+    {
+      'username': 'sara_lawyer',
+      'fullName': 'سارة محمود',
+      'lastMessage': 'شكراً جزيلاً لك',
+      'time': 'أمس',
+      'bio': 'طالبة قانون - المرحلة الرابعة',
+      'messages': [
+        {'sender': 'me', 'text': 'تم إرسال الملف القانوني', 'time': 'أمس'},
+        {'sender': 'sara_lawyer', 'text': 'شكراً جزيلاً لك', 'time': 'أمس'},
+      ]
+    },
   ];
 
   // 1. التبليغات الرسمية (تظهر بالرئيسية فقط)
@@ -42,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
     )
   ];
 
-  // 2. منشورات المستخدمين الشخصية (تقتصر على الملفات الشخصية)
+  // 2. منشورات المستخدمين الشخصية
   List<PostModel> _userPosts = [];
 
   // قاعدة بيانات تجريبية للمستخدمين للبحث عنهم
@@ -69,6 +97,25 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadPin();
     _startTimer();
+    _tickerScrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startTickerAnimation();
+    });
+  }
+
+  void _startTickerAnimation() {
+    _tickerTimer?.cancel();
+    _tickerTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (_tickerScrollController.hasClients) {
+        double maxScroll = _tickerScrollController.position.maxScrollExtent;
+        double currentScroll = _tickerScrollController.offset;
+        if (currentScroll >= maxScroll) {
+          _tickerScrollController.jumpTo(0);
+        } else {
+          _tickerScrollController.jumpTo(currentScroll + 1.5);
+        }
+      }
+    });
   }
 
   void _loadPin() async {
@@ -93,6 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _tickerTimer?.cancel();
+    _tickerScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -191,7 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // فتح صفحة المستخدم كزائر
   void _openUserProfile(Map<String, String> user) {
-    // تصفية المنشورات الخاصة بهذا المستخدم فقط
     List<PostModel> filteredPosts = _userPosts
         .where((p) => p.username == user['username'])
         .toList();
@@ -202,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => UserProfileViewScreen(
           username: user['username']!,
           fullName: user['fullName']!,
-          bio: user['bio']!,
+          bio: user['bio'] ?? '',
           userPosts: filteredPosts,
         ),
       ),
@@ -302,6 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentIndex,
         children: [
           _buildMainHomeTab(),
+          _buildChatTab(), // تبويب الدردشة والمحادثات
           _buildServicesTab(),
         ],
       ),
@@ -313,6 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'الدردشة'),
           BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
         ],
       ),
@@ -325,28 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // شريط اختصار للبحث في واجهة الرئيسية
-          GestureDetector(
-            onTap: _showUserSearchDialog,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.search, color: AppColors.accent),
-                  SizedBox(width: 10),
-                  Text('ابحث عن زميل برمز @username...', style: TextStyle(color: Colors.white54)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          if (_announcements.isNotEmpty) _buildAnnouncementsBanner(),
+          if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
           if (_announcements.isNotEmpty) const SizedBox(height: 16),
           if (_targetDuration != null) _buildCountdownCard(),
           if (_targetDuration != null) const SizedBox(height: 20),
@@ -363,27 +392,85 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildAnnouncementsBanner() {
+  // شريط الإعلانات الأخبار المتحرك تلقائياً
+  Widget _buildAnnouncementsTicker() {
+    String combinedText = _announcements.join("                  ");
     return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(color: AppColors.cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.accent.withOpacity(0.3))),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+      ),
       child: Row(
         children: [
           const Icon(Icons.campaign, color: AppColors.accent),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
-            child: PageView.builder(
-              itemCount: _announcements.length,
-              itemBuilder: (context, index) => Align(
-                alignment: Alignment.centerRight,
-                child: Text(_announcements[index], style: const TextStyle(fontSize: 14, color: Colors.white), overflow: TextOverflow.ellipsis),
+            child: SingleChildScrollView(
+              controller: _tickerScrollController,
+              scrollDirection: Axis.horizontal,
+              physics: const NeverScrollableScrollPhysics(),
+              child: Text(
+                combinedText,
+                style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // تبويب قائمة الدردشات
+  Widget _buildChatTab() {
+    return _chatList.isEmpty
+        ? const Center(
+            child: Text(
+              'لا توجد محادثات حتى الآن.\nيمكنك البحث عن زملائك ومراسلتهم!',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 16),
+            ),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: _chatList.length,
+            separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+            itemBuilder: (context, index) {
+              final chat = _chatList[index];
+              return ListTile(
+                backgroundColor: AppColors.cardBg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: GestureDetector(
+                  onTap: () {
+                    _openUserProfile({
+                      'username': chat['username'],
+                      'fullName': chat['fullName'],
+                      'bio': chat['bio'] ?? '',
+                    });
+                  },
+                  child: CircleAvatar(
+                    backgroundColor: AppColors.accent,
+                    child: Text(
+                      chat['fullName'][0],
+                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                title: Text(chat['fullName'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                subtitle: Text(chat['lastMessage'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70)),
+                trailing: Text(chat['time'], style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                onTap: () {
+                  _openUserProfile({
+                    'username': chat['username'],
+                    'fullName': chat['fullName'],
+                    'bio': chat['bio'] ?? '',
+                  });
+                },
+              );
+            },
+          );
   }
 
   Widget _buildCountdownCard() {
