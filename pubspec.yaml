@@ -1,0 +1,31 @@
+name: law_platform
+description: "تطبيق منصة القانون - تطبيق خاص بالأجهزة الذكية"
+publish_to: 'none' # يمنع نشر التطبيق على pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # حزمة دعم اللغة العربية واللغات الأخرى (RTL)
+  flutter_localizations:
+    sdk: flutter
+
+  # حزمة الأيقونات الإضافية (اختياري)
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # إذا أردت إضافة صور أو شعارات مستقبلاً قم بإلغاء التعليق عن الأسطر التالية:
+  # assets:
+  #   - assets/images/
