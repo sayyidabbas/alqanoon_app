@@ -1,4 +1,4 @@
-name: Build Android APK
+Name: Build Android APK
 
 on:
   push:
@@ -31,6 +31,14 @@ jobs:
 
     - name: Install Dependencies
       run: flutter pub get
+
+    # نسخ ملف إعدادات الفايربيس إلى مجلد الأندرويد
+    - name: Copy Firebase Config
+      run: cp google-services.json android/app/
+
+    # تطبيق اسم التطبيق "منصة القانون" عبر حزمة rename
+    - name: Set App Name
+      run: flutter pub run rename setAppName --value "منصة القانون"
 
     - name: Build APK
       run: flutter build apk --release
