@@ -21,7 +21,7 @@ dependencies:
   # لحفظ الرمز السري وحالة تسجيل دخول البوابة الآمنة محلياً
   shared_preferences: ^2.2.2
 
-  # (المكتبة الجديدة) لاختيار الصور من المعرض والكاميرا
+  # لاختيار الصور من المعرض والكاميرا
   image_picker: ^1.0.7
 
 dev_dependencies:
@@ -29,10 +29,12 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^3.0.0
 
+  # حزمة تغيير اسم التطبيق تلقائياً
+  flutter_rename_app: ^1.6.0
+
 flutter:
   uses-material-design: true
 
-  # إذا أردت إضافة صور أو شعارات مستقبلاً قم بإلغاء التعليق عن الأسطر التالية:
-  # assets:
-  #   - assets/images/
-  
+# إعدادات اسم التطبيق الجديد بالعربي
+flutter_rename_app:
+  application_name: "منصة القانون"
