@@ -256,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-    // نافذة البحث عن المستخدمين
+  // نافذة البحث عن المستخدمين
   void _showUserSearchDialog() {
     showDialog(
       context: context,
@@ -440,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (context, index) {
               final chat = _chatList[index];
               return ListTile(
-                backgroundColor: AppColors.cardBg,
+                tileColor: AppColors.cardBg, // 👈 تم التصحيح هنا واستبدال backgroundColor بـ tileColor
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 leading: GestureDetector(
                   onTap: () {
