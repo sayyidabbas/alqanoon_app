@@ -2,6 +2,7 @@ class PostModel {
   String id;
   String content;
   String author;
+  String? imageUrl; // رابط أو مسار الصورة
   DateTime timestamp;
   int likes;
   bool isLiked;
@@ -11,6 +12,7 @@ class PostModel {
     required this.id,
     required this.content,
     required this.author,
+    this.imageUrl,
     required this.timestamp,
     this.likes = 0,
     this.isLiked = false,
