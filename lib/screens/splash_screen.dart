@@ -42,6 +42,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
+          // تأثير الخلفية الضوئية المصحح
           Center(
             child: Container(
               width: 250,
@@ -49,7 +50,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.accent.withOpacity(0.15),
-                blurRadius: 100,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withOpacity(0.2),
+                    blurRadius: 100,
+                    spreadRadius: 20,
+                  ),
+                ],
               ),
             ),
           ),
