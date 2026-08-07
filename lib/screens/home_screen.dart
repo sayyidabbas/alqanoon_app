@@ -7,6 +7,7 @@ import '../models/post_model.dart';
 import '../routes/app_routes.dart';
 import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
+import 'user_profile_view_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,19 +23,45 @@ class _HomeScreenState extends State<HomeScreen> {
   Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
   Timer? _countdownTimer;
 
+  final TextEditingController _searchController = TextEditingController();
+
   List<String> _announcements = [
     "مرحباً بكم في منصة القانون - النسخة الرسمية!",
     "تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.",
   ];
 
-  List<PostModel> _posts = [
+  // 1. التبليغات الرسمية (تظهر بالرئيسية فقط)
+  List<PostModel> _officialPosts = [
     PostModel(
       id: '1',
-      author: 'سيدعباس عقيل الحسيني',
+      author: 'إدارة منصة القانون',
+      username: 'admin',
       content: 'نرحب بجميع الطلبة في منصة القانون الإلكترونية التعليمية.',
       timestamp: DateTime.now().subtract(const Duration(hours: 2)),
       likes: 12,
     )
+  ];
+
+  // 2. منشورات المستخدمين الشخصية (تقتصر على الملفات الشخصية)
+  List<PostModel> _userPosts = [];
+
+  // قاعدة بيانات تجريبية للمستخدمين للبحث عنهم
+  final List<Map<String, String>> _allUsers = [
+    {
+      'username': 'abbas_law',
+      'fullName': 'سيدعباس عقيل الحسيني',
+      'bio': 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية'
+    },
+    {
+      'username': 'ahmed_legal',
+      'fullName': 'أحمد علي',
+      'bio': 'باحث قانوني متقدم'
+    },
+    {
+      'username': 'sara_lawyer',
+      'fullName': 'سارة محمود',
+      'bio': 'طالبة قانون - المرحلة الرابعة'
+    },
   ];
 
   @override
@@ -66,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -119,18 +147,28 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => AdminPanelScreen(
-          posts: _posts,
+          posts: _officialPosts,
           announcements: _announcements,
           onAddPost: (content, imageFile) {
             setState(() {
-              _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageFile: imageFile, timestamp: DateTime.now()));
+              _officialPosts.insert(
+                0,
+                PostModel(
+                  id: DateTime.now().toString(),
+                  author: 'إدارة منصة القانون',
+                  username: 'admin',
+                  content: content,
+                  imageFile: imageFile,
+                  timestamp: DateTime.now(),
+                ),
+              );
             });
           },
           onDeletePost: (index) {
-            setState(() { _posts.removeAt(index); });
+            setState(() { _officialPosts.removeAt(index); });
           },
           onEditPost: (index, newContent) {
-            setState(() { _posts[index].content = newContent; });
+            setState(() { _officialPosts[index].content = newContent; });
           },
           onAddBanner: (banner) {
             setState(() { _announcements.add(banner); });
@@ -151,12 +189,103 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // فتح صفحة المستخدم كزائر
+  void _openUserProfile(Map<String, String> user) {
+    // تصفية المنشورات الخاصة بهذا المستخدم فقط
+    List<PostModel> filteredPosts = _userPosts
+        .where((p) => p.username == user['username'])
+        .toList();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileViewScreen(
+          username: user['username']!,
+          fullName: user['fullName']!,
+          bio: user['bio']!,
+          userPosts: filteredPosts,
+        ),
+      ),
+    );
+  }
+    // نافذة البحث عن المستخدمين
+  void _showUserSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String query = "";
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            List<Map<String, String>> searchResults = _allUsers.where((u) {
+              return u['username']!.toLowerCase().contains(query.toLowerCase()) ||
+                     u['fullName']!.contains(query);
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: AppColors.cardBg,
+              title: const Text('البحث عن مستخدم 🔍', style: TextStyle(color: AppColors.accent)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'ادخل اسم المستخدم (مثال: abbas_law)...',
+                        prefixIcon: Icon(Icons.search, color: AppColors.accent),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          query = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 200,
+                      child: searchResults.isEmpty
+                          ? const Center(child: Text('لا يوجد مستخدم بهذا الاسم', style: TextStyle(color: Colors.white54)))
+                          : ListView.builder(
+                              itemCount: searchResults.length,
+                              itemBuilder: (context, index) {
+                                final user = searchResults[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: AppColors.accent,
+                                    child: Text(user['fullName']![0], style: const TextStyle(color: Colors.black)),
+                                  ),
+                                  title: Text(user['fullName']!),
+                                  subtitle: Text('@${user['username']}', style: const TextStyle(color: AppColors.accent)),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _openUserProfile(user);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('منصة القانون'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search, color: AppColors.accent),
+            onPressed: _showUserSearchDialog,
+            tooltip: 'البحث عن مستخدم',
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: TextButton.icon(
@@ -196,17 +325,38 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // شريط اختصار للبحث في واجهة الرئيسية
+          GestureDetector(
+            onTap: _showUserSearchDialog,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.search, color: AppColors.accent),
+                  SizedBox(width: 10),
+                  Text('ابحث عن زميل برمز @username...', style: TextStyle(color: Colors.white54)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           if (_announcements.isNotEmpty) _buildAnnouncementsBanner(),
           if (_announcements.isNotEmpty) const SizedBox(height: 16),
           if (_targetDuration != null) _buildCountdownCard(),
           if (_targetDuration != null) const SizedBox(height: 20),
-          const Text('المنشورات والتحديثات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
+          const Text('التبليغات الرسمية والتحديثات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
           const SizedBox(height: 12),
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _posts.length,
-            itemBuilder: (context, index) => _buildPostCard(_posts[index]),
+            itemCount: _officialPosts.length,
+            itemBuilder: (context, index) => _buildPostCard(_officialPosts[index]),
           ),
         ],
       ),
@@ -295,7 +445,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(post.author.isNotEmpty ? post.author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 10),
-                Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('@${post.username}', style: const TextStyle(fontSize: 11, color: AppColors.accent)),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -383,10 +539,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ProfileScreen(
-                    posts: _posts,
+                    posts: _userPosts,
                     onAddUserPost: (content, imageFile) {
                       setState(() {
-                        _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageFile: imageFile, timestamp: DateTime.now()));
+                        _userPosts.insert(
+                          0,
+                          PostModel(
+                            id: DateTime.now().toString(),
+                            author: 'سيدعباس عقيل الحسيني',
+                            username: 'abbas_law',
+                            content: content,
+                            imageFile: imageFile,
+                            timestamp: DateTime.now(),
+                          ),
+                        );
                       });
                     },
                   ),
