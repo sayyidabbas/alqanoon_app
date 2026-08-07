@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart'; // <--- إضافة استيراد الفايربيس
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-void main() {
+void main() async { // <--- إضافة async
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // تهيئة الفايربيس سحابياً
+  await Firebase.initializeApp();
+
   runApp(const LawPlatformApp());
 }
 
