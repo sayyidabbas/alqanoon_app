@@ -113,8 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
   }
-
-  void _showCommentsDialog(String postId) {
+    void _showCommentsDialog(String postId) {
     final commentController = TextEditingController();
     showModalBottomSheet(
       context: context,
@@ -166,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () async {
                       if (commentController.text.trim().isNotEmpty) {
                         await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
-                          'userName': currentUserAccountName,
+                          'userName': widget.currentUserAccountName,
                           'userPhoto': currentUserPhotoUrl,
                           'text': commentController.text.trim(),
                           'timestamp': FieldValue.serverTimestamp(),
@@ -183,7 +182,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-    @override
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -293,7 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     var post = posts[index];
                     var data = post.data() as Map<String, dynamic>;
                     List likedBy = data['likedBy'] ?? [];
-                    bool isLiked = likedBy.contains(currentUserAccountName);
+                    bool isLiked = likedBy.contains(widget.currentUserAccountName);
                     String postImage = data['imageUrl'] ?? '';
 
                     return Container(
@@ -321,11 +321,27 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(height: 5),
                             Text(data['content'] ?? '', style: const TextStyle(color: Colors.white70)),
                           ],
+                          // تعديل عرض الصورة من ImgBB بشكل احترافي مع مؤشر التحميل
                           if (postImage.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.network(postImage, fit: BoxFit.cover, width: double.infinity, height: 200),
+                              child: Image.network(
+                                postImage,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Container(
+                                    height: 180,
+                                    color: const Color(0xFF0F0F12),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                              ),
                             ),
                           ],
                           const SizedBox(height: 15),
@@ -337,9 +353,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onTap: () async {
                                   DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(post.id);
                                   if (isLiked) {
-                                    await ref.update({'likedBy': FieldValue.arrayRemove([currentUserAccountName])});
+                                    await ref.update({'likedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
                                   } else {
-                                    await ref.update({'likedBy': FieldValue.arrayUnion([currentUserAccountName])});
+                                    await ref.update({'likedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
                                   }
                                 },
                                 child: Row(
@@ -380,8 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  Widget _buildCountdownWidget() {
+    Widget _buildCountdownWidget() {
     int days = _timeRemaining.inDays;
     int hours = _timeRemaining.inHours % 24;
     int minutes = _timeRemaining.inMinutes % 60;
@@ -426,6 +441,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
 class MarqueeTickerText extends StatefulWidget {
   final String text;
   const MarqueeTickerText({super.key, required this.text});
@@ -614,7 +630,7 @@ class AdminDashboardPage extends StatefulWidget {
 }
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
-  // دالة الرفع السريع لـ ImgBB بدون تكاليف أو فيزا
+  // دالة الرفع السريع لـ ImgBB
   Future<String?> uploadToImgBB(File imageFile) async {
     try {
       var request = http.MultipartRequest(
@@ -778,8 +794,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       ),
     );
   }
-
-  void _showEventManager() {
+    void _showEventManager() {
     final nameController = TextEditingController();
     final daysController = TextEditingController();
     showDialog(
@@ -866,7 +881,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       ),
     );
   }
-    @override
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
