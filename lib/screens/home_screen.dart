@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
@@ -120,9 +121,9 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => AdminPanelScreen(
           posts: _posts,
           announcements: _announcements,
-          onAddPost: (content, imageUrl) {
+          onAddPost: (content, imageFile) {
             setState(() {
-              _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageUrl: imageUrl, timestamp: DateTime.now()));
+              _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageFile: imageFile, timestamp: DateTime.now()));
             });
           },
           onDeletePost: (index) {
@@ -180,9 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: AppColors.accent,
         unselectedItemColor: Colors.white54,
         backgroundColor: AppColors.primary,
-        onTap: (index) {
-          setState(() { _currentIndex = index; });
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
           BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
@@ -300,12 +299,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            Text(post.content, style: const TextStyle(fontSize: 15)),
-            if (post.imageUrl != null) ...[
+            if (post.content.isNotEmpty) Text(post.content, style: const TextStyle(fontSize: 15)),
+            if (post.imageFile != null) ...[
               const SizedBox(height: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(post.imageUrl!, errorBuilder: (c, o, s) => const Icon(Icons.broken_image, size: 50, color: Colors.white24)),
+                child: Image.file(post.imageFile!, width: double.infinity, fit: BoxFit.cover),
               ),
             ],
             const Divider(color: Colors.white10, height: 20),
@@ -385,9 +384,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => ProfileScreen(
                     posts: _posts,
-                    onAddUserPost: (content, imageUrl) {
+                    onAddUserPost: (content, imageFile) {
                       setState(() {
-                        _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageUrl: imageUrl, timestamp: DateTime.now()));
+                        _posts.insert(0, PostModel(id: DateTime.now().toString(), author: 'سيدعباس عقيل الحسيني', content: content, imageFile: imageFile, timestamp: DateTime.now()));
                       });
                     },
                   ),
@@ -408,4 +407,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
- 
