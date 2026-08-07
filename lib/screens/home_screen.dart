@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 
@@ -42,10 +45,12 @@ class _HomeScreenState extends State<HomeScreen> {
       DocumentSnapshot doc = await FirebaseFirestore.instance.collection('app_config').doc('admin_credentials').get();
       if (doc.exists && doc.data() != null) {
         var data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _adminUsernameConfig = data['username'] ?? 'x9.ta9';
-          _adminPasswordConfig = data['password'] ?? 'Abbas312004';
-        });
+        if (mounted) {
+          setState(() {
+            _adminUsernameConfig = data['username'] ?? 'x9.ta9';
+            _adminPasswordConfig = data['password'] ?? 'Abbas312004';
+          });
+        }
       }
     } catch (e) {
       debugPrint("Admin config error: $e");
@@ -85,319 +90,28 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // -------------------------------------------------------------
-  // البوابة الآمنة الفخمة (صفحة كاملة)
-  // -------------------------------------------------------------
+  // فتح صفحة البوابة الآمنة الشاملة
   void _openAdminSecurityPage() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool isSavedAdmin = prefs.getBool('is_admin_logged_in') ?? false;
 
-    if (isSavedAdmin) {
-      _showAdminControlPanel();
-    } else {
-      if (mounted) {
+    if (mounted) {
+      if (isSavedAdmin) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminDashboardPage()));
+      } else {
         Navigator.push(context, MaterialPageRoute(builder: (context) => AdminLoginPage(
           adminUsername: _adminUsernameConfig,
           adminPassword: _adminPasswordConfig,
           onLoginSuccess: () async {
             await prefs.setBool('is_admin_logged_in', true);
-            setState(() {
-              isCurrentUserAdmin = true;
-            });
             if (mounted) {
-              Navigator.pop(context);
-              _showAdminControlPanel();
+              setState(() => isCurrentUserAdmin = true);
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminDashboardPage()));
             }
           },
         )));
       }
     }
-  }
-    // لوحة التحكم المركزية
-  void _showAdminControlPanel() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('لوحة التحكم والتوجيه المركزية 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    icon: const Icon(Icons.logout, color: Colors.redAccent),
-                    tooltip: 'قفل صلاحية الأدمن',
-                    onPressed: () async {
-                      SharedPreferences prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('is_admin_logged_in');
-                      setState(() => isCurrentUserAdmin = false);
-                      if (mounted) Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              _buildAdminTile(Icons.campaign, 'إدارة الشريط العاجل', 'إضافة / تعديل / حذف الخبر العاجل', () {
-                Navigator.pop(context);
-                _showTickerManager();
-              }),
-              _buildAdminTile(Icons.timer, 'إدارة العداد التنازلي', 'إضافة / تعديل / حذف الحدث', () {
-                Navigator.pop(context);
-                _showEventManager();
-              }),
-              _buildAdminTile(Icons.add_comment, 'إضافة منشور جديد', 'نشر في الخلاصة الرئيسية', () {
-                Navigator.pop(context);
-                _showAddPostDialog();
-              }),
-              _buildAdminTile(Icons.manage_accounts, 'طلبات تغيير اسم المستخدم', 'الموافقة أو الرفض على الطلبات', () {
-                Navigator.pop(context);
-                _showUsernameRequestsDialog();
-              }),
-              _buildAdminTile(Icons.security, 'تغيير بيانات دخول الأدمن', 'تعديل اليوزر والباسوورد', () {
-                Navigator.pop(context);
-                _showChangeAdminCredentialsDialog();
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAdminTile(IconData icon, String title, String sub, VoidCallback onTap) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E24), borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Icon(icon, color: const Color(0xFFD4AF37)),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  void _showTickerManager() {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('إدارة الشريط العاجل 🔴', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: TextField(controller: textController, maxLines: 2, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اكتب نص الخبر الجديد...', hintStyle: TextStyle(color: Colors.grey))),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('ticker').delete();
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حذف العاجل 🗑️', style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              if (textController.text.trim().isNotEmpty) {
-                await FirebaseFirestore.instance.collection('app_config').doc('ticker').set({
-                  'text': textController.text.trim(),
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-                if (mounted) Navigator.pop(context);
-              }
-            },
-            child: const Text('حفظ / نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEventManager() {
-    final nameController = TextEditingController();
-    final daysController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('إدارة العداد التنازلي ⏳', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الحدث', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: daysController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'عدد الأيام من الآن', labelStyle: TextStyle(color: Colors.grey))),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('event').set({'active': false});
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حذف الحدث 🗑️', style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              int days = int.tryParse(daysController.text.trim()) ?? 1;
-              DateTime futureDate = DateTime.now().add(Duration(days: days));
-              await FirebaseFirestore.instance.collection('app_config').doc('event').set({
-                'eventName': nameController.text.trim().isEmpty ? 'الحدث القادم' : nameController.text.trim(),
-                'targetDate': Timestamp.fromDate(futureDate),
-                'active': true,
-              });
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('تفعيل / حفظ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showUsernameRequestsDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          children: [
-            const Text('طلبات تغيير اسم المستخدم 📩', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-            const Divider(color: Colors.white10),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('username_requests').where('status', isEqualTo: 'pending').snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                  var docs = snapshot.data!.docs;
-                  if (docs.isEmpty) return const Center(child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
-
-                  return ListView.builder(
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      var req = docs[index];
-                      var data = req.data() as Map<String, dynamic>;
-                      return Card(
-                        color: const Color(0xFF1E1E24),
-                        child: ListTile(
-                          title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          subtitle: Text('المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
-                          isThreeLine: true,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () async {
-                                await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
-                                await req.reference.update({'status': 'approved'});
-                              }),
-                              IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () async {
-                                await req.reference.update({'status': 'rejected'});
-                              }),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showChangeAdminCredentialsDialog() {
-    final newUser = TextEditingController(text: _adminUsernameConfig);
-    final newPass = TextEditingController(text: _adminPasswordConfig);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('تغيير بيانات دخول الأدمن 🔑', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: newUser, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اليوزر الجديد', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: newPass, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة', labelStyle: TextStyle(color: Colors.grey))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () async {
-              await FirebaseFirestore.instance.collection('app_config').doc('admin_credentials').set({
-                'username': newUser.text.trim(),
-                'password': newPass.text.trim(),
-              });
-              setState(() {
-                _adminUsernameConfig = newUser.text.trim();
-                _adminPasswordConfig = newPass.text.trim();
-              });
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text('حفظ البيانات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddPostDialog() {
-    final titleController = TextEditingController();
-    final contentController = TextEditingController();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF16161C),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('إضافة منشور جديد 📢', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            TextField(controller: titleController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'العنوان', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: contentController, maxLines: 3, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'المحتوى...', labelStyle: TextStyle(color: Colors.grey))),
-            const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-                onPressed: () async {
-                  if (contentController.text.trim().isNotEmpty) {
-                    await FirebaseFirestore.instance.collection('posts').add({
-                      'title': titleController.text.trim(),
-                      'content': contentController.text.trim(),
-                      'author': currentUserAccountName,
-                      'authorPhoto': currentUserPhotoUrl,
-                      'likedBy': [],
-                      'timestamp': FieldValue.serverTimestamp(),
-                    });
-                    if (mounted) Navigator.pop(context);
-                  }
-                },
-                child: const Text('نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showCommentsDialog(String postId) {
@@ -477,15 +191,10 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: const Color(0xFF121216),
         actions: [
           IconButton(
-            icon: const Icon(Icons.shield, color: Color(0xFFD4AF37)),
+            icon: const Icon(Icons.shield, color: Color(0xFFD4AF37), size: 28),
             onPressed: _openAdminSecurityPage,
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openAdminSecurityPage,
-        backgroundColor: const Color(0xFFD4AF37),
-        child: const Icon(Icons.admin_panel_settings, color: Colors.black),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -521,14 +230,46 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
+            const SizedBox(height: 12),
+
+            // 2. كارت الترحيب بالطالب
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16161C),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: const Color(0xFFD4AF37),
+                    backgroundImage: currentUserPhotoUrl.isNotEmpty ? NetworkImage(currentUserPhotoUrl) : null,
+                    child: currentUserPhotoUrl.isEmpty ? const Icon(Icons.person, color: Colors.black) : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('أهلاً بك مجدداً 👋', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text(widget.currentUserAccountName, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 15),
 
-            // 2. العداد التنازلي للحدث
+            // 3. العداد التنازلي للحدث
             if (_hasActiveEvent) _buildCountdownWidget(),
 
             const SizedBox(height: 20),
 
-            // 3. خلاصة المنشورات
+            // 4. خلاصة المنشورات
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -557,6 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     var data = post.data() as Map<String, dynamic>;
                     List likedBy = data['likedBy'] ?? [];
                     bool isLiked = likedBy.contains(currentUserAccountName);
+                    String postImage = data['imageUrl'] ?? '';
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -575,18 +317,21 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(width: 10),
                               Text(data['author'] ?? 'منشئ المنصة', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              if (isCurrentUserAdmin)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                                  onPressed: () async => await FirebaseFirestore.instance.collection('posts').doc(post.id).delete(),
-                                ),
                             ],
                           ),
                           const SizedBox(height: 10),
                           if ((data['title'] ?? '').isNotEmpty) Text(data['title'], style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 5),
-                          Text(data['content'] ?? '', style: const TextStyle(color: Colors.white70)),
+                          if ((data['content'] ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(data['content'] ?? '', style: const TextStyle(color: Colors.white70)),
+                          ],
+                          if (postImage.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(postImage, fit: BoxFit.cover, width: double.infinity, height: 200),
+                            ),
+                          ],
                           const SizedBox(height: 15),
                           const Divider(color: Colors.white10),
                           Row(
@@ -749,7 +494,7 @@ class _MarqueeTickerTextState extends State<MarqueeTickerText> {
 }
 
 // -------------------------------------------------------------
-// البوابة الآمنة - صفحة دخولية فخمة ومستقلة
+// البوابة الآمنة - صفحة تسجيل الدخول الفخمة
 // -------------------------------------------------------------
 class AdminLoginPage extends StatefulWidget {
   final String adminUsername;
@@ -787,6 +532,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0F0F12),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -866,6 +612,342 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+// -------------------------------------------------------------
+// شاشة التحكم الكاملة (AdminDashboardPage)
+// -------------------------------------------------------------
+class AdminDashboardPage extends StatefulWidget {
+  const AdminDashboardPage({super.key});
+
+  @override
+  State<AdminDashboardPage> createState() => _AdminDashboardPageState();
+}
+
+class _AdminDashboardPageState extends State<AdminDashboardPage> {
+  // نشر منشور جديد برابط صورة اختياري
+  void _showAddPostDialog() {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    File? selectedImage;
+    bool isUploading = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF16161C),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 20, left: 20, right: 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('إضافة منشور جديد 📢', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextField(controller: titleController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'العنوان (اختياري)', labelStyle: TextStyle(color: Colors.grey))),
+                  const SizedBox(height: 10),
+                  TextField(controller: contentController, maxLines: 3, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'محتوى النص...', labelStyle: TextStyle(color: Colors.grey))),
+                  const SizedBox(height: 15),
+                  if (selectedImage != null)
+                    Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(selectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover)),
+                        IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () => setModalState(() => selectedImage = null)),
+                      ],
+                    )
+                  else
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFD4AF37))),
+                      onPressed: () async {
+                        final picker = ImagePicker();
+                        final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+                        if (img != null) {
+                          setModalState(() => selectedImage = File(img.path));
+                        }
+                      },
+                      icon: const Icon(Icons.image, color: Color(0xFFD4AF37)),
+                      label: const Text('إضافة صورة من المعرض', style: TextStyle(color: Color(0xFFD4AF37))),
+                    ),
+                  const SizedBox(height: 20),
+                  isUploading
+                      ? const CircularProgressIndicator(color: Color(0xFFD4AF37))
+                      : SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+                            onPressed: () async {
+                              if (contentController.text.trim().isNotEmpty || selectedImage != null) {
+                                setModalState(() => isUploading = true);
+                                String imageUrl = '';
+                                if (selectedImage != null) {
+                                  String path = 'posts/${DateTime.now().millisecondsSinceEpoch}.jpg';
+                                  UploadTask task = FirebaseStorage.instance.ref().child(path).putFile(selectedImage!);
+                                  TaskSnapshot snap = await task;
+                                  imageUrl = await snap.ref.getDownloadURL();
+                                }
+                                await FirebaseFirestore.instance.collection('posts').add({
+                                  'title': titleController.text.trim(),
+                                  'content': contentController.text.trim(),
+                                  'imageUrl': imageUrl,
+                                  'author': currentUserAccountName,
+                                  'authorPhoto': currentUserPhotoUrl,
+                                  'likedBy': [],
+                                  'timestamp': FieldValue.serverTimestamp(),
+                                });
+                                if (mounted) Navigator.pop(context);
+                              }
+                            },
+                            child: const Text('نشر المنشور', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showTickerManager() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF16161C),
+        title: const Text('إدارة الشريط العاجل 🔴', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: TextField(controller: textController, maxLines: 2, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اكتب نص الخبر الجديد...', hintStyle: TextStyle(color: Colors.grey))),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('app_config').doc('ticker').delete();
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('حذف العاجل 🗑️', style: TextStyle(color: Colors.redAccent)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              if (textController.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance.collection('app_config').doc('ticker').set({
+                  'text': textController.text.trim(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('حفظ / نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEventManager() {
+    final nameController = TextEditingController();
+    final daysController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF16161C),
+        title: const Text('إدارة العداد التنازلي ⏳', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اسم الحدث', labelStyle: TextStyle(color: Colors.grey))),
+            const SizedBox(height: 10),
+            TextField(controller: daysController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'عدد الأيام من الآن', labelStyle: TextStyle(color: Colors.grey))),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('app_config').doc('event').set({'active': false});
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('حذف الحدث 🗑️', style: TextStyle(color: Colors.redAccent)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              int days = int.tryParse(daysController.text.trim()) ?? 1;
+              DateTime futureDate = DateTime.now().add(Duration(days: days));
+              await FirebaseFirestore.instance.collection('app_config').doc('event').set({
+                'eventName': nameController.text.trim().isEmpty ? 'الحدث القادم' : nameController.text.trim(),
+                'targetDate': Timestamp.fromDate(futureDate),
+                'active': true,
+              });
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('تفعيل / حفظ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangeAdminCredentialsDialog() {
+    final newUser = TextEditingController();
+    final newPass = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF16161C),
+        title: const Text('تغيير بيانات دخول الأدمن 🔑', style: TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: newUser, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'اليوزر الجديد', labelStyle: TextStyle(color: Colors.grey))),
+            const SizedBox(height: 10),
+            TextField(controller: newPass, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'رمز الأمان الجديد', labelStyle: TextStyle(color: Colors.grey))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () async {
+              if (newUser.text.trim().isNotEmpty && newPass.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance.collection('app_config').doc('admin_credentials').set({
+                  'username': newUser.text.trim(),
+                  'password': newPass.text.trim(),
+                });
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('حفظ البيانات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('لوحة التحكم المركزية 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF121216),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: 'تسجيل الخروج من صلاحية الأدمن',
+            onPressed: () async {
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              await prefs.remove('is_admin_logged_in');
+              setState(() => isCurrentUserAdmin = false);
+              if (mounted) Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDashCard(Icons.add_photo_alternate, 'إضافة منشور جديد', 'نشر صورة، كابشن أو كلاهما للطلاب', _showAddPostDialog),
+            _buildDashCard(Icons.campaign, 'إدارة الشريط العاجل', 'إضافة / تعديل / حذف الشريط العاجل', _showTickerManager),
+            _buildDashCard(Icons.timer, 'إدارة العداد التنازلي', 'إضافة / تعديل / حذف الحدث التنازلي', _showEventManager),
+            _buildDashCard(Icons.lock_reset, 'تغيير رمز بيانات الأدمن', 'تحديث اليوزر وباسوورد لوحة التحكم', _showChangeAdminCredentialsDialog),
+            
+            const SizedBox(height: 25),
+            const Text('طلبات تغيير اسم المستخدم 📩', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('username_requests').where('status', isEqualTo: 'pending').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                var docs = snapshot.data!.docs;
+                if (docs.isEmpty) return const Container(padding: EdgeInsets.all(15), child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var req = docs[index];
+                    var data = req.data() as Map<String, dynamic>;
+                    return Card(
+                      color: const Color(0xFF1E1E24),
+                      child: ListTile(
+                        title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        subtitle: Text('المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
+                        isThreeLine: true,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () async {
+                              await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
+                              await req.reference.update({'status': 'approved'});
+                            }),
+                            IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () async {
+                              await req.reference.update({'status': 'rejected'});
+                            }),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+
+            const SizedBox(height: 25),
+            const Text('إدارة المنشورات (الحذف المباشر) 🗑️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('posts').orderBy('timestamp', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                var posts = snapshot.data!.docs;
+                if (posts.isEmpty) return const Text('لا توجد منشورات لحذفها', style: TextStyle(color: Colors.grey));
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: posts.length,
+                  itemBuilder: (context, index) {
+                    var post = posts[index];
+                    var data = post.data() as Map<String, dynamic>;
+                    return Card(
+                      color: const Color(0xFF16161C),
+                      child: ListTile(
+                        title: Text(data['title'] ?? data['content'] ?? 'منشور', style: const TextStyle(color: Colors.white)),
+                        subtitle: Text('بقلم: ${data['author']}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.redAccent),
+                          onPressed: () async => await FirebaseFirestore.instance.collection('posts').doc(post.id).delete(),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashCard(IconData icon, String title, String sub, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: const Color(0xFF16161C), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFFD4AF37)),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+        onTap: onTap,
       ),
     );
   }
