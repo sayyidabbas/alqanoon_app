@@ -33,7 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
     "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
   ];
 
-  // قائمة محادثات تجريبية للدردشة
+  // قائمة المحظورين
+  final List<Map<String, dynamic>> _blockedUsers = [];
+
+  // قائمة محادثات تجريبية للدردشة مع دعم العداد والكتم
   final List<Map<String, dynamic>> _chatList = [
     {
       'username': 'ahmed_legal',
@@ -41,6 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
       'time': '10:30 ص',
       'bio': 'باحث قانوني متقدم',
+      'unreadCount': 3, // عدد الرسائل غير المقروءة
+      'isMuted': false,
       'messages': [
         {'sender': 'ahmed_legal', 'text': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟', 'time': '10:30 ص'},
       ]
@@ -51,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'lastMessage': 'شكراً جزيلاً لك',
       'time': 'أمس',
       'bio': 'طالبة قانون - المرحلة الرابعة',
+      'unreadCount': 0,
+      'isMuted': true,
       'messages': [
         {'sender': 'me', 'text': 'تم إرسال الملف القانوني', 'time': 'أمس'},
         {'sender': 'sara_lawyer', 'text': 'شكراً جزيلاً لك', 'time': 'أمس'},
@@ -103,16 +110,17 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // حركة شريط الإعلانات بشكل سلس ودائري دون الرجوع
   void _startTickerAnimation() {
     _tickerTimer?.cancel();
-    _tickerTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+    _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
       if (_tickerScrollController.hasClients) {
         double maxScroll = _tickerScrollController.position.maxScrollExtent;
         double currentScroll = _tickerScrollController.offset;
         if (currentScroll >= maxScroll) {
           _tickerScrollController.jumpTo(0);
         } else {
-          _tickerScrollController.jumpTo(currentScroll + 1.5);
+          _tickerScrollController.jumpTo(currentScroll + 1.2);
         }
       }
     });
@@ -238,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // فتح صفحة المستخدم كزائر
+  // فتح صفحة الملف الشخصي للمستخدم
   void _openUserProfile(Map<String, String> user) {
     List<PostModel> filteredPosts = _userPosts
         .where((p) => p.username == user['username'])
@@ -256,6 +264,180 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+  // نافذة الشات المباشرة عند الضغط على المحادثة
+  void _openChatDetailScreen(Map<String, dynamic> chat) {
+    setState(() {
+      chat['unreadCount'] = 0; // تصفير عداد الرسائل عند القراءة
+    });
+
+    final TextEditingController messageController = TextEditingController();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => StatefulBuilder(
+          builder: (context, setChatState) {
+            List messages = chat['messages'] ?? [];
+            return Scaffold(
+              backgroundColor: AppColors.primary,
+              appBar: AppBar(
+                title: Text(chat['fullName']),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.person, color: AppColors.accent),
+                    onPressed: () {
+                      _openUserProfile({
+                        'username': chat['username'],
+                        'fullName': chat['fullName'],
+                        'bio': chat['bio'] ?? '',
+                      });
+                    },
+                  )
+                ],
+              ),
+              body: Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = messages[index];
+                        final isMe = msg['sender'] == 'me';
+                        return Align(
+                          alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isMe ? AppColors.accent : AppColors.cardBg,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  msg['text'],
+                                  style: TextStyle(color: isMe ? Colors.black : Colors.white, fontSize: 15),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  msg['time'],
+                                  style: TextStyle(color: isMe ? Colors.black54 : Colors.white38, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: AppColors.cardBg,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: messageController,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              hintText: 'اكتب رسالة...',
+                              hintStyle: TextStyle(color: Colors.white38),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.send, color: AppColors.accent),
+                          onPressed: () {
+                            if (messageController.text.trim().isNotEmpty) {
+                              final nowText = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
+                              setChatState(() {
+                                messages.add({
+                                  'sender': 'me',
+                                  'text': messageController.text.trim(),
+                                  'time': nowText,
+                                });
+                              });
+                              setState(() {
+                                chat['lastMessage'] = messageController.text.trim();
+                                chat['time'] = nowText;
+                              });
+                              messageController.clear();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // خيارات الضغط المطوّل على المحادثة (حذف - كتم - حظر)
+  void _showChatOptionsBottomSheet(Map<String, dynamic> chat, int index) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        bool isMuted = chat['isMuted'] ?? false;
+        return Wrap(
+          children: [
+            ListTile(
+              leading: Icon(isMuted ? Icons.notifications_active : Icons.notifications_off, color: AppColors.accent),
+              title: Text(isMuted ? 'إلغاء كتم التنبيهات' : 'كتم التنبيهات', style: const TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  chat['isMuted'] = !isMuted;
+                });
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  SnackBar(content: Text(!isMuted ? 'تم كتم المحادثة' : 'تم تفعيل التنبيهات')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.orangeAccent),
+              title: const Text('حظر المستخدم', style: TextStyle(color: Colors.orangeAccent)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _blockedUsers.add(chat);
+                  _chatList.removeAt(index);
+                });
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  SnackBar(content: Text('تم حظر ${chat['fullName']}')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.redAccent),
+              title: const Text('حذف المحادثة', style: TextStyle(color: Colors.redAccent)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _chatList.removeAt(index);
+                });
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف المحادثة')),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // نافذة البحث عن المستخدمين
   void _showUserSearchDialog() {
     showDialog(
@@ -392,9 +574,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // شريط الإعلانات الأخبار المتحرك تلقائياً
+  // شريط الإعلانات الأخبار المتحرك تلقائياً وبشكل مستمر دون الرجوع
   Widget _buildAnnouncementsTicker() {
-    String combinedText = _announcements.join("                  ");
+    String combinedText = "${_announcements.join("                  ")}                  ";
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -422,8 +604,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // تبويب قائمة الدردشات
+  // تبويب قائمة الدردشات مع الشارة الحمراء ودعم النقر والضغط المطول
   Widget _buildChatTab() {
     return _chatList.isEmpty
         ? const Center(
@@ -439,8 +620,14 @@ class _HomeScreenState extends State<HomeScreen> {
             separatorBuilder: (context, index) => const Divider(color: Colors.white10),
             itemBuilder: (context, index) {
               final chat = _chatList[index];
+              final unread = chat['unreadCount'] ?? 0;
+              final isMuted = chat['isMuted'] ?? false;
+
+              // صياغة عداد الرسائل من 1 إلى 9 وما فوقها +9
+              String unreadText = unread > 9 ? '+9' : '$unread';
+
               return ListTile(
-                tileColor: AppColors.cardBg, // 👈 تم التصحيح هنا واستبدال backgroundColor بـ tileColor
+                tileColor: AppColors.cardBg,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 leading: GestureDetector(
                   onTap: () {
@@ -450,24 +637,48 @@ class _HomeScreenState extends State<HomeScreen> {
                       'bio': chat['bio'] ?? '',
                     });
                   },
-                  child: CircleAvatar(
-                    backgroundColor: AppColors.accent,
-                    child: Text(
-                      chat['fullName'][0],
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                    ),
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: AppColors.accent,
+                        child: Text(
+                          chat['fullName'][0],
+                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (isMuted)
+                        const Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Icon(Icons.volume_off, size: 14, color: Colors.white60),
+                        ),
+                    ],
                   ),
                 ),
                 title: Text(chat['fullName'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                 subtitle: Text(chat['lastMessage'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70)),
-                trailing: Text(chat['time'], style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                onTap: () {
-                  _openUserProfile({
-                    'username': chat['username'],
-                    'fullName': chat['fullName'],
-                    'bio': chat['bio'] ?? '',
-                  });
-                },
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(chat['time'], style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    if (unread > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          unreadText,
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+                onTap: () => _openChatDetailScreen(chat),
+                onLongPress: () => _showChatOptionsBottomSheet(chat, index),
               );
             },
           );
@@ -605,6 +816,54 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // شاشة المحظورين وإلغاء الحظر
+  void _openBlockedUsersScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => StatefulBuilder(
+          builder: (context, setBlockedState) {
+            return Scaffold(
+              backgroundColor: AppColors.primary,
+              appBar: AppBar(title: const Text('المستخدمون المحظورون')),
+              body: _blockedUsers.isEmpty
+                  ? const Center(child: Text('لا يوجد مستخدمون محظورون', style: TextStyle(color: Colors.white54)))
+                  : ListView.builder(
+                      itemCount: _blockedUsers.length,
+                      itemBuilder: (context, index) {
+                        final blocked = _blockedUsers[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.accent,
+                            child: Text(blocked['fullName'][0], style: const TextStyle(color: Colors.black)),
+                          ),
+                          title: Text(blocked['fullName'], style: const TextStyle(color: Colors.white)),
+                          subtitle: Text('@${blocked['username']}', style: const TextStyle(color: AppColors.accent)),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                            onPressed: () {
+                              setBlockedState(() {
+                                _blockedUsers.removeAt(index);
+                              });
+                              setState(() {
+                                _chatList.add(blocked);
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('تم إلغاء حظر ${blocked['fullName']}')),
+                              );
+                            },
+                            child: const Text('إلغاء الحظر', style: TextStyle(color: Colors.black)),
+                          ),
+                        );
+                      },
+                    ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       backgroundColor: AppColors.cardBg,
@@ -645,6 +904,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.block, color: Colors.orangeAccent),
+            title: const Text('قائمة المحظورين'),
+            onTap: () {
+              Navigator.pop(context);
+              _openBlockedUsersScreen();
             },
           ),
           ListTile(leading: const Icon(Icons.settings, color: AppColors.accent), title: const Text('الإعدادات'), onTap: () {}),
