@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import '../main.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -613,6 +614,27 @@ class AdminDashboardPage extends StatefulWidget {
 }
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
+  // دالة الرفع السريع لـ ImgBB بدون تكاليف أو فيزا
+  Future<String?> uploadToImgBB(File imageFile) async {
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.imgbb.com/1/upload?key=d158b75b1ba16d4e022a51ad461b1639'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      var response = await request.send();
+
+      if (response.statusCode == 200) {
+        var responseData = await response.stream.bytesToString();
+        var json = jsonDecode(responseData);
+        return json['data']['url'];
+      }
+    } catch (e) {
+      debugPrint("ImgBB Upload error: $e");
+    }
+    return null;
+  }
+
   void _showAddPostDialog() {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
@@ -671,11 +693,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                                 try {
                                   String imageUrl = '';
                                   if (selectedImage != null) {
-                                    String path = 'posts/${DateTime.now().millisecondsSinceEpoch}.jpg';
-                                    UploadTask task = FirebaseStorage.instance.ref().child(path).putFile(selectedImage!);
-                                    TaskSnapshot snap = await task;
-                                    imageUrl = await snap.ref.getDownloadURL();
+                                    String? uploadedUrl = await uploadToImgBB(selectedImage!);
+                                    if (uploadedUrl != null) {
+                                      imageUrl = uploadedUrl;
+                                    } else {
+                                      throw Exception("فشل رفع الصورة إلى خادم الصور المجاني");
+                                    }
                                   }
+
                                   await FirebaseFirestore.instance.collection('posts').add({
                                     'title': titleController.text.trim(),
                                     'content': contentController.text.trim(),
@@ -685,10 +710,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                                     'likedBy': [],
                                     'timestamp': FieldValue.serverTimestamp(),
                                   });
+
                                   if (mounted) {
                                     Navigator.pop(context);
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('تم نشر المنشور بنجاح ✅'), backgroundColor: Colors.green),
+                                      const SnackBar(content: Text('تم نشر المنشور والصورة بنجاح ✅'), backgroundColor: Colors.green),
                                     );
                                   }
                                 } catch (e) {
