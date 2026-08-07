@@ -15,8 +15,11 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # حزمة الأيقونات الإضافية (اختياري)
+  # حزمة الأيقونات الإضافية
   cupertino_icons: ^1.0.8
+
+  # (المكتبة الجديدة) لحفظ الرمز السري وحالة تسجيل دخول البوابة الآمنة محلياً
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
