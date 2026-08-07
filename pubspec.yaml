@@ -1,4 +1,4 @@
-name: alqanoon_app
+Name: alqanoon_app
 description: "تطبيق منصة القانون"
 publish_to: 'none'
 
@@ -21,6 +21,7 @@ dependencies:
   audioplayers: ^5.2.1
   url_launcher: ^6.2.5
   shared_preferences: ^2.2.2
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
