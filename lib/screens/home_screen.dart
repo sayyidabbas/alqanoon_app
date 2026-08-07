@@ -90,7 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // فتح صفحة البوابة الآمنة الشاملة
   void _openAdminSecurityPage() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool isSavedAdmin = prefs.getBool('is_admin_logged_in') ?? false;
@@ -199,7 +198,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. شريط أخبار التلفاز المتحرك تلقائياً
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('app_config').doc('ticker').snapshots(),
               builder: (context, snapshot) {
@@ -232,7 +230,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 12),
 
-            // 2. كارت الترحيب بالطالب
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -264,12 +261,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 15),
 
-            // 3. العداد التنازلي للحدث
             if (_hasActiveEvent) _buildCountdownWidget(),
 
             const SizedBox(height: 20),
 
-            // 4. خلاصة المنشورات
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -430,9 +425,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-// -------------------------------------------------------------
-// شريط أخبار التلفاز التلقائي الحركة
-// -------------------------------------------------------------
 class MarqueeTickerText extends StatefulWidget {
   final String text;
   const MarqueeTickerText({super.key, required this.text});
@@ -493,9 +485,6 @@ class _MarqueeTickerTextState extends State<MarqueeTickerText> {
   }
 }
 
-// -------------------------------------------------------------
-// البوابة الآمنة - صفحة تسجيل الدخول الفخمة
-// -------------------------------------------------------------
 class AdminLoginPage extends StatefulWidget {
   final String adminUsername;
   final String adminPassword;
@@ -616,9 +605,6 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
     );
   }
 }
-// -------------------------------------------------------------
-// شاشة التحكم الكاملة (AdminDashboardPage)
-// -------------------------------------------------------------
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
 
@@ -627,7 +613,6 @@ class AdminDashboardPage extends StatefulWidget {
 }
 
 class _AdminDashboardPageState extends State<AdminDashboardPage> {
-  // نشر منشور جديد برابط صورة اختياري
   void _showAddPostDialog() {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
@@ -865,7 +850,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
                 var docs = snapshot.data!.docs;
-                if (docs.isEmpty) return const Container(padding: EdgeInsets.all(15), child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
+                if (docs.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(15),
+                    child: const Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)),
+                  );
+                }
 
                 return ListView.builder(
                   shrinkWrap: true,
