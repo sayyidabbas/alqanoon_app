@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,10 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _eventName = '';
   bool _hasActiveEvent = false;
 
-  // كلمة السر واليوزر الافتراضيان للأدمن
   String _adminUsernameConfig = 'x9.ta9';
   String _adminPasswordConfig = 'Abbas312004';
-  bool _isAdminLoggedInSession = false;
 
   @override
   void initState() {
@@ -49,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      debugPrint("Credentials fetch error: $e");
+      debugPrint("Admin config error: $e");
     }
   }
 
@@ -76,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _hasActiveEvent = false);
       }
     } catch (e) {
-      debugPrint("Event fetch error: $e");
+      debugPrint("Event error: $e");
     }
   }
 
@@ -87,70 +86,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // -------------------------------------------------------------
-  // المصادقة والحماية للوحة التحكم
+  // البوابة الآمنة الفخمة (صفحة كاملة)
   // -------------------------------------------------------------
-  void _accessAdminPanel() {
-    if (_isAdminLoggedInSession || currentUsername == _adminUsernameConfig) {
+  void _openAdminSecurityPage() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isSavedAdmin = prefs.getBool('is_admin_logged_in') ?? false;
+
+    if (isSavedAdmin) {
       _showAdminControlPanel();
-      return;
+    } else {
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => AdminLoginPage(
+          adminUsername: _adminUsernameConfig,
+          adminPassword: _adminPasswordConfig,
+          onLoginSuccess: () async {
+            await prefs.setBool('is_admin_logged_in', true);
+            setState(() {
+              isCurrentUserAdmin = true;
+            });
+            if (mounted) {
+              Navigator.pop(context);
+              _showAdminControlPanel();
+            }
+          },
+        )));
+      }
     }
-
-    final userController = TextEditingController();
-    final passController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16161C),
-        title: const Text('تسجيل دخول لوحة التحكم 🛡️', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: userController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'اسم المستخدم (اليوزر)', labelStyle: TextStyle(color: Colors.grey)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: passController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'كلمة المرور', labelStyle: TextStyle(color: Colors.grey)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () {
-              if (userController.text.trim() == _adminUsernameConfig && passController.text.trim() == _adminPasswordConfig) {
-                setState(() {
-                  _isAdminLoggedInSession = true;
-                  isCurrentUserAdmin = true;
-                });
-                Navigator.pop(context);
-                _showAdminControlPanel();
-              } else {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('عذراً، غير مصرح لك بالدخول إلى لوحة التحكم والتوجيه ❌'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
   }
-    // -------------------------------------------------------------
-  // لوحة التحكم الموحدة والشاملة
-  // -------------------------------------------------------------
+    // لوحة التحكم المركزية
   void _showAdminControlPanel() {
     showModalBottomSheet(
       context: context,
@@ -164,9 +127,24 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('لوحة التحكم والتوجيه المركزية 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('لوحة التحكم والتوجيه المركزية 🛡️', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.redAccent),
+                    tooltip: 'قفل صلاحية الأدمن',
+                    onPressed: () async {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('is_admin_logged_in');
+                      setState(() => isCurrentUserAdmin = false);
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
               const SizedBox(height: 15),
-              _buildAdminTile(Icons.campaign, 'إدارة الشريط العاجل', 'إضافة / تعديل / حذف الخبر', () {
+              _buildAdminTile(Icons.campaign, 'إدارة الشريط العاجل', 'إضافة / تعديل / حذف الخبر العاجل', () {
                 Navigator.pop(context);
                 _showTickerManager();
               }),
@@ -207,7 +185,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // إدارة الشريط العاجل
   void _showTickerManager() {
     final textController = TextEditingController();
     showDialog(
@@ -215,12 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF16161C),
         title: const Text('إدارة الشريط العاجل 🔴', style: TextStyle(color: Color(0xFFD4AF37))),
-        content: TextField(
-          controller: textController,
-          maxLines: 2,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'اكتب نص الخبر الجديد...', hintStyle: TextStyle(color: Colors.grey)),
-        ),
+        content: TextField(controller: textController, maxLines: 2, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اكتب نص الخبر الجديد...', hintStyle: TextStyle(color: Colors.grey))),
         actions: [
           TextButton(
             onPressed: () async {
@@ -247,11 +219,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // إدارة العداد
   void _showEventManager() {
     final nameController = TextEditingController();
     final daysController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -292,80 +262,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // إدارة طلبات تغيير اليوزر
   void _showUsernameRequestsDialog() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF16161C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            children: [
-              const Text('طلبات تغيير اسم المستخدم 📩', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
-              const Divider(color: Colors.white10),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('username_requests').where('status', isEqualTo: 'pending').snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                    var docs = snapshot.data!.docs;
-                    if (docs.isEmpty) return const Center(child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          children: [
+            const Text('طلبات تغيير اسم المستخدم 📩', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 18, fontWeight: FontWeight.bold)),
+            const Divider(color: Colors.white10),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('username_requests').where('status', isEqualTo: 'pending').snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                  var docs = snapshot.data!.docs;
+                  if (docs.isEmpty) return const Center(child: Text('لا توجد طلبات معلقة حالياً', style: TextStyle(color: Colors.grey)));
 
-                    return ListView.builder(
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        var req = docs[index];
-                        var data = req.data() as Map<String, dynamic>;
-
-                        return Card(
-                          color: const Color(0xFF1E1E24),
-                          child: ListTile(
-                            title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            subtitle: Text('اليوزر المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
-                            isThreeLine: true,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                                  onPressed: () async {
-                                    // قبول الطلب وتحديث يوزر الطالب
-                                    await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
-                                    await req.reference.update({'status': 'approved'});
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.cancel, color: Colors.red),
-                                  onPressed: () async {
-                                    // رفض الطلب
-                                    await req.reference.update({'status': 'rejected'});
-                                  },
-                                ),
-                              ],
-                            ),
+                  return ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      var req = docs[index];
+                      var data = req.data() as Map<String, dynamic>;
+                      return Card(
+                        color: const Color(0xFF1E1E24),
+                        child: ListTile(
+                          title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: Text('المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
+                          isThreeLine: true,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () async {
+                                await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
+                                await req.reference.update({'status': 'approved'});
+                              }),
+                              IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () async {
+                                await req.reference.update({'status': 'rejected'});
+                              }),
+                            ],
                           ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  // تغيير يوزر وباسوورد الأدمن
   void _showChangeAdminCredentialsDialog() {
     final newUser = TextEditingController(text: _adminUsernameConfig);
     final newPass = TextEditingController(text: _adminPasswordConfig);
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -401,11 +356,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // إضافة منشور
   void _showAddPostDialog() {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -430,9 +383,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     await FirebaseFirestore.instance.collection('posts').add({
                       'title': titleController.text.trim(),
                       'content': contentController.text.trim(),
-                      'author': widget.currentUserAccountName,
+                      'author': currentUserAccountName,
+                      'authorPhoto': currentUserPhotoUrl,
                       'likedBy': [],
-                      'savedBy': [],
                       'timestamp': FieldValue.serverTimestamp(),
                     });
                     if (mounted) Navigator.pop(context);
@@ -447,10 +400,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // عرض التعليقات مثل الفيسبوك
   void _showCommentsDialog(String postId) {
     final commentController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -472,6 +423,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemBuilder: (context, index) {
                       var c = comments[index].data() as Map<String, dynamic>;
                       return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF1E1E24),
+                          backgroundImage: (c['userPhoto'] ?? '').isNotEmpty ? NetworkImage(c['userPhoto']) : null,
+                          child: (c['userPhoto'] ?? '').isEmpty ? const Icon(Icons.person, color: Color(0xFFD4AF37)) : null,
+                        ),
                         title: Text(c['userName'] ?? 'طالب', style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
                         subtitle: Text(c['text'] ?? '', style: const TextStyle(color: Colors.white)),
                       );
@@ -496,7 +452,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () async {
                       if (commentController.text.trim().isNotEmpty) {
                         await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
-                          'userName': widget.currentUserAccountName,
+                          'userName': currentUserAccountName,
+                          'userPhoto': currentUserPhotoUrl,
                           'text': commentController.text.trim(),
                           'timestamp': FieldValue.serverTimestamp(),
                         });
@@ -520,20 +477,20 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: const Color(0xFF121216),
         actions: [
           IconButton(
-            icon: const Icon(Icons.tune_rounded, color: Color(0xFFD4AF37)),
-            onPressed: _accessAdminPanel,
+            icon: const Icon(Icons.shield, color: Color(0xFFD4AF37)),
+            onPressed: _openAdminSecurityPage,
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _accessAdminPanel,
+        onPressed: _openAdminSecurityPage,
         backgroundColor: const Color(0xFFD4AF37),
         child: const Icon(Icons.admin_panel_settings, color: Colors.black),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. الشريط العاجل الديناميكي
+            // 1. شريط أخبار التلفاز المتحرك تلقائياً
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance.collection('app_config').doc('ticker').snapshots(),
               builder: (context, snapshot) {
@@ -542,29 +499,25 @@ class _HomeScreenState extends State<HomeScreen> {
                   String text = data['text'] ?? '';
                   if (text.isNotEmpty) {
                     return Container(
+                      height: 42,
                       width: double.infinity,
                       color: const Color(0xFF1E1E24),
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(6)),
-                            child: const Text('عاجل 🔴', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: Colors.redAccent.shade700,
+                            child: const Text('عاجل 🔴', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
-                          const SizedBox(width: 12),
                           Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Text(text, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.w500)),
-                            ),
+                            child: MarqueeTickerText(text: text),
                           ),
                         ],
                       ),
                     );
                   }
                 }
-                return const SizedBox.shrink(); // إخفاء الشريط إذا تم حذفه
+                return const SizedBox.shrink();
               },
             ),
 
@@ -603,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     var post = posts[index];
                     var data = post.data() as Map<String, dynamic>;
                     List likedBy = data['likedBy'] ?? [];
-                    bool isLiked = likedBy.contains(widget.currentUserAccountName);
+                    bool isLiked = likedBy.contains(currentUserAccountName);
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -614,9 +567,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Row(
                             children: [
-                              const CircleAvatar(backgroundColor: Color(0xFFD4AF37), radius: 16, child: Icon(Icons.star, color: Colors.black, size: 18)),
+                              CircleAvatar(
+                                backgroundColor: const Color(0xFFD4AF37),
+                                radius: 18,
+                                backgroundImage: (data['authorPhoto'] ?? '').isNotEmpty ? NetworkImage(data['authorPhoto']) : null,
+                                child: (data['authorPhoto'] ?? '').isEmpty ? const Icon(Icons.star, color: Colors.black, size: 18) : null,
+                              ),
                               const SizedBox(width: 10),
-                              Text(data['author'] ?? 'الأدمن', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              Text(data['author'] ?? 'منشئ المنصة', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               const Spacer(),
                               if (isCurrentUserAdmin)
                                 IconButton(
@@ -634,14 +592,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              // زر الإعجاب
                               InkWell(
                                 onTap: () async {
                                   DocumentReference ref = FirebaseFirestore.instance.collection('posts').doc(post.id);
                                   if (isLiked) {
-                                    await ref.update({'likedBy': FieldValue.arrayRemove([widget.currentUserAccountName])});
+                                    await ref.update({'likedBy': FieldValue.arrayRemove([currentUserAccountName])});
                                   } else {
-                                    await ref.update({'likedBy': FieldValue.arrayUnion([widget.currentUserAccountName])});
+                                    await ref.update({'likedBy': FieldValue.arrayUnion([currentUserAccountName])});
                                   }
                                 },
                                 child: Row(
@@ -652,8 +609,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ],
                                 ),
                               ),
-
-                              // زر التعليقات مثل الفيسبوك
                               StreamBuilder<QuerySnapshot>(
                                 stream: FirebaseFirestore.instance.collection('posts').doc(post.id).collection('comments').snapshots(),
                                 builder: (context, commentSnap) {
@@ -727,6 +682,191 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
       ],
+    );
+  }
+}
+// -------------------------------------------------------------
+// شريط أخبار التلفاز التلقائي الحركة
+// -------------------------------------------------------------
+class MarqueeTickerText extends StatefulWidget {
+  final String text;
+  const MarqueeTickerText({super.key, required this.text});
+
+  @override
+  State<MarqueeTickerText> createState() => _MarqueeTickerTextState();
+}
+
+class _MarqueeTickerTextState extends State<MarqueeTickerText> {
+  late ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startScrolling());
+  }
+
+  void _startScrolling() async {
+    while (_scrollController.hasClients) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (_scrollController.hasClients) {
+        double maxExtent = _scrollController.position.maxScrollExtent;
+        await _scrollController.animateTo(
+          maxExtent,
+          duration: Duration(seconds: (maxExtent / 30).clamp(5, 30).toInt()),
+          curve: Curves.linear,
+        );
+        await Future.delayed(const Duration(seconds: 1));
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(widget.text, style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// -------------------------------------------------------------
+// البوابة الآمنة - صفحة دخولية فخمة ومستقلة
+// -------------------------------------------------------------
+class AdminLoginPage extends StatefulWidget {
+  final String adminUsername;
+  final String adminPassword;
+  final VoidCallback onLoginSuccess;
+
+  const AdminLoginPage({
+    super.key,
+    required this.adminUsername,
+    required this.adminPassword,
+    required this.onLoginSuccess,
+  });
+
+  @override
+  State<AdminLoginPage> createState() => _AdminLoginPageState();
+}
+
+class _AdminLoginPageState extends State<AdminLoginPage> {
+  final _userController = TextEditingController();
+  final _passController = TextEditingController();
+
+  void _verifyLogin() {
+    if (_userController.text.trim() == widget.adminUsername && _passController.text.trim() == widget.adminPassword) {
+      widget.onLoginSuccess();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('عذراً، غير مصرح لك بالدخول إلى لوحة التحكم والتوجيه ❌'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0F0F12), Color(0xFF1E1E2A)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        padding: const EdgeInsets.all(25),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16161C),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFFD4AF37).withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
+                    ],
+                  ),
+                  child: const Icon(Icons.security, size: 60, color: Color(0xFFD4AF37)),
+                ),
+                const SizedBox(height: 25),
+                const Text('البوابة الآمنة لرئاسة المنصة', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('منطقة مخصصة للتحكم والإدارة المركزية فقط', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 35),
+                TextField(
+                  controller: _userController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'اسم المستخدم (اليوزر)',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.person_pin, color: Color(0xFFD4AF37)),
+                    filled: true,
+                    fillColor: const Color(0xFF16161C),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _passController,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'رمز الأمان الحصري',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFD4AF37)),
+                    filled: true,
+                    fillColor: const Color(0xFF16161C),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  ),
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                    onPressed: _verifyLogin,
+                    child: const Text('مصادقة ودخول', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('العودة للواجهة الرئيسية', style: TextStyle(color: Colors.grey)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
