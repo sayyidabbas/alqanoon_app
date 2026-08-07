@@ -840,8 +840,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       ),
     );
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -957,7 +956,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                       color: const Color(0xFF16161C),
                       child: ListTile(
                         title: Text(data['title'] ?? data['content'] ?? 'منشور', style: const TextStyle(color: Colors.white)),
-                        subtitle: Text('بقلم: ${data['author']}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                        subtitle: Text('بقلم: ${data['author'] ?? 'أدمن'}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.redAccent),
                           onPressed: () async {
@@ -986,4 +985,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       child: ListTile(
         leading: Icon(icon, color: const Color(0xFFD4AF37)),
         title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text(su
+        subtitle: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+        onTap: onTap,
+      ),
+    );
+  }
+}
