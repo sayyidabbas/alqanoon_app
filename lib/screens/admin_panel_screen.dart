@@ -62,21 +62,125 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  void _showEditBannerDialog(int index, String currentText) {
+    final editController = TextEditingController(text: currentText);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('تعديل الإعلان المتحرك 📢', style: TextStyle(color: AppColors.accent)),
+        content: TextField(
+          controller: editController,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(hintText: 'أدخل النص الجديد للإعلان...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () {
+              if (editController.text.isNotEmpty) {
+                widget.onDeleteBanner(index);
+                widget.onAddBanner(editController.text.trim());
+                Navigator.pop(context);
+                setState(() {});
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: const Text('البوابة الآمنة - لوحة التحكم')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // إدارة العداد
+            // قسم إدارة الإعلان المتحرك المميز
             _buildCard(
-              title: 'إدارة العداد التنازلي (بالأيام)',
+              title: 'إدارة شريط الإعلانات المتحرك 📢',
               child: Column(
                 children: [
-                  TextField(controller: _daysController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'عدد الأيام للحدث القادم')),
+                  TextField(
+                    controller: _bannerController,
+                    maxLines: 2,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'اكتب نص الإعلان المتحرك الجديد...'),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                    icon: const Icon(Icons.campaign, color: Colors.black),
+                    label: const Text('إضافة الإعلان لشريط الأخبار', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      if (_bannerController.text.trim().isNotEmpty) {
+                        widget.onAddBanner(_bannerController.text.trim());
+                        _bannerController.clear();
+                        setState(() {});
+                      }
+                    },
+                  ),
+                  const Divider(color: Colors.white24),
+                  if (widget.announcements.isEmpty)
+                    const Text('لا توجد إعلانات حالية', style: TextStyle(color: Colors.white38))
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: widget.announcements.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListTile(
+                            title: Text(widget.announcements[index], style: const TextStyle(color: Colors.white, fontSize: 13), maxLines: 2),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: AppColors.accent, size: 20),
+                                  onPressed: () => _showEditBannerDialog(index, widget.announcements[index]),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                                  onPressed: () {
+                                    widget.onDeleteBanner(index);
+                                    setState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // إدارة العداد التنازلي
+            _buildCard(
+              title: 'إدارة العداد التنازلي (بالأيام) ⏳',
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _daysController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'عدد الأيام للحدث القادم'),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -104,10 +208,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
             // إضافة منشور مع رفعه حصراً من المعرض
             _buildCard(
-              title: 'إضافة منشور جديد (من المعرض)',
+              title: 'إضافة منشور رسمية (من المعرض) 📝',
               child: Column(
                 children: [
-                  TextField(controller: _postController, maxLines: 2, decoration: const InputDecoration(hintText: 'محتوى المنشور...')),
+                  TextField(
+                    controller: _postController,
+                    maxLines: 2,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'محتوى المنشور...'),
+                  ),
                   const SizedBox(height: 10),
                   if (_adminSelectedImage != null) ...[
                     ClipRRect(
@@ -133,14 +242,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     },
                     child: const Text('نشر المنشور', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                   ),
-                  const Divider(),
+                  const Divider(color: Colors.white24),
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: widget.posts.length,
                     itemBuilder: (context, index) {
                       return ListTile(
-                        title: Text(widget.posts[index].content, maxLines: 1),
+                        title: Text(widget.posts[index].content, maxLines: 1, style: const TextStyle(color: Colors.white)),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () {
@@ -158,12 +267,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
             // تغيير PIN
             _buildCard(
-              title: 'تغيير الرمز السري للبوابة',
+              title: 'تغيير الرمز السري للبوابة 🔐',
               child: Column(
                 children: [
-                  TextField(controller: _newPinController, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'الرمز السري الجديد')),
+                  TextField(
+                    controller: _newPinController,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(hintText: 'الرمز السري الجديد'),
+                  ),
                   const SizedBox(height: 8),
-                  OutlinedButton(onPressed: _changePin, child: const Text('حفظ الرمز السري')),
+                  OutlinedButton(onPressed: _changePin, child: const Text('حفظ الرمز السري', style: TextStyle(color: AppColors.accent))),
                 ],
               ),
             )
@@ -182,7 +297,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accent)),
-            const Divider(),
+            const Divider(color: Colors.white10),
             child,
           ],
         ),
