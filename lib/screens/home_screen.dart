@@ -243,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // شريط الإعلانات المتحرك
+  // شريط الإعلانات المتحرك - تم إصلاح المكون هنا
   Widget _buildAnnouncementsBanner() {
     return Container(
       height: 50,
@@ -261,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: PageView.builder(
               itemCount: _announcements.length,
               itemBuilder: (context, index) {
-                return Alignment(
+                return Align(
                   alignment: Alignment.centerRight,
                   child: Text(
                     _announcements[index],
@@ -525,3 +525,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
