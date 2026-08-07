@@ -668,23 +668,37 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                             onPressed: () async {
                               if (contentController.text.trim().isNotEmpty || selectedImage != null) {
                                 setModalState(() => isUploading = true);
-                                String imageUrl = '';
-                                if (selectedImage != null) {
-                                  String path = 'posts/${DateTime.now().millisecondsSinceEpoch}.jpg';
-                                  UploadTask task = FirebaseStorage.instance.ref().child(path).putFile(selectedImage!);
-                                  TaskSnapshot snap = await task;
-                                  imageUrl = await snap.ref.getDownloadURL();
+                                try {
+                                  String imageUrl = '';
+                                  if (selectedImage != null) {
+                                    String path = 'posts/${DateTime.now().millisecondsSinceEpoch}.jpg';
+                                    UploadTask task = FirebaseStorage.instance.ref().child(path).putFile(selectedImage!);
+                                    TaskSnapshot snap = await task;
+                                    imageUrl = await snap.ref.getDownloadURL();
+                                  }
+                                  await FirebaseFirestore.instance.collection('posts').add({
+                                    'title': titleController.text.trim(),
+                                    'content': contentController.text.trim(),
+                                    'imageUrl': imageUrl,
+                                    'author': currentUserAccountName,
+                                    'authorPhoto': currentUserPhotoUrl,
+                                    'likedBy': [],
+                                    'timestamp': FieldValue.serverTimestamp(),
+                                  });
+                                  if (mounted) {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('تم نشر المنشور بنجاح ✅'), backgroundColor: Colors.green),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    setModalState(() => isUploading = false);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('حدث خطأ أثناء النشر: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
                                 }
-                                await FirebaseFirestore.instance.collection('posts').add({
-                                  'title': titleController.text.trim(),
-                                  'content': contentController.text.trim(),
-                                  'imageUrl': imageUrl,
-                                  'author': currentUserAccountName,
-                                  'authorPhoto': currentUserPhotoUrl,
-                                  'likedBy': [],
-                                  'timestamp': FieldValue.serverTimestamp(),
-                                });
-                                if (mounted) Navigator.pop(context);
                               }
                             },
                             child: const Text('نشر المنشور', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -711,7 +725,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           TextButton(
             onPressed: () async {
               await FirebaseFirestore.instance.collection('app_config').doc('ticker').delete();
-              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الخبر العاجل 🗑️')));
+              }
             },
             child: const Text('حذف العاجل 🗑️', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -723,7 +740,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   'text': textController.text.trim(),
                   'updatedAt': FieldValue.serverTimestamp(),
                 });
-                if (mounted) Navigator.pop(context);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الخبر العاجل بنجاح 🔴')));
+                }
               }
             },
             child: const Text('حفظ / نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -753,7 +773,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           TextButton(
             onPressed: () async {
               await FirebaseFirestore.instance.collection('app_config').doc('event').set({'active': false});
-              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إلغاء الحدث التنازلي 🗑️')));
+              }
             },
             child: const Text('حذف الحدث 🗑️', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -767,7 +790,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 'targetDate': Timestamp.fromDate(futureDate),
                 'active': true,
               });
-              if (mounted) Navigator.pop(context);
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تفعيل العداد التنازلي بنجاح ⏳')));
+              }
             },
             child: const Text('تفعيل / حفظ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
@@ -802,7 +828,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   'username': newUser.text.trim(),
                   'password': newPass.text.trim(),
                 });
-                if (mounted) Navigator.pop(context);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث بيانات الدخول بنجاح 🔑')));
+                }
               }
             },
             child: const Text('حفظ البيانات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -864,22 +893,39 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   itemBuilder: (context, index) {
                     var req = docs[index];
                     var data = req.data() as Map<String, dynamic>;
+                    String targetUserId = data['userId'] ?? '';
+                    String newUsername = data['requestedUsername'] ?? '';
+
                     return Card(
                       color: const Color(0xFF1E1E24),
                       child: ListTile(
                         title: Text('${data['currentName']} (@${data['oldUsername']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        subtitle: Text('المطلوب: @${data['requestedUsername']}\nالسبب: ${data['reason']}', style: const TextStyle(color: Colors.grey)),
+                        subtitle: Text('المطلوب: @$newUsername\nالسبب: ${data['reason'] ?? 'لا يوجد'}', style: const TextStyle(color: Colors.grey)),
                         isThreeLine: true,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () async {
-                              await FirebaseFirestore.instance.collection('users').doc(data['userId']).update({'username': data['requestedUsername']});
-                              await req.reference.update({'status': 'approved'});
-                            }),
-                            IconButton(icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () async {
-                              await req.reference.update({'status': 'rejected'});
-                            }),
+                            IconButton(
+                              icon: const Icon(Icons.check_circle, color: Colors.green, size: 28),
+                              onPressed: () async {
+                                if (targetUserId.isNotEmpty && newUsername.isNotEmpty) {
+                                  await FirebaseFirestore.instance.collection('users').doc(targetUserId).update({'username': newUsername});
+                                }
+                                await req.reference.update({'status': 'approved'});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت الموافقة وتحديث اليوزر بنجاح ✅'), backgroundColor: Colors.green));
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.cancel, color: Colors.red, size: 28),
+                              onPressed: () async {
+                                await req.reference.update({'status': 'rejected'});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌'), backgroundColor: Colors.orange));
+                                }
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -914,7 +960,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                         subtitle: Text('بقلم: ${data['author']}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.redAccent),
-                          onPressed: () async => await FirebaseFirestore.instance.collection('posts').doc(post.id).delete(),
+                          onPressed: () async {
+                            await FirebaseFirestore.instance.collection('posts').doc(post.id).delete();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف المنشور 🗑️')));
+                            }
+                          },
                         ),
                       ),
                     );
@@ -935,10 +986,4 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       child: ListTile(
         leading: Icon(icon, color: const Color(0xFFD4AF37)),
         title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-        onTap: onTap,
-      ),
-    );
-  }
-}
+        subtitle: Text(su
