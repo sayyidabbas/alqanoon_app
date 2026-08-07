@@ -3,8 +3,9 @@ import 'dart:io';
 class PostModel {
   String id;
   String content;
-  String author;
-  File? imageFile; // استخدام ملف الصورة المحلي من معرض الجهاز
+  String author;      // الاسم الكامل للكاتب
+  String username;    // المعرف الخاص بالكاتب (مثل: abbas_law)
+  File? imageFile;   // صورة المنشور من الجهاز
   DateTime timestamp;
   int likes;
   bool isLiked;
@@ -14,6 +15,7 @@ class PostModel {
     required this.id,
     required this.content,
     required this.author,
+    required this.username,
     this.imageFile,
     required this.timestamp,
     this.likes = 0,
