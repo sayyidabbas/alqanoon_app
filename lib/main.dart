@@ -1,14 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:firebase_core/firebase_core.dart'; // <--- إضافة استيراد الفايربيس
+import 'package:firebase_core/firebase_core.dart';
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-void main() async { // <--- إضافة async
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // تهيئة الفايربيس سحابياً
-  await Firebase.initializeApp();
+
+  // معالجة أخطاء الواجهات لمنع الشاشة السوداء
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'حدث خطأ في الواجهة:\n${details.exception}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, fontSize: 16),
+          ),
+        ),
+      ),
+    );
+  };
+
+  // تهيئة الفايربيس بحماية try-catch
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint("Firebase init failed: $e");
+  }
 
   runApp(const LawPlatformApp());
 }
