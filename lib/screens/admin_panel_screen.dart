@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
@@ -6,7 +8,7 @@ import '../models/post_model.dart';
 class AdminPanelScreen extends StatefulWidget {
   final List<PostModel> posts;
   final List<String> announcements;
-  final Function(String content, String? imageUrl) onAddPost;
+  final Function(String content, File? imageFile) onAddPost;
   final Function(int index) onDeletePost;
   final Function(int index, String newContent) onEditPost;
   final Function(String) onAddBanner;
@@ -33,17 +35,28 @@ class AdminPanelScreen extends StatefulWidget {
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final _postController = TextEditingController();
-  final _imageUrlController = TextEditingController();
   final _bannerController = TextEditingController();
   final _daysController = TextEditingController();
   final _newPinController = TextEditingController();
+  
+  File? _adminSelectedImage;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickAdminImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _adminSelectedImage = File(image.path);
+      });
+    }
+  }
 
   void _changePin() async {
     if (_newPinController.text.length >= 4) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('admin_pin', _newPinController.text);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تغيير الرمز السري')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تغيير الرمز السري بنجاح')));
         _newPinController.clear();
       }
     }
@@ -58,16 +71,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // قسم العداد
+            // إدارة العداد
             _buildCard(
-              title: 'إدارة العداد التنازلي',
+              title: 'إدارة العداد التنازلي (بالأيام)',
               child: Column(
                 children: [
-                  TextField(
-                    controller: _daysController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(hintText: 'أدخل عدد الأيام للعداد'),
-                  ),
+                  TextField(controller: _daysController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'عدد الأيام للحدث القادم')),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -85,11 +94,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                        onPressed: widget.onDeleteTimer,
-                        child: const Text('حذف العداد'),
-                      )
+                      OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red), onPressed: widget.onDeleteTimer, child: const Text('حذف العداد')),
                     ],
                   )
                 ],
@@ -97,26 +102,36 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             const SizedBox(height: 16),
 
-            // قسم المنشورات
+            // إضافة منشور مع رفعه حصراً من المعرض
             _buildCard(
-              title: 'إضافة/إدارة المنشورات (صورة + نص)',
+              title: 'إضافة منشور جديد (من المعرض)',
               child: Column(
                 children: [
-                  TextField(controller: _postController, maxLines: 2, decoration: const InputDecoration(hintText: 'محتوى المنشور')),
-                  const SizedBox(height: 8),
-                  TextField(controller: _imageUrlController, decoration: const InputDecoration(hintText: 'رابط الصورة (اختياري)')),
+                  TextField(controller: _postController, maxLines: 2, decoration: const InputDecoration(hintText: 'محتوى المنشور...')),
+                  const SizedBox(height: 10),
+                  if (_adminSelectedImage != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(_adminSelectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  OutlinedButton.icon(
+                    onPressed: _pickAdminImage,
+                    icon: const Icon(Icons.photo_library, color: AppColors.accent),
+                    label: Text(_adminSelectedImage == null ? 'إرفاق صورة من المعرض' : 'تغيير الصورة', style: const TextStyle(color: AppColors.accent)),
+                  ),
                   const SizedBox(height: 10),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
                     onPressed: () {
-                      if (_postController.text.isNotEmpty) {
-                        widget.onAddPost(_postController.text, _imageUrlController.text.isEmpty ? null : _imageUrlController.text);
+                      if (_postController.text.isNotEmpty || _adminSelectedImage != null) {
+                        widget.onAddPost(_postController.text, _adminSelectedImage);
                         _postController.clear();
-                        _imageUrlController.clear();
-                        setState(() {});
+                        setState(() => _adminSelectedImage = null);
                       }
                     },
-                    child: const Text('نشر جديد', style: TextStyle(color: Colors.black)),
+                    child: const Text('نشر المنشور', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                   ),
                   const Divider(),
                   ListView.builder(
@@ -126,80 +141,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     itemBuilder: (context, index) {
                       return ListTile(
                         title: Text(widget.posts[index].content, maxLines: 1),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: AppColors.accent),
-                              onPressed: () {
-                                final editCtrl = TextEditingController(text: widget.posts[index].content);
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    backgroundColor: AppColors.cardBg,
-                                    title: const Text('تعديل المنشور'),
-                                    content: TextField(controller: editCtrl),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () {
-                                          widget.onEditPost(index, editCtrl.text);
-                                          Navigator.pop(context);
-                                          setState(() {});
-                                        },
-                                        child: const Text('حفظ'),
-                                      )
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                widget.onDeletePost(index);
-                                setState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // قسم الإعلانات
-            _buildCard(
-              title: 'إدارة الإعلانات المتحركة',
-              child: Column(
-                children: [
-                  TextField(controller: _bannerController, decoration: const InputDecoration(hintText: 'نص الإعلان')),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                    onPressed: () {
-                      if (_bannerController.text.isNotEmpty) {
-                        widget.onAddBanner(_bannerController.text);
-                        _bannerController.clear();
-                        setState(() {});
-                      }
-                    },
-                    child: const Text('إضافة إعلان', style: TextStyle(color: Colors.black)),
-                  ),
-                  const Divider(),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: widget.announcements.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(widget.announcements[index]),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () {
-                            widget.onDeleteBanner(index);
+                            widget.onDeletePost(index);
                             setState(() {});
                           },
                         ),
@@ -211,14 +156,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             const SizedBox(height: 16),
 
-            // قسم تغيير PIN
+            // تغيير PIN
             _buildCard(
               title: 'تغيير الرمز السري للبوابة',
               child: Column(
                 children: [
                   TextField(controller: _newPinController, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'الرمز السري الجديد')),
                   const SizedBox(height: 8),
-                  OutlinedButton(onPressed: _changePin, child: const Text('حفظ الرمز السري الجديد')),
+                  OutlinedButton(onPressed: _changePin, child: const Text('حفظ الرمز السري')),
                 ],
               ),
             )
