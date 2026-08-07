@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "521454530754",
+    "project_id": "law-platform-55632",
+    "storage_bucket": "law-platform-55632.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:521454530754:android:9ede6222cad2fcabb08b5b",
+        "android_client_info": {
+          "package_name": "com.example.law_platform"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
