@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
@@ -8,6 +10,7 @@ import '../routes/app_routes.dart';
 import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -43,8 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
       'fullName': 'أحمد علي',
       'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
       'time': '10:30 ص',
-      'bio': 'باحث قانوني متقدم',
-      'unreadCount': 3, // عدد الرسائل غير المقروءة
+      'bio': 'باحث قانوني متتقدم',
+      'unreadCount': 3,
       'isMuted': false,
       'messages': [
         {'sender': 'ahmed_legal', 'text': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟', 'time': '10:30 ص'},
@@ -65,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
-  // 1. التبليغات الرسمية (تظهر بالرئيسية فقط)
+  // 1. التبليغات الرسمية
   List<PostModel> _officialPosts = [
     PostModel(
       id: '1',
@@ -110,7 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // حركة شريط الإعلانات بشكل سلس ودائري دون الرجوع
   void _startTickerAnimation() {
     _tickerTimer?.cancel();
     _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
@@ -246,7 +248,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // فتح صفحة الملف الشخصي للمستخدم
   void _openUserProfile(Map<String, String> user) {
     List<PostModel> filteredPosts = _userPosts
         .where((p) => p.username == user['username'])
@@ -264,10 +265,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  // نافذة الشات المباشرة عند الضغط على المحادثة
+
   void _openChatDetailScreen(Map<String, dynamic> chat) {
     setState(() {
-      chat['unreadCount'] = 0; // تصفير عداد الرسائل عند القراءة
+      chat['unreadCount'] = 0;
     });
 
     final TextEditingController messageController = TextEditingController();
@@ -380,7 +381,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // خيارات الضغط المطوّل على المحادثة (حذف - كتم - حظر)
   void _showChatOptionsBottomSheet(Map<String, dynamic> chat, int index) {
     showModalBottomSheet(
       context: context,
@@ -438,7 +438,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // نافذة البحث عن المستخدمين
   void _showUserSearchDialog() {
     showDialog(
       context: context,
@@ -532,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentIndex,
         children: [
           _buildMainHomeTab(),
-          _buildChatTab(), // تبويب الدردشة والمحادثات
+          _buildChatTab(),
           _buildServicesTab(),
         ],
       ),
@@ -574,7 +573,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // شريط الإعلانات الأخبار المتحرك تلقائياً وبشكل مستمر دون الرجوع
   Widget _buildAnnouncementsTicker() {
     String combinedText = "${_announcements.join("                  ")}                  ";
     return Container(
@@ -604,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  // تبويب قائمة الدردشات مع الشارة الحمراء ودعم النقر والضغط المطول
+
   Widget _buildChatTab() {
     return _chatList.isEmpty
         ? const Center(
@@ -622,8 +620,6 @@ class _HomeScreenState extends State<HomeScreen> {
               final chat = _chatList[index];
               final unread = chat['unreadCount'] ?? 0;
               final isMuted = chat['isMuted'] ?? false;
-
-              // صياغة عداد الرسائل من 1 إلى 9 وما فوقها +9
               String unreadText = unread > 9 ? '+9' : '$unread';
 
               return ListTile(
@@ -816,65 +812,48 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // شاشة المحظورين وإلغاء الحظر
-  void _openBlockedUsersScreen() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StatefulBuilder(
-          builder: (context, setBlockedState) {
-            return Scaffold(
-              backgroundColor: AppColors.primary,
-              appBar: AppBar(title: const Text('المستخدمون المحظورون')),
-              body: _blockedUsers.isEmpty
-                  ? const Center(child: Text('لا يوجد مستخدمون محظورون', style: TextStyle(color: Colors.white54)))
-                  : ListView.builder(
-                      itemCount: _blockedUsers.length,
-                      itemBuilder: (context, index) {
-                        final blocked = _blockedUsers[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.accent,
-                            child: Text(blocked['fullName'][0], style: const TextStyle(color: Colors.black)),
-                          ),
-                          title: Text(blocked['fullName'], style: const TextStyle(color: Colors.white)),
-                          subtitle: Text('@${blocked['username']}', style: const TextStyle(color: AppColors.accent)),
-                          trailing: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                            onPressed: () {
-                              setBlockedState(() {
-                                _blockedUsers.removeAt(index);
-                              });
-                              setState(() {
-                                _chatList.add(blocked);
-                              });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('تم إلغاء حظر ${blocked['fullName']}')),
-                              );
-                            },
-                            child: const Text('إلغاء الحظر', style: TextStyle(color: Colors.black)),
-                          ),
-                        );
-                      },
-                    ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
+  // 🔴 4. القائمة الجانبية المربوطة لحظياً بالـ Firestore
   Widget _buildDrawer(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return Drawer(
       backgroundColor: AppColors.cardBg,
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          const UserAccountsDrawerHeader(
-            decoration: BoxDecoration(color: AppColors.primary),
-            accountName: Text('سيدعباس عقيل الحسيني'),
-            accountEmail: Text('abbas@lawplatform.com'),
-            currentAccountPicture: CircleAvatar(backgroundColor: AppColors.accent, child: Icon(Icons.person, size: 40, color: Colors.black)),
+          // 📡 المراقبة اللحظية لبيانات المستخدم الحقيقي
+          StreamBuilder<DocumentSnapshot>(
+            stream: currentUser != null
+                ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
+                : null,
+            builder: (context, snapshot) {
+              String name = currentUser?.displayName ?? "طالب قانون";
+              String email = currentUser?.email ?? "";
+              String? photoUrl;
+
+              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                name = data['fullName'] ?? name;
+                email = data['email'] ?? email;
+                photoUrl = data['photoUrl'];
+              }
+
+              return UserAccountsDrawerHeader(
+                decoration: const BoxDecoration(color: AppColors.primary),
+                accountName: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                currentAccountPicture: CircleAvatar(
+                  backgroundColor: AppColors.accent,
+                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                  child: photoUrl == null
+                      ? Text(
+                          name.isNotEmpty ? name[0] : 'ع',
+                          style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold),
+                        )
+                      : null,
+                ),
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Icons.person, color: AppColors.accent),
@@ -892,8 +871,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           0,
                           PostModel(
                             id: DateTime.now().toString(),
-                            author: 'سيدعباس عقيل الحسيني',
-                            username: 'abbas_law',
+                            author: currentUser?.displayName ?? 'طالب قانون',
+                            username: 'my_user',
                             content: content,
                             imageFile: imageFile,
                             timestamp: DateTime.now(),
@@ -907,23 +886,41 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.block, color: Colors.orangeAccent),
-            title: const Text('قائمة المحظورين'),
+            leading: const Icon(Icons.settings, color: AppColors.accent),
+            title: const Text('الإعدادات'),
             onTap: () {
               Navigator.pop(context);
-              _openBlockedUsersScreen();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SettingsScreen(
+                    blockedUsers: _blockedUsers,
+                    onUnblockUser: (index) {
+                      setState(() {
+                        final unblocked = _blockedUsers.removeAt(index);
+                        _chatList.add(unblocked);
+                      });
+                    },
+                  ),
+                ),
+              );
             },
           ),
-          ListTile(leading: const Icon(Icons.settings, color: AppColors.accent), title: const Text('الإعدادات'), onTap: () {}),
           ListTile(leading: const Icon(Icons.info, color: AppColors.accent), title: const Text('حول التطبيق'), onTap: () {}),
           const Divider(color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
             title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.redAccent)),
-            onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.pushReplacementNamed(context, AppRoutes.login);
+              }
+            },
           ),
         ],
       ),
     );
   }
 }
+ 
