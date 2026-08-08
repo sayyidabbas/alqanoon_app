@@ -23,11 +23,21 @@ void main() async {
     );
   };
 
-  // تهيئة الفايربيس بحماية try-catch
+  // تهيئة الفايربيس المباشرة بالبيانات الخاصة بمشروعك
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
+        appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
+        messagingSenderId: "521454530754",
+        projectId: "law-platform-55632",
+        storageBucket: "law-platform-55632.firebasestorage.app",
+      ),
+    );
   } catch (e) {
-    debugPrint("Firebase init failed: $e");
+    if (!e.toString().contains('duplicate-app')) {
+      await Firebase.initializeApp();
+    }
   }
 
   runApp(const LawPlatformApp());
