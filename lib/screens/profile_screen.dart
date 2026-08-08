@@ -1,1001 +1,216 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
-import '../routes/app_routes.dart';
-import 'admin_panel_screen.dart';
-import 'profile_screen.dart';
-import 'user_profile_view_screen.dart';
-import 'settings_screen.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class ProfileScreen extends StatefulWidget {
+  final List<PostModel> posts;
+  final Function(String content, File? imageFile) onAddUserPost;
+
+  const ProfileScreen({
+    super.key,
+    required this.posts,
+    required this.onAddUserPost,
+  });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
-  String _adminPin = "1234"; 
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _currentUser = FirebaseAuth.instance.currentUser;
+  final TextEditingController _postController = TextEditingController();
+  File? _selectedImage;
 
-  Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
-  Timer? _countdownTimer;
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-  late ScrollController _tickerScrollController;
-  Timer? _tickerTimer;
-
-  final List<String> _announcements = [
-    "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
-  ];
-
-  final List<Map<String, dynamic>> _blockedUsers = [];
-
-  // قائمة محادثات الدردشة
-  final List<Map<String, dynamic>> _chatList = [
-    {
-      'username': 'ahmed_legal',
-      'fullName': 'أحمد علي',
-      'photoUrl': null,
-      'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
-      'time': '10:30 ص',
-      'bio': 'باحث قانوني متقدم',
-      'unreadCount': 3,
-      'isMuted': false,
-      'messages': [
-        {'sender': 'ahmed_legal', 'text': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟', 'time': '10:30 ص'},
-      ]
-    },
-    {
-      'username': 'sara_lawyer',
-      'fullName': 'سارة محمود',
-      'photoUrl': null,
-      'lastMessage': 'شكراً جزيلاً لك',
-      'time': 'أمس',
-      'bio': 'طالبة قانون - المرحلة الرابعة',
-      'unreadCount': 0,
-      'isMuted': true,
-      'messages': [
-        {'sender': 'me', 'text': 'تم إرسال الملف القانوني', 'time': 'أمس'},
-        {'sender': 'sara_lawyer', 'text': 'شكراً جزيلاً لك', 'time': 'أمس'},
-      ]
-    },
-  ];
-
-  final List<PostModel> _officialPosts = [
-    PostModel(
-      id: '1',
-      author: 'إدارة منصة القانون',
-      username: 'admin',
-      content: 'نرحب بجميع الطلبة في منصة القانون الإلكترونية التعليمية.',
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      likes: 12,
-    )
-  ];
-
-  final List<PostModel> _userPosts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _tickerScrollController = ScrollController();
-    _loadPin();
-    _startTimer();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startTickerAnimation();
-    });
-  }
-
-  void _startTickerAnimation() {
-    _tickerTimer?.cancel();
-    _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
-      if (_tickerScrollController.hasClients && _tickerScrollController.position.hasContentDimensions) {
-        double maxScroll = _tickerScrollController.position.maxScrollExtent;
-        double currentScroll = _tickerScrollController.offset;
-        if (currentScroll >= maxScroll) {
-          _tickerScrollController.jumpTo(0);
-        } else {
-          _tickerScrollController.jumpTo(currentScroll + 1.2);
-        }
-      }
-    });
-  }
-
-  void _loadPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
+    if (pickedFile != null) {
       setState(() {
-        _adminPin = prefs.getString('admin_pin') ?? "1234";
+        _selectedImage = File(pickedFile.path);
       });
     }
   }
 
-  void _startTimer() {
-    _countdownTimer?.cancel();
-    if (_targetDuration == null) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_targetDuration != null && _targetDuration!.inSeconds > 0) {
-        if (mounted) {
-          setState(() {
-            _targetDuration = _targetDuration! - const Duration(seconds: 1);
-          });
-        }
-      } else {
-        _countdownTimer?.cancel();
-      }
-    });
-  }
+  void _submitPost() {
+    if (_postController.text.trim().isEmpty && _selectedImage == null) return;
 
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _tickerTimer?.cancel();
-    _tickerScrollController.dispose();
-    super.dispose();
-  }
-
-  void _openAdminGate() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isAlreadyLoggedIn = prefs.getBool('is_admin_logged_in') ?? false;
-
-    if (isAlreadyLoggedIn) {
-      _navigateToAdminPanel();
-    } else {
-      _showPinDialog();
-    }
-  }
-
-  void _showPinDialog() {
-    final pinController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: const Text('البوابة الآمنة 🔒', style: TextStyle(color: AppColors.accent)),
-        content: TextField(
-          controller: pinController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'أدخل رمز PIN', hintStyle: TextStyle(color: Colors.white38)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () async {
-              if (pinController.text == _adminPin) {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setBool('is_admin_logged_in', true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _navigateToAdminPanel();
-                }
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _navigateToAdminPanel() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AdminPanelScreen(
-          posts: _officialPosts,
-          announcements: _announcements,
-          onAddPost: (content, imageFile) {
-            setState(() {
-              _officialPosts.insert(
-                0,
-                PostModel(
-                  id: DateTime.now().toString(),
-                  author: 'إدارة منصة القانون',
-                  username: 'admin',
-                  content: content,
-                  imageFile: imageFile,
-                  timestamp: DateTime.now(),
-                ),
-              );
-            });
-          },
-          onDeletePost: (index) {
-            setState(() { _officialPosts.removeAt(index); });
-          },
-          onEditPost: (index, newContent) {
-            setState(() { _officialPosts[index].content = newContent; });
-          },
-          onAddBanner: (banner) {
-            setState(() { _announcements.add(banner); });
-          },
-          onDeleteBanner: (index) {
-            setState(() { _announcements.removeAt(index); });
-          },
-          onUpdateTimerDays: (days) {
-            setState(() { _targetDuration = Duration(days: days); });
-            _startTimer();
-          },
-          onDeleteTimer: () {
-            setState(() { _targetDuration = null; });
-            _countdownTimer?.cancel();
-          },
-        ),
-      ),
-    );
-  }
-
-  // 🟢 فتح بروفايل المستخدم مع إرسال photoUrl وفتح شاشته المحدثة
-  void _openUserProfile(Map<String, dynamic> user) {
-    List<PostModel> filteredPosts = _userPosts
-        .where((p) => p.username == user['username'])
-        .toList();
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileViewScreen(
-          username: user['username'] ?? '',
-          fullName: user['fullName'] ?? 'مستخدم',
-          bio: user['bio'] ?? '',
-          photoUrl: user['photoUrl'], // ✅ تمرير الصورة
-          userPosts: filteredPosts,
-          onStartChat: () {
-            // 🟢 البحث عن المحادثة الحالية أو إنشاؤها فوراً
-            var existingChatIndex = _chatList.indexWhere((c) => c['username'] == user['username']);
-            Map<String, dynamic> targetChat;
-
-            if (existingChatIndex != -1) {
-              targetChat = _chatList[existingChatIndex];
-            } else {
-              targetChat = {
-                'username': user['username'],
-                'fullName': user['fullName'],
-                'photoUrl': user['photoUrl'],
-                'lastMessage': '',
-                'time': 'الآن',
-                'bio': user['bio'] ?? '',
-                'unreadCount': 0,
-                'isMuted': false,
-                'messages': [],
-              };
-              setState(() {
-                _chatList.insert(0, targetChat);
-              });
-            }
-
-            _openChatDetailScreen(targetChat);
-          },
-        ),
-      ),
-    );
-  }
-
-  void _openChatDetailScreen(Map<String, dynamic> chat) {
+    widget.onAddUserPost(_postController.text.trim(), _selectedImage);
+    _postController.clear();
     setState(() {
-      chat['unreadCount'] = 0;
+      _selectedImage = null;
     });
 
-    final TextEditingController messageController = TextEditingController();
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StatefulBuilder(
-          builder: (context, setChatState) {
-            List messages = chat['messages'] ?? [];
-            return Scaffold(
-              backgroundColor: AppColors.primary,
-              appBar: AppBar(
-                title: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppColors.accent,
-                      backgroundImage: chat['photoUrl'] != null ? NetworkImage(chat['photoUrl']) : null,
-                      child: chat['photoUrl'] == null
-                          ? Text(chat['fullName'][0], style: const TextStyle(color: Colors.black, fontSize: 14))
-                          : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(chat['fullName']),
-                  ],
-                ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.person, color: AppColors.accent),
-                    onPressed: () {
-                      _openUserProfile({
-                        'username': chat['username'],
-                        'fullName': chat['fullName'],
-                        'bio': chat['bio'] ?? '',
-                        'photoUrl': chat['photoUrl'],
-                      });
-                    },
-                  )
-                ],
-              ),
-              body: Column(
-                children: [
-                  Expanded(
-                    child: messages.isEmpty
-                        ? const Center(child: Text('بدء المحادثة الآن... 👋', style: TextStyle(color: Colors.white38)))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: messages.length,
-                            itemBuilder: (context, index) {
-                              final msg = messages[index];
-                              final isMe = msg['sender'] == 'me';
-                              return Align(
-                                alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: isMe ? AppColors.accent : AppColors.cardBg,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        msg['text'],
-                                        style: TextStyle(color: isMe ? Colors.black : Colors.white, fontSize: 15),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        msg['time'],
-                                        style: TextStyle(color: isMe ? Colors.black54 : Colors.white38, fontSize: 10),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    color: AppColors.cardBg,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: messageController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              hintText: 'اكتب رسالة...',
-                              hintStyle: TextStyle(color: Colors.white38),
-                              border: InputBorder.none,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: AppColors.accent),
-                          onPressed: () {
-                            if (messageController.text.trim().isNotEmpty) {
-                              final nowText = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
-                              setChatState(() {
-                                messages.add({
-                                  'sender': 'me',
-                                  'text': messageController.text.trim(),
-                                  'time': nowText,
-                                });
-                              });
-                              setState(() {
-                                chat['lastMessage'] = messageController.text.trim();
-                                chat['time'] = nowText;
-                              });
-                              messageController.clear();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  void _showChatOptionsBottomSheet(Map<String, dynamic> chat, int index) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.cardBg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        bool isMuted = chat['isMuted'] ?? false;
-        return Wrap(
-          children: [
-            ListTile(
-              leading: Icon(isMuted ? Icons.notifications_active : Icons.notifications_off, color: AppColors.accent),
-              title: Text(isMuted ? 'إلغاء كتم التنبيهات' : 'كتم التنبيهات', style: const TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  chat['isMuted'] = !isMuted;
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text(!isMuted ? 'تم كتم المحادثة' : 'تم تفعيل التنبيهات')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.block, color: Colors.orangeAccent),
-              title: const Text('حظر المستخدم', style: TextStyle(color: Colors.orangeAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _blockedUsers.add(chat);
-                  _chatList.removeAt(index);
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text('تم حظر ${chat['fullName']}')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.redAccent),
-              title: const Text('حذف المحادثة', style: TextStyle(color: Colors.redAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _chatList.removeAt(index);
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف المحادثة')),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showUserSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        String query = "";
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.cardBg,
-              title: const Text('البحث عن مستخدم 🔍', style: TextStyle(color: AppColors.accent)),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: 'ادخل الاسم أو اسم المستخدم...',
-                        hintStyle: TextStyle(color: Colors.white38),
-                        prefixIcon: Icon(Icons.search, color: AppColors.accent),
-                      ),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          query = val.trim();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 250,
-                      child: query.isEmpty
-                          ? const Center(
-                              child: Text('اكتب اسم البحث للبدء...', style: TextStyle(color: Colors.white54)),
-                            )
-                          : StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance.collection('users').snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-                                }
-
-                                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                  return const Center(child: Text('لا يوجد مستخدمون', style: TextStyle(color: Colors.white54)));
-                                }
-
-                                final results = snapshot.data!.docs.where((doc) {
-                                  final data = doc.data() as Map<String, dynamic>;
-                                  final fullName = (data['fullName'] ?? '').toString().toLowerCase();
-                                  final username = (data['username'] ?? '').toString().toLowerCase();
-                                  final q = query.toLowerCase();
-
-                                  return fullName.contains(q) || username.contains(q);
-                                }).toList();
-
-                                if (results.isEmpty) {
-                                  return const Center(child: Text('لا يوجد مستخدم بهذا الاسم', style: TextStyle(color: Colors.white54)));
-                                }
-
-                                return ListView.builder(
-                                  itemCount: results.length,
-                                  itemBuilder: (context, index) {
-                                    final userData = results[index].data() as Map<String, dynamic>;
-                                    final fullName = userData['fullName'] ?? 'مستخدم';
-                                    final username = userData['username'] ?? 'user';
-                                    final bio = userData['bio'] ?? '';
-                                    final photoUrl = userData['photoUrl'];
-
-                                    return ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: AppColors.accent,
-                                        backgroundImage: photoUrl != null && photoUrl.toString().isNotEmpty
-                                            ? NetworkImage(photoUrl)
-                                            : null,
-                                        child: photoUrl == null || photoUrl.toString().isEmpty
-                                            ? Text(
-                                                fullName.isNotEmpty ? fullName[0] : 'ع',
-                                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                                              )
-                                            : null,
-                                      ),
-                                      title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                      subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        // 🟢 تم تمرير photoUrl هنا أيضاً
-                                        _openUserProfile({
-                                          'username': username,
-                                          'fullName': fullName,
-                                          'bio': bio,
-                                          'photoUrl': photoUrl,
-                                        });
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم نشر المنشور بنجاح!')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('منصة القانون'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: AppColors.accent),
-            onPressed: _showUserSearchDialog,
-            tooltip: 'البحث عن مستخدم',
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: TextButton.icon(
-              style: TextButton.styleFrom(backgroundColor: AppColors.accent.withOpacity(0.2)),
-              onPressed: _openAdminGate,
-              icon: const Icon(Icons.admin_panel_settings, color: AppColors.accent, size: 20),
-              label: const Text('البوابة الآمنة', style: TextStyle(color: AppColors.accent, fontSize: 12)),
-            ),
-          ),
-        ],
-      ),
-      drawer: _buildDrawer(context),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildMainHomeTab(),
-          _buildChatTab(),
-          _buildServicesTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: AppColors.accent,
-        unselectedItemColor: Colors.white54,
+        title: const Text('الملف الشخصي'),
         backgroundColor: AppColors.primary,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'الدردشة'),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
-        ],
       ),
-    );
-  }
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _currentUser != null
+            ? FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).snapshots()
+            : null,
+        builder: (context, snapshot) {
+          String fullName = _currentUser?.displayName ?? 'طالب قانون';
+          String username = 'my_user';
+          String bio = 'طالب قانون بجامعة بغداد';
+          String? photoUrl;
 
-  Widget _buildMainHomeTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
-          if (_announcements.isNotEmpty) const SizedBox(height: 16),
-          if (_targetDuration != null) _buildCountdownCard(),
-          if (_targetDuration != null) const SizedBox(height: 20),
-          const Text('التبليغات الرسمية والتحديثات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
-          const SizedBox(height: 12),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _officialPosts.length,
-            itemBuilder: (context, index) => _buildPostCard(_officialPosts[index]),
-          ),
-        ],
-      ),
-    );
-  }
+          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            fullName = data['fullName'] ?? fullName;
+            username = data['username'] ?? username;
+            bio = data['bio'] ?? bio;
+            photoUrl = data['photoUrl'];
+          }
 
-  Widget _buildAnnouncementsTicker() {
-    String combinedText = "${_announcements.join("                  ")}                  ";
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.campaign, color: AppColors.accent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _tickerScrollController,
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              child: Text(
-                combinedText,
-                style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatTab() {
-    return _chatList.isEmpty
-        ? const Center(
-            child: Text(
-              'لا توجد محادثات حتى الآن.\nيمكنك البحث عن زملائك ومراسلتهم!',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
-            ),
-          )
-        : ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: _chatList.length,
-            separatorBuilder: (context, index) => const Divider(color: Colors.white10),
-            itemBuilder: (context, index) {
-              final chat = _chatList[index];
-              final unread = chat['unreadCount'] ?? 0;
-              final isMuted = chat['isMuted'] ?? false;
-              String unreadText = unread > 9 ? '+9' : '$unread';
-
-              return ListTile(
-                tileColor: AppColors.cardBg,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                leading: GestureDetector(
-                  onTap: () {
-                    _openUserProfile({
-                      'username': chat['username'],
-                      'fullName': chat['fullName'],
-                      'bio': chat['bio'] ?? '',
-                      'photoUrl': chat['photoUrl'],
-                    });
-                  },
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: AppColors.accent,
-                        backgroundImage: chat['photoUrl'] != null ? NetworkImage(chat['photoUrl']) : null,
-                        child: chat['photoUrl'] == null
-                            ? Text(
-                                chat['fullName'][0],
-                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                              )
-                            : null,
-                      ),
-                      if (isMuted)
-                        const Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Icon(Icons.volume_off, size: 14, color: Colors.white60),
-                        ),
-                    ],
-                  ),
-                ),
-                title: Text(chat['fullName'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                subtitle: Text(chat['lastMessage'].toString().isEmpty ? 'لا توجد رسائل بعد' : chat['lastMessage'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70)),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(chat['time'], style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    if (unread > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          unreadText,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                  ],
-                ),
-                onTap: () => _openChatDetailScreen(chat),
-                onLongPress: () => _showChatOptionsBottomSheet(chat, index),
-              );
-            },
-          );
-  }
-
-  Widget _buildCountdownCard() {
-    if (_targetDuration == null) return const SizedBox();
-    String days = _targetDuration!.inDays.toString().padLeft(2, '0');
-    String hours = (_targetDuration!.inHours % 24).toString().padLeft(2, '0');
-    String minutes = (_targetDuration!.inMinutes % 60).toString().padLeft(2, '0');
-    String seconds = (_targetDuration!.inSeconds % 60).toString().padLeft(2, '0');
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        children: [
-          const Text('الوقت المتبقي لحدث منصة القانون القادم ⏳', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _timerUnit(days, 'يوم'),
-              _timerUnit(hours, 'ساعة'),
-              _timerUnit(minutes, 'دقيقة'),
-              _timerUnit(seconds, 'ثانية'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _timerUnit(String value, String label) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: AppColors.cardBg, borderRadius: BorderRadius.circular(8)),
-          child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.accent)),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.white60)),
-      ],
-    );
-  }
-
-  Widget _buildPostCard(PostModel post) {
-    return Card(
-      color: AppColors.cardBg,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppColors.accent,
-                  child: Text(post.author.isNotEmpty ? post.author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text('@${post.username}', style: const TextStyle(fontSize: 11, color: AppColors.accent)),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (post.content.isNotEmpty) Text(post.content, style: const TextStyle(fontSize: 15, color: Colors.white)),
-            if (post.imageFile != null) ...[
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(post.imageFile!, width: double.infinity, fit: BoxFit.cover),
-              ),
-            ],
-            const Divider(color: Colors.white10, height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      post.isLiked = !post.isLiked;
-                      post.likes += post.isLiked ? 1 : -1;
-                    });
-                  },
-                  icon: Icon(post.isLiked ? Icons.favorite : Icons.favorite_border, color: post.isLiked ? Colors.red : Colors.white60),
-                  label: Text('${post.likes} إعجاب', style: const TextStyle(color: Colors.white60)),
-                ),
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.comment_outlined, color: Colors.white60),
-                  label: Text('${post.comments.length} تعليق', style: const TextStyle(color: Colors.white60)),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServicesTab() {
-    List<Map<String, dynamic>> services = [
-      {'icon': Icons.menu_book, 'title': 'المكتبة القانونية'},
-      {'icon': Icons.book, 'title': 'المواد الدراسية'},
-      {'icon': Icons.quiz, 'title': 'بنك الأسئلة'},
-      {'icon': Icons.assignment, 'title': 'الاختبارات الإلكترونية'},
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.3),
-        itemCount: services.length,
-        itemBuilder: (context, index) => Card(
-          color: AppColors.cardBg,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(services[index]['icon'], size: 40, color: AppColors.accent),
-              const SizedBox(height: 8),
-              Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    return Drawer(
-      backgroundColor: AppColors.cardBg,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          StreamBuilder<DocumentSnapshot>(
-            stream: currentUser != null
-                ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
-                : null,
-            builder: (context, snapshot) {
-              String name = currentUser?.displayName ?? "طالب قانون";
-              String email = currentUser?.email ?? "";
-              String? photoUrl;
-
-              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                name = data['fullName'] ?? name;
-                email = data['email'] ?? email;
-                photoUrl = data['photoUrl'];
-              }
-
-              return UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(color: AppColors.primary),
-                accountName: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                currentAccountPicture: CircleAvatar(
+                  radius: 50,
                   backgroundColor: AppColors.accent,
                   backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
                   child: photoUrl == null
                       ? Text(
-                          name.isNotEmpty ? name[0] : 'ع',
-                          style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold),
+                          fullName.isNotEmpty ? fullName[0] : 'ع',
+                          style: const TextStyle(fontSize: 36, color: Colors.black, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.person, color: AppColors.accent),
-            title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(
-                    posts: _userPosts,
-                    onAddUserPost: (content, imageFile) {
-                      setState(() {
-                        _userPosts.insert(
-                          0,
-                          PostModel(
-                            id: DateTime.now().toString(),
-                            author: currentUser?.displayName ?? 'طالب قانون',
-                            username: 'my_user',
-                            content: content,
-                            imageFile: imageFile,
-                            timestamp: DateTime.now(),
+                const SizedBox(height: 12),
+                Text(
+                  fullName,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '@$username',
+                  style: const TextStyle(fontSize: 14, color: AppColors.accent),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  bio,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 20),
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 10),
+
+                // قسم إضافة منشور جديد
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _postController,
+                        maxLines: 3,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: 'بماذا تفكر اليوم؟ شارك مع زملائك...',
+                          hintStyle: TextStyle(color: Colors.white38),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                      if (_selectedImage != null)
+                        Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(_selectedImage!, height: 150, width: double.infinity, fit: BoxFit.cover),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.cancel, color: Colors.red),
+                              onPressed: () => setState(() => _selectedImage = null),
+                            )
+                          ],
+                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.image, color: AppColors.accent),
+                            onPressed: _pickImage,
                           ),
-                        );
-                      });
-                    },
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                            onPressed: _submitPost,
+                            child: const Text('نشر', style: TextStyle(color: Colors.black)),
+                          ),
+                        ],
+                      )
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: AppColors.accent),
-            title: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    blockedUsers: _blockedUsers,
-                    onUnblockUser: (index) {
-                      setState(() {
-                        final unblocked = _blockedUsers.removeAt(index);
-                        _chatList.add(unblocked);
-                      });
-                    },
-                  ),
+
+                const SizedBox(height: 20),
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('منشوراتي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
                 ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.info, color: AppColors.accent),
-            title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
-            onTap: () {},
-          ),
-          const Divider(color: Colors.white24),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.redAccent)),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
-              }
-            },
-          ),
-        ],
+                const SizedBox(height: 10),
+
+                // عرض منشورات المستخدم
+                widget.posts.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text('لم تقم بنشر أي منشور بعد.', style: TextStyle(color: Colors.white38)),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: widget.posts.length,
+                        itemBuilder: (context, index) {
+                          final post = widget.posts[index];
+                          return Card(
+                            color: AppColors.cardBg,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(post.content, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                                  if (post.imageFile != null) ...[
+                                    const SizedBox(height: 10),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.file(post.imageFile!, width: double.infinity, fit: BoxFit.cover),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
