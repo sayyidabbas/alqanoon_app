@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 👈 تمت إضافة هذه المكتبة للتعامل مع النسخ (Clipboard)
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -107,7 +108,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final String? uploadedUrl = await _uploadImageToFreeImageHost(File(image.path));
 
     if (uploadedUrl != null) {
-      // حفظ رابط الصورة بداخل قاعدة البيانات
       await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).set({
         'photoUrl': uploadedUrl,
       }, SetOptions(merge: true));
@@ -325,6 +325,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                         const SizedBox(height: 4),
                         Text(userEmail, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                        const SizedBox(height: 10),
+                        
+                        // 👈 الإضافة الجديدة: عرض الـ ID مع زر النسخ
+                        if (currentUser != null)
+                          InkWell(
+                            onTap: () async {
+                              await Clipboard.setData(ClipboardData(text: currentUser!.uid));
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('تم نسخ الـ ID بنجاح! ✅'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.copy, size: 14, color: AppColors.accent),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'ID: ${currentUser!.uid}',
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        // 👈 نهاية الإضافة الجديدة
+
                         const SizedBox(height: 10),
                         Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.accent, fontSize: 13, height: 1.4)),
                         const SizedBox(height: 16),
