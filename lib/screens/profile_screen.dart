@@ -21,7 +21,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _currentUser = FirebaseAuth.instance.currentUser;
   final TextEditingController _postController = TextEditingController();
   File? _selectedImage;
 
@@ -51,7 +50,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   @override
+  void dispose() {
+    _postController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // 🟢 نقل المترجم لمتغير محلي داخل build لمعالجة Null Safety و Field Promotion
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
@@ -59,11 +67,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.primary,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: _currentUser != null
-            ? FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).snapshots()
+        // 🟢 استخدام الأمان مع المتغير المحلي لتفادي خطأ uid
+        stream: currentUser != null
+            ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
             : null,
         builder: (context, snapshot) {
-          String fullName = _currentUser?.displayName ?? 'طالب قانون';
+          String fullName = currentUser?.displayName ?? 'طالب قانون';
           String username = 'my_user';
           String bio = 'طالب قانون بجامعة بغداد';
           String? photoUrl;
@@ -215,4 +224,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
- 
