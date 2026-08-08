@@ -11,6 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
+import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,10 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
     "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
   ];
 
-  // قائمة المحظورين
   final List<Map<String, dynamic>> _blockedUsers = [];
 
-  // قائمة محادثات تجريبية للدردشة مع دعم العداد والكتم
   final List<Map<String, dynamic>> _chatList = [
     {
       'username': 'ahmed_legal',
@@ -49,9 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'bio': 'باحث قانوني متقدم',
       'unreadCount': 3,
       'isMuted': false,
-      'messages': [
-        {'sender': 'ahmed_legal', 'text': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟', 'time': '10:30 ص'},
-      ]
     },
     {
       'username': 'sara_lawyer',
@@ -61,14 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
       'bio': 'طالبة قانون - المرحلة الرابعة',
       'unreadCount': 0,
       'isMuted': true,
-      'messages': [
-        {'sender': 'me', 'text': 'تم إرسال الملف القانوني', 'time': 'أمس'},
-        {'sender': 'sara_lawyer', 'text': 'شكراً جزيلاً لك', 'time': 'أمس'},
-      ]
     },
   ];
 
-  // 1. التبليغات الرسمية
   final List<PostModel> _officialPosts = [
     PostModel(
       id: '1',
@@ -80,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
     )
   ];
 
-  // 2. منشورات المستخدمين الشخصية
   final List<PostModel> _userPosts = [];
 
   @override
@@ -236,23 +226,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openUserProfile(Map<String, dynamic> user) {
-    List<PostModel> filteredPosts = _userPosts
-        .where((p) => p.username == user['username'])
-        .toList();
+  void _openUserProfile(Map<String, dynamic> user) async {
+    final username = user['username'] ?? '';
+    final fullName = user['fullName'] ?? '';
+    final bio = user['bio'] ?? '';
+    final photoUrl = user['photoUrl'];
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileViewScreen(
-          username: user['username'] ?? '',
-          fullName: user['fullName'] ?? '',
-          bio: user['bio'] ?? '',
-          photoUrl: user['photoUrl'],
-          userPosts: filteredPosts,
+    // جلب منشورات المستخدم مباشرة من الفايربيس حتى تظهر للجميع
+    final querySnap = await FirebaseFirestore.instance
+        .collection('posts')
+        .where('username', isEqualTo: username)
+        .get();
+
+    List<PostModel> posts = querySnap.docs.map((doc) {
+      final data = doc.data();
+      return PostModel(
+        id: doc.id,
+        author: data['author'] ?? fullName,
+        username: data['username'] ?? username,
+        content: data['content'] ?? '',
+        timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        likes: data['likes'] ?? 0,
+      );
+    }).toList();
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserProfileViewScreen(
+            username: username,
+            fullName: fullName,
+            bio: bio,
+            photoUrl: photoUrl,
+            userPosts: posts,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   void _openChatDetailScreen(Map<String, dynamic> chat) {
@@ -260,107 +271,13 @@ class _HomeScreenState extends State<HomeScreen> {
       chat['unreadCount'] = 0;
     });
 
-    final TextEditingController messageController = TextEditingController();
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => StatefulBuilder(
-          builder: (context, setChatState) {
-            List messages = chat['messages'] ?? [];
-            return Scaffold(
-              backgroundColor: AppColors.primary,
-              appBar: AppBar(
-                title: Text(chat['fullName']),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.person, color: AppColors.accent),
-                    onPressed: () {
-                      _openUserProfile(chat);
-                    },
-                  )
-                ],
-              ),
-              body: Column(
-                children: [
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final msg = messages[index];
-                        final isMe = msg['sender'] == 'me';
-                        return Align(
-                          alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isMe ? AppColors.accent : AppColors.cardBg,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  msg['text'],
-                                  style: TextStyle(color: isMe ? Colors.black : Colors.white, fontSize: 15),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  msg['time'],
-                                  style: TextStyle(color: isMe ? Colors.black54 : Colors.white38, fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    color: AppColors.cardBg,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: messageController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              hintText: 'اكتب رسالة...',
-                              hintStyle: TextStyle(color: Colors.white38),
-                              border: InputBorder.none,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.send, color: AppColors.accent),
-                          onPressed: () {
-                            if (messageController.text.trim().isNotEmpty) {
-                              final nowText = "${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}";
-                              setChatState(() {
-                                messages.add({
-                                  'sender': 'me',
-                                  'text': messageController.text.trim(),
-                                  'time': nowText,
-                                });
-                              });
-                              setState(() {
-                                chat['lastMessage'] = messageController.text.trim();
-                                chat['time'] = nowText;
-                              });
-                              messageController.clear();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            );
-          },
+        builder: (context) => ChatScreen(
+          userName: chat['fullName'] ?? 'مستخدم',
+          userHandle: chat['username'] ?? 'user',
+          peerUid: chat['uid'],
         ),
       ),
     );
@@ -495,7 +412,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return ListView.builder(
                                   itemCount: results.length,
                                   itemBuilder: (context, index) {
-                                    final userData = results[index].data() as Map<String, dynamic>;
+                                    final doc = results[index];
+                                    final userData = doc.data() as Map<String, dynamic>;
                                     final fullName = userData['fullName'] ?? 'مستخدم';
                                     final username = userData['username'] ?? 'user';
                                     final bio = userData['bio'] ?? '';
@@ -519,6 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       onTap: () {
                                         Navigator.pop(context);
                                         _openUserProfile({
+                                          'uid': doc.id,
                                           'username': username,
                                           'fullName': fullName,
                                           'bio': bio,
@@ -958,3 +877,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
