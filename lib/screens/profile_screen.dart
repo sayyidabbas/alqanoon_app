@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package0/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
@@ -24,10 +25,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _postController = TextEditingController();
   File? _selectedImage;
+  bool _isUploading = false;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
 
     if (pickedFile != null) {
       setState(() {
@@ -36,17 +38,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<String?> _uploadImageToStorage(File imageFile) async {
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance.ref().child('post_images').child(fileName);
+      await ref.putFile(imageFile);
+      return await ref.getDownloadURL();
+    } catch (e) {
+      return null;
+    }
+  }
+
   void _submitPost() async {
     if (_postController.text.trim().isEmpty && _selectedImage == null) return;
 
-    final content = _postController.text.trim();
-    final image = _selectedImage;
+    setState(() => _isUploading = true);
 
-    widget.onAddUserPost(content, image);
-
-    // رفع المنشور إلى Firestore ليظهر للجميع
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      String? imageUrl;
+      if (_selectedImage != null) {
+        imageUrl = await _uploadImageToStorage(_selectedImage!);
+      }
+
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final userData = userDoc.data();
       final username = userData?['username'] ?? 'user';
@@ -56,15 +70,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'userId': user.uid,
         'author': fullName,
         'username': username,
-        'content': content,
+        'content': _postController.text.trim(),
+        'imageUrl': imageUrl,
         'timestamp': FieldValue.serverTimestamp(),
-        'likes': 0,
+        'likes': [],
+        'commentsCount': 0,
       });
     }
 
     _postController.clear();
     setState(() {
       _selectedImage = null;
+      _isUploading = false;
     });
 
     if (mounted) {
@@ -72,6 +89,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SnackBar(content: Text('تم نشر المنشور بنجاح!')),
       );
     }
+  }
+
+  void _toggleLike(String postId, List<dynamic> likes) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+    if (likes.contains(uid)) {
+      await postRef.update({'likes': FieldValue.arrayRemove([uid])});
+    } else {
+      await postRef.update({'likes': FieldValue.arrayUnion([uid])});
+    }
+  }
+
+  void _showCommentsModal(BuildContext context, String postId) {
+    final commentController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 250,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .doc(postId)
+                      .collection('comments')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                    final comments = snapshot.data!.docs;
+                    if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
+
+                    return ListView.builder(
+                      itemCount: comments.length,
+                      itemBuilder: (context, i) {
+                        final data = comments[i].data() as Map<String, dynamic>;
+                        return ListTile(
+                          title: Text(data['author'] ?? 'مستخدم', style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white)),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: commentController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(hintText: 'اكتب تعليقاً...', hintStyle: TextStyle(color: Colors.white38)),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: AppColors.accent),
+                    onPressed: () async {
+                      final text = commentController.text.trim();
+                      if (text.isEmpty) return;
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
+                          'text': text,
+                          'author': user.displayName ?? 'مستخدم',
+                          'timestamp': FieldValue.serverTimestamp(),
+                        });
+                        await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+                          'commentsCount': FieldValue.increment(1),
+                        });
+                        commentController.clear();
+                      }
+                    },
+                  )
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _showEditProfileDialog(String currentName, String currentUsername, String currentBio) {
@@ -91,29 +201,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               TextField(
                 controller: nameController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'الاسم الكامل',
-                  labelStyle: TextStyle(color: Colors.white70),
-                ),
+                decoration: const InputDecoration(labelText: 'الاسم الكامل', labelStyle: TextStyle(color: Colors.white70)),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: usernameController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'اسم المستخدم (User)',
-                  labelStyle: TextStyle(color: Colors.white70),
-                ),
+                decoration: const InputDecoration(labelText: 'اسم المستخدم (User)', labelStyle: TextStyle(color: Colors.white70)),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: bioController,
                 maxLines: 2,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'السيرة الذاتية (Bio)',
-                  labelStyle: TextStyle(color: Colors.white70),
-                ),
+                decoration: const InputDecoration(labelText: 'السيرة الذاتية (Bio)', labelStyle: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -205,7 +306,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 4),
-                // 🟢 الضغط لنسخ اسم المستخدم
                 InkWell(
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: username));
@@ -218,10 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '@$username',
-                          style: const TextStyle(fontSize: 14, color: AppColors.accent),
-                        ),
+                        Text('@$username', style: const TextStyle(fontSize: 14, color: AppColors.accent)),
                         const SizedBox(width: 4),
                         const Icon(Icons.copy, size: 14, color: AppColors.accent),
                       ],
@@ -229,11 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  bio,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70),
-                ),
+                Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
                 
                 OutlinedButton.icon(
@@ -291,11 +384,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: const Icon(Icons.image, color: AppColors.accent),
                             onPressed: _pickImage,
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                            onPressed: _submitPost,
-                            child: const Text('نشر', style: TextStyle(color: Colors.black)),
-                          ),
+                          _isUploading
+                              ? const CircularProgressIndicator(color: AppColors.accent)
+                              : ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                                  onPressed: _submitPost,
+                                  child: const Text('نشر', style: TextStyle(color: Colors.black)),
+                                ),
                         ],
                       )
                     ],
@@ -309,42 +404,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                widget.posts.isEmpty
-                    ? const Center(
+                // 📡 منشورات المستخدم الحقيقية المباشرة من Firestore
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .where('userId', isEqualTo: currentUser?.uid)
+                      .snapshots(),
+                  builder: (context, postSnapshot) {
+                    if (postSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                    }
+
+                    final docs = postSnapshot.data?.docs ?? [];
+
+                    if (docs.isEmpty) {
+                      return const Center(
                         child: Padding(
                           padding: EdgeInsets.all(20.0),
                           child: Text('لم تقم بنشر أي منشور بعد.', style: TextStyle(color: Colors.white38)),
                         ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: widget.posts.length,
-                        itemBuilder: (context, index) {
-                          final post = widget.posts[index];
-                          return Card(
-                            color: AppColors.cardBg,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(post.content, style: const TextStyle(color: Colors.white, fontSize: 15)),
-                                  if (post.imageFile != null) ...[
-                                    const SizedBox(height: 10),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.file(post.imageFile!, width: double.infinity, fit: BoxFit.cover),
+                      );
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final likes = List<String>.from(data['likes'] ?? []);
+                        final isLiked = likes.contains(currentUser?.uid);
+                        final commentsCount = data['commentsCount'] ?? 0;
+
+                        return Card(
+                          color: AppColors.cardBg,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if ((data['content'] ?? '').isNotEmpty)
+                                  Text(data['content'], style: const TextStyle(color: Colors.white, fontSize: 15)),
+                                if (data['imageUrl'] != null && (data['imageUrl'] as String).isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(data['imageUrl'], width: double.infinity, fit: BoxFit.cover),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                const Divider(color: Colors.white10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    InkWell(
+                                      onTap: () => _toggleLike(doc.id, likes),
+                                      child: Row(
+                                        children: [
+                                          Icon(isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, color: isLiked ? AppColors.accent : Colors.white70, size: 20),
+                                          const SizedBox(width: 6),
+                                          Text('${likes.length}', style: TextStyle(color: isLiked ? AppColors.accent : Colors.white70)),
+                                        ],
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => _showCommentsModal(context, doc.id),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.comment_outlined, color: Colors.white70, size: 20),
+                                          const SizedBox(width: 6),
+                                          Text('$commentsCount', style: const TextStyle(color: Colors.white70)),
+                                        ],
+                                      ),
                                     ),
                                   ],
-                                ],
-                              ),
+                                )
+                              ],
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ],
             ),
           );
@@ -353,3 +498,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+ 
