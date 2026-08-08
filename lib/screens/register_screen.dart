@@ -14,11 +14,10 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // المتحكمات
+  // المتحكمات (تم حذف _phoneController)
   final _fullNameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -37,18 +36,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _fullNameController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
 
-  // 🔍 دالة الفحص اللحظي لاسم المستخدم في Firestore
+  // 🔍 دالة الفحص اللحظي المتقدمة (تتحقق من اليوزر المعتمد واليوزر المعلق لـ 24 ساعة)
   void _onUsernameChanged(String username) {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
 
-    final cleanUsername = username.trim().toLowerCase();
+    final cleanUsername = username.trim().toLowerCase().replaceAll('@', '').replaceAll(' ', '');
+
     if (cleanUsername.isEmpty || cleanUsername.length < 3) {
       setState(() {
         _isUsernameAvailable = null;
@@ -59,17 +58,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isCheckingUsername = true);
 
-    // الانتظار 500 ملي ثانية بعد توقف المستخدم عن الكتابة للبحث في الفايربيس
+    // الانتظار 500 ملي ثانية بعد توقف المستخدم عن الكتابة قبل الاستعلام
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
-        final query = await FirebaseFirestore.instance
+        // 1. البحث في اليوزرات المعتمدة الحالية
+        final queryUsername = await FirebaseFirestore.instance
             .collection('users')
             .where('username', isEqualTo: cleanUsername)
             .get();
 
+        // 2. البحث في اليوزرات المعلقة (التي تنتظر مرور 24 ساعة لتبديلها)
+        final queryPending = await FirebaseFirestore.instance
+            .collection('users')
+            .where('pendingUsername', isEqualTo: cleanUsername)
+            .get();
+
         if (mounted) {
           setState(() {
-            _isUsernameAvailable = query.docs.isEmpty;
+            // يكون متاحاً فقط إذا كان كلا البحثين خاليين!
+            _isUsernameAvailable = queryUsername.docs.isEmpty && queryPending.docs.isEmpty;
             _isCheckingUsername = false;
           });
         }
@@ -85,7 +92,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (_isUsernameAvailable == false) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اسم المستخدم مستعمل بالفعل، اختر اسماً آخر'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('اسم المستخدم مستعمل أو معلق لحساب آخر، اختر اسماً آخر'), backgroundColor: Colors.orange),
       );
       return;
     }
@@ -93,6 +100,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final cleanUsername = _usernameController.text.trim().toLowerCase().replaceAll('@', '').replaceAll(' ', '');
+
       // 1. إنشاء الحساب في Firebase Auth
       final UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -106,14 +115,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         await user.updateDisplayName(_fullNameController.text.trim());
         await user.sendEmailVerification();
 
-        // 3. حفظ البيانات في Firestore (مع حماية لعدم التعليق)
+        // 3. حفظ البيانات في Firestore (بدون رقم الهاتف)
         try {
           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
             'uid': user.uid,
             'fullName': _fullNameController.text.trim(),
-            'username': _usernameController.text.trim().toLowerCase(),
+            'username': cleanUsername,
             'email': _emailController.text.trim(),
-            'phone': _phoneController.text.trim(),
             'stage': _selectedStage,
             'department': _selectedDepartment,
             'createdAt': FieldValue.serverTimestamp(),
@@ -123,7 +131,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           debugPrint("خطأ أثناء حفظ بيانات Firestore: $e");
         }
 
-        // 4. تسجيل الخروج حتى يضطر لتفعيل الإيميل ثم تسجيل الدخول
+        // 4. تسجيل الخروج لتأكيد تفعيل الإيميل
         await FirebaseAuth.instance.signOut();
 
         if (!mounted) return;
@@ -141,8 +149,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(ctx); // إغلاق النافذة
-                  Navigator.pop(context); // العودة لصفحة تسجيل الدخول
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
                 },
                 child: const Text('حسناً، فهمت', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
               ),
@@ -210,7 +218,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   helperText: _isUsernameAvailable == true
                       ? 'اسم المستخدم متاح ✅'
                       : _isUsernameAvailable == false
-                          ? 'اسم المستخدم غير متاح ❌'
+                          ? 'اسم المستخدم غير متاح أو معلق لحساب آخر ❌'
                           : null,
                   helperStyle: TextStyle(
                     color: _isUsernameAvailable == true ? Colors.green : Colors.red,
@@ -219,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 validator: (val) {
                   if (val == null || val.trim().isEmpty) return 'يرجى إدخال اسم المستخدم';
                   if (val.trim().length < 3) return 'اسم المستخدم يجب أن يكون 3 حروف على الأقل';
-                  if (_isUsernameAvailable == false) return 'اسم المستخدم مستخدم مسبقاً';
+                  if (_isUsernameAvailable == false) return 'اسم المستخدم مستخدم أو معلق مسبقاً';
                   return null;
                 },
               ),
@@ -235,15 +243,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   if (!val.contains('@')) return 'يرجى إدخال بريد إلكتروني صحيح';
                   return null;
                 },
-              ),
-              const SizedBox(height: 12),
-
-              // رقم الهاتف
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'رقم الهاتف', prefixIcon: Icon(Icons.phone)),
-                validator: (val) => val == null || val.trim().isEmpty ? 'يرجى إدخال رقم الهاتف' : null,
               ),
               const SizedBox(height: 12),
 
@@ -328,3 +327,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+ 
