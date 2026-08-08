@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,21 +36,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _submitPost() {
+  void _submitPost() async {
     if (_postController.text.trim().isEmpty && _selectedImage == null) return;
 
-    widget.onAddUserPost(_postController.text.trim(), _selectedImage);
+    final content = _postController.text.trim();
+    final image = _selectedImage;
+
+    widget.onAddUserPost(content, image);
+
+    // رفع المنشور إلى Firestore ليظهر للجميع
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userData = userDoc.data();
+      final username = userData?['username'] ?? 'user';
+      final fullName = userData?['fullName'] ?? user.displayName ?? 'طالب قانون';
+
+      await FirebaseFirestore.instance.collection('posts').add({
+        'userId': user.uid,
+        'author': fullName,
+        'username': username,
+        'content': content,
+        'timestamp': FieldValue.serverTimestamp(),
+        'likes': 0,
+      });
+    }
+
     _postController.clear();
     setState(() {
       _selectedImage = null;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم نشر المنشور بنجاح!')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم نشر المنشور بنجاح!')),
+      );
+    }
   }
 
-  // 🟢 نافذة تعديل البيانات الشخصية (الاسم، اليوزر، البايو)
   void _showEditProfileDialog(String currentName, String currentUsername, String currentBio) {
     final nameController = TextEditingController(text: currentName);
     final usernameController = TextEditingController(text: currentUsername);
@@ -181,9 +205,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '@$username',
-                  style: const TextStyle(fontSize: 14, color: AppColors.accent),
+                // 🟢 الضغط لنسخ اسم المستخدم
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: username));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('تم نسخ اسم المستخدم: @$username')),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '@$username',
+                          style: const TextStyle(fontSize: 14, color: AppColors.accent),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.copy, size: 14, color: AppColors.accent),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -193,7 +236,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 
-                // 🟢 زر تعديل الملف الشخصي
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accent,
