@@ -102,35 +102,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final User? user = userCredential.user;
 
       if (user != null) {
-        // 2. تحديث الاسم في ملف المستخدِم
+        // 2. تحديث الاسم وإرسال إيميل التفعيل
         await user.updateDisplayName(_fullNameController.text.trim());
-
-        // 3. إرسال رابط التحقق للبريد الإلكتروني
         await user.sendEmailVerification();
 
-        // 4. حفظ كامل بيانات الحساب في قاعدة البيانات Firestore
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'fullName': _fullNameController.text.trim(),
-          'username': _usernameController.text.trim().toLowerCase(),
-          'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'stage': _selectedStage,
-          'department': _selectedDepartment,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isVerified': false,
-        });
+        // 3. حفظ البيانات في Firestore (مع حماية لعدم التعليق)
+        try {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'uid': user.uid,
+            'fullName': _fullNameController.text.trim(),
+            'username': _usernameController.text.trim().toLowerCase(),
+            'email': _emailController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'stage': _selectedStage,
+            'department': _selectedDepartment,
+            'createdAt': FieldValue.serverTimestamp(),
+            'isVerified': false,
+          });
+        } catch (e) {
+          debugPrint("خطأ أثناء حفظ بيانات Firestore: $e");
+        }
+
+        // 4. تسجيل الخروج حتى يضطر لتفعيل الإيميل ثم تسجيل الدخول
+        await FirebaseAuth.instance.signOut();
 
         if (!mounted) return;
 
-        // 5. إظهار رسالة تنبيه بضرورة تفعيل الإيميل
+        // 5. إظهار نافذة التنبيه
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
             title: const Text('تم إنشاء الحساب بنجاح! 📧', textAlign: TextAlign.center),
             content: Text(
-              'أرسلنا رابط تأكيد إلى بريدك الإلكتروني:\n(${_emailController.text})\n\nيرجى فتح إيميلك والضغط على رابط التفعيل ثم تسجيل الدخول.',
+              'أرسلنا رابط تأكيد إلى بريدك الإلكتروني:\n(${_emailController.text.trim()})\n\nيرجى فتح إيميلك والضغط على رابط التفعيل ثم تسجيل الدخول.',
               textAlign: TextAlign.center,
             ),
             actions: [
@@ -150,7 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (e.code == 'email-already-in-use') {
         message = 'البريد الإلكتروني مستخدم بالفعل';
       } else if (e.code == 'weak-password') {
-        message = 'كلمة المرور ضعيفة جداً';
+        message = 'كلمة المرور ضعيفة جداً (6 خانات على الأقل)';
       } else if (e.code == 'invalid-email') {
         message = 'البريد الإلكتروني غير صحيح';
       }
