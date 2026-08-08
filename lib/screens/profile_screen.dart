@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 
@@ -19,43 +22,117 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String userName = "سيدعباس عقيل الحسيني";
-  String userEmail = "abbas@lawplatform.com";
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  String userName = "جاري التحميل...";
+  String userEmail = "";
   String bio = "طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية";
+  String? photoUrl;
+
+  bool _isLoadingData = true;
+  bool _isUploadingProfileImg = false;
   
-  File? _profileImage;
   File? _selectedPostImage;
   final _postController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
-  // اختيار صورة البروفايل من المعرض
-  Future<void> _pickProfileImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _profileImage = File(image.path);
-      });
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  // 📥 1. جلب بيانات المستخدم من Firestore
+  Future<void> _loadUserData() async {
+    if (currentUser == null) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        setState(() {
+          userName = data['fullName'] ?? currentUser?.displayName ?? "طالب قانون";
+          userEmail = data['email'] ?? currentUser?.email ?? "";
+          bio = data['bio'] ?? bio;
+          photoUrl = data['photoUrl'];
+          _isLoadingData = false;
+        });
+      } else {
+        setState(() {
+          userName = currentUser?.displayName ?? "طالب قانون";
+          userEmail = currentUser?.email ?? "";
+          _isLoadingData = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("خطأ في جلب البيانات: $e");
+      if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
-  // حذف صورة البروفايل
-  void _removeProfileImage() {
-    setState(() {
-      _profileImage = null;
-    });
-  }
+  // 📸 2. اختيار ورفع صورة البروفايل إلى Firebase Storage
+  Future<void> _pickAndUploadProfileImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (image == null || currentUser == null) return;
 
-  // اختيار صورة للمنشور من المعرض
-  Future<void> _pickPostImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _selectedPostImage = File(image.path);
+    setState(() => _isUploadingProfileImg = true);
+
+    try {
+      final File file = File(image.path);
+      final ref = FirebaseStorage.instance.ref().child('user_profiles').child('${currentUser!.uid}.jpg');
+
+      // رفع الملف إلى السيرفر
+      await ref.putFile(file);
+      final String downloadUrl = await ref.getDownloadURL();
+
+      // تحديث رابط الصورة في Firestore
+      await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
+        'photoUrl': downloadUrl,
       });
+
+      setState(() {
+        photoUrl = downloadUrl;
+        _isUploadingProfileImg = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحديث صورة الملف الشخصي بنجاح! ✅'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      debugPrint("خطأ أثناء رفع الصورة: $e");
+      setState(() => _isUploadingProfileImg = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء رفع الصورة: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
-  // تعديل بيانات الملف الشخصي
+  // 🗑️ 3. حذف صورة البروفايل
+  Future<void> _removeProfileImage() async {
+    if (currentUser == null) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
+        'photoUrl': FieldValue.delete(),
+      });
+
+      setState(() => photoUrl = null);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف صورة الملف الشخصي'), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      debugPrint("خطأ في حذف الصورة: $e");
+    }
+  }
+
+  // 📝 4. تعديل بيانات الملف الشخصي وحفظها مباشرة في Firestore
   void _editProfile() {
     final nameController = TextEditingController(text: userName);
     final bioController = TextEditingController(text: bio);
@@ -85,18 +162,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () {
-              setState(() {
-                userName = nameController.text;
-                bio = bioController.text;
-              });
-              Navigator.pop(context);
+            onPressed: () async {
+              final newName = nameController.text.trim();
+              final newBio = bioController.text.trim();
+
+              if (newName.isNotEmpty && currentUser != null) {
+                setState(() {
+                  userName = newName;
+                  bio = newBio;
+                });
+
+                await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
+                  'fullName': newName,
+                  'bio': newBio,
+                });
+              }
+
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('حفظ التغييرات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+  }
+
+  // اختيار صورة للمنشور
+  Future<void> _pickPostImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (image != null) {
+      setState(() {
+        _selectedPostImage = File(image.path);
+      });
+    }
   }
 
   @override
@@ -109,201 +207,209 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        child: Column(
-          children: [
-            // هيدر البروفايل الأنيق
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.cardBg, AppColors.primary],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ),
+      body: _isLoadingData
+          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               child: Column(
                 children: [
-                  Stack(
-                    alignment: Alignment.bottomLeft,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.accent, width: 3),
-                        ),
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundColor: AppColors.primary,
-                          backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                          child: _profileImage == null
-                              ? Text(
-                                  userName.isNotEmpty ? userName[0] : 'ع',
-                                  style: const TextStyle(fontSize: 38, color: AppColors.accent, fontWeight: FontWeight.bold),
-                                )
-                              : null,
-                        ),
+                  // هيدر البروفايل الأنيق
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.cardBg, AppColors.primary],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
-                      Positioned(
-                        bottom: 0,
-                        left: 0,
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: AppColors.accent,
-                          child: IconButton(
-                            icon: const Icon(Icons.camera_alt, size: 18, color: Colors.black),
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                backgroundColor: AppColors.cardBg,
-                                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-                                builder: (context) => Container(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ListTile(
-                                        leading: const Icon(Icons.photo_library, color: AppColors.accent),
-                                        title: const Text('اختيار صورة من المعرض'),
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          _pickProfileImage();
-                                        },
-                                      ),
-                                      if (_profileImage != null)
-                                        ListTile(
-                                          leading: const Icon(Icons.delete, color: Colors.red),
-                                          title: const Text('حذف صورة البروفايل', style: TextStyle(color: Colors.red)),
-                                          onTap: () {
-                                            Navigator.pop(context);
-                                            _removeProfileImage();
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 4),
-                  Text(userEmail, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-                  const SizedBox(height: 10),
-                  Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.accent, fontSize: 13, height: 1.4)),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      side: const BorderSide(color: AppColors.accent, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                    ),
-                    onPressed: _editProfile,
-                    icon: const Icon(Icons.edit, color: AppColors.accent, size: 18),
-                    label: const Text('تعديل البيانات', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // صندوق النشر الفخم
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _postController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'بماذا تفكر اليوم؟ أنشر شارك الجميع...',
-                      border: InputBorder.none,
-                    ),
-                  ),
-                  if (_selectedPostImage != null) ...[
-                    const SizedBox(height: 10),
-                    Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_selectedPostImage!, height: 160, width: double.infinity, fit: BoxFit.cover),
-                        ),
-                        IconButton(
-                          icon: const CircleAvatar(backgroundColor: Colors.black54, child: Icon(Icons.close, color: Colors.white, size: 18)),
-                          onPressed: () => setState(() => _selectedPostImage = null),
-                        )
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4)),
                       ],
                     ),
-                  ],
-                  const Divider(color: Colors.white10, height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton.icon(
-                        onPressed: _pickPostImage,
-                        icon: const Icon(Icons.photo_library_rounded, color: AppColors.accent),
-                        label: const Text('معرض الصور', style: TextStyle(color: AppColors.accent)),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomLeft,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.accent, width: 3),
+                              ),
+                              child: _isUploadingProfileImg
+                                  ? const CircleAvatar(
+                                      radius: 50,
+                                      backgroundColor: AppColors.primary,
+                                      child: CircularProgressIndicator(color: AppColors.accent),
+                                    )
+                                  : CircleAvatar(
+                                      radius: 50,
+                                      backgroundColor: AppColors.primary,
+                                      backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                                      child: photoUrl == null
+                                          ? Text(
+                                              userName.isNotEmpty ? userName[0] : 'ع',
+                                              style: const TextStyle(fontSize: 38, color: AppColors.accent, fontWeight: FontWeight.bold),
+                                            )
+                                          : null,
+                                    ),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              child: CircleAvatar(
+                                radius: 18,
+                                backgroundColor: AppColors.accent,
+                                child: IconButton(
+                                  icon: const Icon(Icons.camera_alt, size: 18, color: Colors.black),
+                                  onPressed: () {
+                                    showModalBottomSheet(
+                                      context: context,
+                                      backgroundColor: AppColors.cardBg,
+                                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                                      builder: (context) => Container(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            ListTile(
+                                              leading: const Icon(Icons.photo_library, color: AppColors.accent),
+                                              title: const Text('اختيار صورة من المعرض'),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                _pickAndUploadProfileImage();
+                                              },
+                                            ),
+                                            if (photoUrl != null)
+                                              ListTile(
+                                                leading: const Icon(Icons.delete, color: Colors.red),
+                                                title: const Text('حذف صورة البروفايل', style: TextStyle(color: Colors.red)),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  _removeProfileImage();
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        onPressed: () {
-                          if (_postController.text.isNotEmpty || _selectedPostImage != null) {
-                            widget.onAddUserPost(_postController.text, _selectedPostImage);
-                            _postController.clear();
-                            setState(() => _selectedPostImage = null);
-                          }
-                        },
-                        child: const Text('نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                        const SizedBox(height: 4),
+                        Text(userEmail, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                        const SizedBox(height: 10),
+                        Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.accent, fontSize: 13, height: 1.4)),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            side: const BorderSide(color: AppColors.accent, width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                          ),
+                          onPressed: _editProfile,
+                          icon: const Icon(Icons.edit, color: AppColors.accent, size: 18),
+                          label: const Text('تعديل البيانات', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // صندوق النشر الفخم
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _postController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            hintText: 'بماذا تفكر اليوم؟ أنشر شارك الجميع...',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                        if (_selectedPostImage != null) ...[
+                          const SizedBox(height: 10),
+                          Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(_selectedPostImage!, height: 160, width: double.infinity, fit: BoxFit.cover),
+                              ),
+                              IconButton(
+                                icon: const CircleAvatar(backgroundColor: Colors.black54, child: Icon(Icons.close, color: Colors.white, size: 18)),
+                                onPressed: () => setState(() => _selectedPostImage = null),
+                              )
+                            ],
+                          ),
+                        ],
+                        const Divider(color: Colors.white10, height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton.icon(
+                              onPressed: _pickPostImage,
+                              icon: const Icon(Icons.photo_library_rounded, color: AppColors.accent),
+                              label: const Text('معرض الصور', style: TextStyle(color: AppColors.accent)),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accent,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+                              ),
+                              onPressed: () {
+                                if (_postController.text.isNotEmpty || _selectedPostImage != null) {
+                                  widget.onAddUserPost(_postController.text, _selectedPostImage);
+                                  _postController.clear();
+                                  setState(() => _selectedPostImage = null);
+                                }
+                              },
+                              child: const Text('نشر', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('منشوراتي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // قائمة المنشورات
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: userPosts.length,
+                    itemBuilder: (context, index) {
+                      final post = userPosts[index];
+                      return _buildPostCard(post);
+                    },
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 24),
-            const Align(
-              alignment: Alignment.centerRight,
-              child: Text('منشوراتي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
-            ),
-            const SizedBox(height: 12),
-
-            // قائمة المنشورات مع التفاعل كامل (إعجاب وتطبيقات التعليقات)
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: userPosts.length,
-              itemBuilder: (context, index) {
-                final post = userPosts[index];
-                return _buildPostCard(post);
-              },
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -323,8 +429,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               CircleAvatar(
                 backgroundColor: AppColors.accent,
-                backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                child: _profileImage == null
+                backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                child: photoUrl == null
                     ? Text(post.author.isNotEmpty ? post.author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
                     : null,
               ),
@@ -424,3 +530,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+ 
