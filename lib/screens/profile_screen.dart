@@ -49,6 +49,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🟢 نافذة تعديل البيانات الشخصية (الاسم، اليوزر، البايو)
+  void _showEditProfileDialog(String currentName, String currentUsername, String currentBio) {
+    final nameController = TextEditingController(text: currentName);
+    final usernameController = TextEditingController(text: currentUsername);
+    final bioController = TextEditingController(text: currentBio);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('تعديل الملف الشخصي ✏️', style: TextStyle(color: AppColors.accent)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'الاسم الكامل',
+                  labelStyle: TextStyle(color: Colors.white70),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: usernameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'اسم المستخدم (User)',
+                  labelStyle: TextStyle(color: Colors.white70),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: bioController,
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'السيرة الذاتية (Bio)',
+                  labelStyle: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user != null) {
+                await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                  'fullName': nameController.text.trim(),
+                  'username': usernameController.text.trim(),
+                  'bio': bioController.text.trim(),
+                }, SetOptions(merge: true));
+
+                await user.updateDisplayName(nameController.text.trim());
+              }
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم تحديث البيانات بنجاح!')),
+                );
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _postController.dispose();
@@ -57,7 +134,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 نقل المترجم لمتغير محلي داخل build لمعالجة Null Safety و Field Promotion
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -67,7 +143,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.primary,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        // 🟢 استخدام الأمان مع المتغير المحلي لتفادي خطأ uid
         stream: currentUser != null
             ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
             : null,
@@ -116,11 +191,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70),
                 ),
+                const SizedBox(height: 12),
+                
+                // 🟢 زر تعديل الملف الشخصي
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accent,
+                    side: const BorderSide(color: AppColors.accent),
+                  ),
+                  onPressed: () => _showEditProfileDialog(fullName, username, bio),
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('تعديل الملف الشخصي'),
+                ),
+
                 const SizedBox(height: 20),
                 const Divider(color: Colors.white24),
                 const SizedBox(height: 10),
 
-                // قسم إضافة منشور جديد
+                // قسم كتابة المنشور
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -179,7 +267,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // عرض منشورات المستخدم
                 widget.posts.isEmpty
                     ? const Center(
                         child: Padding(
