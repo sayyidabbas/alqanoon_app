@@ -236,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openUserProfile(Map<String, String> user) {
+  void _openUserProfile(Map<String, dynamic> user) {
     List<PostModel> filteredPosts = _userPosts
         .where((p) => p.username == user['username'])
         .toList();
@@ -245,9 +245,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => UserProfileViewScreen(
-          username: user['username']!,
-          fullName: user['fullName']!,
+          username: user['username'] ?? '',
+          fullName: user['fullName'] ?? '',
           bio: user['bio'] ?? '',
+          photoUrl: user['photoUrl'],
           userPosts: filteredPosts,
         ),
       ),
@@ -275,11 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   IconButton(
                     icon: const Icon(Icons.person, color: AppColors.accent),
                     onPressed: () {
-                      _openUserProfile({
-                        'username': chat['username'],
-                        'fullName': chat['fullName'],
-                        'bio': chat['bio'] ?? '',
-                      });
+                      _openUserProfile(chat);
                     },
                   )
                 ],
@@ -525,6 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           'username': username,
                                           'fullName': fullName,
                                           'bio': bio,
+                                          'photoUrl': photoUrl,
                                         });
                                       },
                                     );
@@ -666,11 +664,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 leading: GestureDetector(
                   onTap: () {
-                    _openUserProfile({
-                      'username': chat['username'],
-                      'fullName': chat['fullName'],
-                      'bio': chat['bio'] ?? '',
-                    });
+                    _openUserProfile(chat);
                   },
                   child: Stack(
                     children: [
@@ -964,4 +958,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
- 
