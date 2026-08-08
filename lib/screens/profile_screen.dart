@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 
@@ -70,48 +71,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 📸 2. اختيار ورفع صورة البروفايل إلى Firebase Storage
+  // 🌐 2. دالة الرفع المجانية المضمنة إلى FreeImage.host
+  Future<String?> _uploadImageToFreeImageHost(File imageFile) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://freeimage.host/api/1/upload'),
+      );
+      
+      request.fields['key'] = '6d207e02198a847aa98d0a2a901485a5';
+      request.fields['action'] = 'upload';
+      
+      request.files.add(await http.MultipartFile.fromPath('source', imageFile.path));
+      
+      final response = await request.send();
+      final responseData = await response.stream.bytesToString();
+      final json = jsonDecode(responseData);
+
+      if (json['status_code'] == 200) {
+        return json['image']['url']; // رابط الصورة المباشر والدائم
+      }
+    } catch (e) {
+      debugPrint("خطأ أثناء الرفع: $e");
+    }
+    return null;
+  }
+
+  // 📸 3. اختيار الصورة ورفعها وتخزين الرابط بداخل Firestore
   Future<void> _pickAndUploadProfileImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (image == null || currentUser == null) return;
 
     setState(() => _isUploadingProfileImg = true);
 
-    try {
-      final File file = File(image.path);
-      final ref = FirebaseStorage.instance.ref().child('user_profiles').child('${currentUser!.uid}.jpg');
+    final String? uploadedUrl = await _uploadImageToFreeImageHost(File(image.path));
 
-      // رفع الملف إلى السيرفر
-      await ref.putFile(file);
-      final String downloadUrl = await ref.getDownloadURL();
-
-      // تحديث رابط الصورة في Firestore
-      await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
-        'photoUrl': downloadUrl,
-      });
-
-      setState(() {
-        photoUrl = downloadUrl;
-        _isUploadingProfileImg = false;
-      });
+    if (uploadedUrl != null) {
+      // حفظ رابط الصورة بداخل قاعدة البيانات
+      await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).set({
+        'photoUrl': uploadedUrl,
+      }, SetOptions(merge: true));
 
       if (mounted) {
+        setState(() {
+          photoUrl = uploadedUrl;
+          _isUploadingProfileImg = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تحديث صورة الملف الشخصي بنجاح! ✅'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('تم حفظ صورة البروفايل بنجاح! ✅'), backgroundColor: Colors.green),
         );
       }
-    } catch (e) {
-      debugPrint("خطأ أثناء رفع الصورة: $e");
-      setState(() => _isUploadingProfileImg = false);
+    } else {
       if (mounted) {
+        setState(() => _isUploadingProfileImg = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('حدث خطأ أثناء رفع الصورة: $e'), backgroundColor: Colors.redAccent),
+          const SnackBar(content: Text('فشل رفع الصورة، يرجى المحاولة لاحقاً'), backgroundColor: Colors.redAccent),
         );
       }
     }
   }
 
-  // 🗑️ 3. حذف صورة البروفايل
+  // 🗑️ 4. حذف صورة البروفايل
   Future<void> _removeProfileImage() async {
     if (currentUser == null) return;
 
@@ -124,7 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حذف صورة الملف الشخصي'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('تم حذف صورة البروفايل'), backgroundColor: Colors.orange),
         );
       }
     } catch (e) {
@@ -132,7 +153,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 📝 4. تعديل بيانات الملف الشخصي وحفظها مباشرة في Firestore
+  // 📝 5. تعديل بيانات الملف الشخصي وحفظها مباشرة في Firestore
   void _editProfile() {
     final nameController = TextEditingController(text: userName);
     final bioController = TextEditingController(text: bio);
@@ -172,10 +193,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   bio = newBio;
                 });
 
-                await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).update({
+                await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).set({
                   'fullName': newName,
                   'bio': newBio,
-                });
+                }, SetOptions(merge: true));
               }
 
               if (mounted) Navigator.pop(context);
