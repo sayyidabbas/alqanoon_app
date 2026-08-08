@@ -83,25 +83,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // 2. منشورات المستخدمين الشخصية
   List<PostModel> _userPosts = [];
 
-  // قاعدة بيانات تجريبية للمستخدمين للبحث عنهم
-  final List<Map<String, String>> _allUsers = [
-    {
-      'username': 'abbas_law',
-      'fullName': 'سيدعباس عقيل الحسيني',
-      'bio': 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية'
-    },
-    {
-      'username': 'ahmed_legal',
-      'fullName': 'أحمد علي',
-      'bio': 'باحث قانوني متقدم'
-    },
-    {
-      'username': 'sara_lawyer',
-      'fullName': 'سارة محمود',
-      'bio': 'طالبة قانون - المرحلة الرابعة'
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -438,6 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🔍 دالة البحث المحدثة والمرتبطة بـ Firebase Firestore
   void _showUserSearchDialog() {
     showDialog(
       context: context,
@@ -445,11 +427,6 @@ class _HomeScreenState extends State<HomeScreen> {
         String query = "";
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            List<Map<String, String>> searchResults = _allUsers.where((u) {
-              return u['username']!.toLowerCase().contains(query.toLowerCase()) ||
-                     u['fullName']!.contains(query);
-            }).toList();
-
             return AlertDialog(
               backgroundColor: AppColors.cardBg,
               title: const Text('البحث عن مستخدم 🔍', style: TextStyle(color: AppColors.accent)),
@@ -460,35 +437,92 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     TextField(
                       autofocus: true,
+                      style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
-                        hintText: 'ادخل اسم المستخدم (مثال: abbas_law)...',
+                        hintText: 'ادخل الاسم أو اسم المستخدم...',
+                        hintStyle: TextStyle(color: Colors.white38),
                         prefixIcon: Icon(Icons.search, color: AppColors.accent),
                       ),
                       onChanged: (val) {
                         setDialogState(() {
-                          query = val;
+                          query = val.trim();
                         });
                       },
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: 200,
-                      child: searchResults.isEmpty
-                          ? const Center(child: Text('لا يوجد مستخدم بهذا الاسم', style: TextStyle(color: Colors.white54)))
-                          : ListView.builder(
-                              itemCount: searchResults.length,
-                              itemBuilder: (context, index) {
-                                final user = searchResults[index];
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: AppColors.accent,
-                                    child: Text(user['fullName']![0], style: const TextStyle(color: Colors.black)),
-                                  ),
-                                  title: Text(user['fullName']!),
-                                  subtitle: Text('@${user['username']}', style: const TextStyle(color: AppColors.accent)),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _openUserProfile(user);
+                      height: 250,
+                      child: query.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'اكتب اسم البحث للبدء...',
+                                style: TextStyle(color: Colors.white54),
+                              ),
+                            )
+                          : StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance.collection('users').snapshots(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(color: AppColors.accent),
+                                  );
+                                }
+
+                                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                  return const Center(
+                                    child: Text('لا يوجد مستخدمون', style: TextStyle(color: Colors.white54)),
+                                  );
+                                }
+
+                                // تصفية النتائج بحسب الاسم الكامل أو اسم المستخدم
+                                final results = snapshot.data!.docs.where((doc) {
+                                  final data = doc.data() as Map<String, dynamic>;
+                                  final fullName = (data['fullName'] ?? '').toString().toLowerCase();
+                                  final username = (data['username'] ?? '').toString().toLowerCase();
+                                  final q = query.toLowerCase();
+
+                                  return fullName.contains(q) || username.contains(q);
+                                }).toList();
+
+                                if (results.isEmpty) {
+                                  return const Center(
+                                    child: Text('لا يوجد مستخدم بهذا الاسم', style: TextStyle(color: Colors.white54)),
+                                  );
+                                }
+
+                                return ListView.builder(
+                                  itemCount: results.length,
+                                  itemBuilder: (context, index) {
+                                    final userData = results[index].data() as Map<String, dynamic>;
+                                    final fullName = userData['fullName'] ?? 'مستخدم';
+                                    final username = userData['username'] ?? 'user';
+                                    final bio = userData['bio'] ?? '';
+                                    final photoUrl = userData['photoUrl'];
+
+                                    return ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: AppColors.accent,
+                                        backgroundImage: photoUrl != null && photoUrl.toString().isNotEmpty
+                                            ? NetworkImage(photoUrl)
+                                            : null,
+                                        child: photoUrl == null || photoUrl.toString().isEmpty
+                                            ? Text(
+                                                fullName.isNotEmpty ? fullName[0] : 'ع',
+                                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                                              )
+                                            : null,
+                                      ),
+                                      title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _openUserProfile({
+                                          'username': username,
+                                          'fullName': fullName,
+                                          'bio': bio,
+                                        });
+                                      },
+                                    );
                                   },
                                 );
                               },
@@ -695,7 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const Text('الوقت المتبقي لحدث منصة القانون القادم ⏳', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: SpaceEvenly,
             children: [
               _timerUnit(days, 'يوم'),
               _timerUnit(hours, 'ساعة'),
@@ -923,4 +957,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
- 
