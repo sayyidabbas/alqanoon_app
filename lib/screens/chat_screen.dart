@@ -24,10 +24,14 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
 
+  // 🟢 توحيد المعرف الحقيقي بناءً على UID لكلا الطرفين لضمان المراسلة المباشرة
   String _getChatId() {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    final peerId = widget.peerUid ?? widget.userHandle;
-    List<String> ids = [myUid, peerId]..sort();
+    final targetId = (widget.peerUid != null && widget.peerUid!.isNotEmpty)
+        ? widget.peerUid!
+        : widget.userHandle;
+
+    List<String> ids = [myUid, targetId]..sort();
     return ids.join('_');
   }
 
@@ -40,17 +44,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final chatId = _getChatId();
 
+    final messageData = {
+      'senderId': myUid,
+      'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
+
     await FirebaseFirestore.instance
         .collection('chats')
         .doc(chatId)
         .collection('messages')
-        .add({
-      'senderId': myUid,
-      'text': text,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+        .add(messageData);
 
-    // تحديث المحادثة في الفايربيس
     await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
       'lastMessage': text,
       'lastUpdated': FieldValue.serverTimestamp(),
@@ -113,7 +118,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     final timeStr = "${time.hour}:${time.minute.toString().padLeft(2, '0')}";
 
                     return Align(
-                      alignment: isMe ? Alignment.centerLeft : Alignment.centerRight,
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -122,7 +127,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
-                          crossAxisAlignment: isMe ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                           children: [
                             Text(
                               msg['text'] ?? '',
@@ -149,7 +154,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           
-          // حقل إدخال الرسالة
           Container(
             padding: const EdgeInsets.all(8.0),
             color: AppColors.cardBg,
