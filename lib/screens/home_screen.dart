@@ -32,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final TextEditingController _searchController = TextEditingController();
 
-  List<String> _announcements = [
+  final List<String> _announcements = [
     "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
   ];
 
@@ -46,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'fullName': 'أحمد علي',
       'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
       'time': '10:30 ص',
-      'bio': 'باحث قانوني متتقدم',
+      'bio': 'باحث قانوني متقدم',
       'unreadCount': 3,
       'isMuted': false,
       'messages': [
@@ -69,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   // 1. التبليغات الرسمية
-  List<PostModel> _officialPosts = [
+  final List<PostModel> _officialPosts = [
     PostModel(
       id: '1',
       author: 'إدارة منصة القانون',
@@ -81,14 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   // 2. منشورات المستخدمين الشخصية
-  List<PostModel> _userPosts = [];
+  final List<PostModel> _userPosts = [];
 
   @override
   void initState() {
     super.initState();
+    _tickerScrollController = ScrollController();
     _loadPin();
     _startTimer();
-    _tickerScrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
@@ -97,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startTickerAnimation() {
     _tickerTimer?.cancel();
     _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
-      if (_tickerScrollController.hasClients) {
+      if (_tickerScrollController.hasClients && _tickerScrollController.position.hasContentDimensions) {
         double maxScroll = _tickerScrollController.position.maxScrollExtent;
         double currentScroll = _tickerScrollController.offset;
         if (currentScroll >= maxScroll) {
@@ -111,9 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _loadPin() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _adminPin = prefs.getString('admin_pin') ?? "1234";
-    });
+    if (mounted) {
+      setState(() {
+        _adminPin = prefs.getString('admin_pin') ?? "1234";
+      });
+    }
   }
 
   void _startTimer() {
@@ -121,9 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_targetDuration == null) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_targetDuration != null && _targetDuration!.inSeconds > 0) {
-        setState(() {
-          _targetDuration = _targetDuration! - const Duration(seconds: 1);
-        });
+        if (mounted) {
+          setState(() {
+            _targetDuration = _targetDuration! - const Duration(seconds: 1);
+          });
+        }
+      } else {
+        _countdownTimer?.cancel();
       }
     });
   }
@@ -159,7 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
           controller: pinController,
           obscureText: true,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'أدخل رمز PIN'),
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(hintText: 'أدخل رمز PIN', hintStyle: TextStyle(color: Colors.white38)),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
@@ -419,7 +426,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔍 دالة البحث المحدثة والمرتبطة بـ Firebase Firestore
   void _showUserSearchDialog() {
     showDialog(
       context: context,
@@ -474,7 +480,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 }
 
-                                // تصفية النتائج بحسب الاسم الكامل أو اسم المستخدم
                                 final results = snapshot.data!.docs.where((doc) {
                                   final data = doc.data() as Map<String, dynamic>;
                                   final fullName = (data['fullName'] ?? '').toString().toLowerCase();
@@ -729,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const Text('الوقت المتبقي لحدث منصة القانون القادم ⏳', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: SpaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _timerUnit(days, 'يوم'),
               _timerUnit(hours, 'ساعة'),
@@ -776,14 +781,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     Text('@${post.username}', style: const TextStyle(fontSize: 11, color: AppColors.accent)),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            if (post.content.isNotEmpty) Text(post.content, style: const TextStyle(fontSize: 15)),
+            if (post.content.isNotEmpty) Text(post.content, style: const TextStyle(fontSize: 15, color: Colors.white)),
             if (post.imageFile != null) ...[
               const SizedBox(height: 10),
               ClipRRect(
@@ -838,7 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Icon(services[index]['icon'], size: 40, color: AppColors.accent),
               const SizedBox(height: 8),
-              Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
             ],
           ),
         ),
@@ -846,7 +851,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔴 4. القائمة الجانبية المربوطة لحظياً بالـ Firestore
   Widget _buildDrawer(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
@@ -855,7 +859,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // 📡 المراقبة اللحظية لبيانات المستخدم الحقيقي
           StreamBuilder<DocumentSnapshot>(
             stream: currentUser != null
                 ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
@@ -891,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.person, color: AppColors.accent),
-            title: const Text('الملف الشخصي'),
+            title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -921,7 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.settings, color: AppColors.accent),
-            title: const Text('الإعدادات'),
+            title: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -940,7 +943,11 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          ListTile(leading: const Icon(Icons.info, color: AppColors.accent), title: const Text('حول التطبيق'), onTap: () {}),
+          ListTile(
+            leading: const Icon(Icons.info, color: AppColors.accent),
+            title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
+            onTap: () {},
+          ),
           const Divider(color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -957,3 +964,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
