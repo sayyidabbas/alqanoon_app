@@ -272,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // دالة مخصصة لفتح الحساب الشخصي (حسابك أنت)
   void _openMyProfile() {
     final currentUser = FirebaseAuth.instance.currentUser;
     Navigator.push(
@@ -308,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final bio = user['bio'] ?? 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية';
     final photoUrl = user['photoUrl'];
 
-    // في حال قام بالضغط على حسابه الخاص، نفتح نافذة الملف الشخصي وليس بروفايل العرض
     if (uid == FirebaseAuth.instance.currentUser?.uid) {
       _openMyProfile();
       return;
@@ -504,11 +502,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                       title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                       subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
                                       onTap: () {
-                                        Navigator.pop(context); // إغلاق نافذة البحث أولاً
-                                        
+                                        Navigator.pop(context);
                                         final currentUid = FirebaseAuth.instance.currentUser?.uid;
                                         if (doc.id == currentUid) {
-                                          _openMyProfile(); // الدخول لبروفايلك الخاص إذا بحثت عن نفسك
+                                          _openMyProfile();
                                         } else {
                                           _openUserProfile({
                                             'uid': doc.id,
@@ -516,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             'fullName': fullName,
                                             'bio': bio,
                                             'photoUrl': photoUrl,
-                                          }); // الدخول لبروفايل الآخرين
+                                          });
                                         }
                                       },
                                     );
@@ -825,12 +822,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // قسم الخدمات المحدث للربط بالملفات المستقلة
   Widget _buildServicesTab() {
     List<Map<String, dynamic>> services = [
-      {'icon': Icons.menu_book, 'title': 'المكتبة القانونية'},
-      {'icon': Icons.book, 'title': 'المواد الدراسية'},
-      {'icon': Icons.quiz, 'title': 'بنك الأسئلة'},
-      {'icon': Icons.assignment, 'title': 'الاختبارات الإلكترونية'},
+      {'icon': Icons.menu_book, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
+      {'icon': Icons.book, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
+      {'icon': Icons.quiz, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
+      {'icon': Icons.assignment, 'title': 'الاختبارات الإلكترونية', 'route': AppRoutes.electronicExams},
     ];
 
     return Padding(
@@ -843,15 +841,20 @@ class _HomeScreenState extends State<HomeScreen> {
           childAspectRatio: 1.3,
         ),
         itemCount: services.length,
-        itemBuilder: (context, index) => Card(
-          color: AppColors.cardBg,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(services[index]['icon'], size: 40, color: AppColors.accent),
-              const SizedBox(height: 8),
-              Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            ],
+        itemBuilder: (context, index) => InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, services[index]['route']);
+          },
+          child: Card(
+            color: AppColors.cardBg,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(services[index]['icon'], size: 40, color: AppColors.accent),
+                const SizedBox(height: 8),
+                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              ],
+            ),
           ),
         ),
       ),
