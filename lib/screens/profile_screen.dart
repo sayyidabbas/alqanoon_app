@@ -10,7 +10,8 @@ import '../models/post_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   final List<PostModel> posts;
-  final Function(String content, File? imageFile) onAddUserPost;
+  // 🛠️ تم تعديل المعامل لاستقبال رابط الصورة الناتجة من السيرفر بنجاح
+  final Function(String content, String? imageUrl) onAddUserPost;
 
   const ProfileScreen({
     super.key,
@@ -41,7 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 🛠️ التعديل الجوهري: رفع آمن ومضمون ومريح لـ Firebase Storage
+  // 🛠️ رفع مضمون وآمن مع الانتظار
   Future<String?> _uploadImageToStorage(File imageFile) async {
     try {
       final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -50,11 +51,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .child('post_images')
           .child(fileName);
 
-      // البدء بإنشاء المهمة والتأكد من انتظار مكتمل تماماً
       final uploadTask = ref.putFile(imageFile);
       final TaskSnapshot snapshot = await uploadTask;
 
-      // أخذ الرابط فقط بعد التأكد من اكتمال حالة الرفع بنجاح
       if (snapshot.state == TaskState.success) {
         final downloadUrl = await ref.getDownloadURL();
         return downloadUrl;
@@ -98,8 +97,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'commentsCount': 0,
       });
 
-      // استدعاء الكود الخارجي إن وجد للحفاظ على النمط
-      widget.onAddUserPost(_postController.text.trim(), _selectedImage);
+      // 🛠️ التمرير المباشر لرابط الصورة المُنشأ بنجاح للوالد
+      widget.onAddUserPost(_postController.text.trim(), imageUrl);
     }
 
     _postController.clear();
@@ -540,7 +539,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         final doc = docs[index];
                         final data = doc.data() as Map<String, dynamic>;
 
-                        // 🛡️ معالجة حقل الإعجابات بأمان
                         List<String> likes = [];
                         if (data['likes'] is List) {
                           likes = List<String>.from((data['likes'] as List).map((e) => e.toString()));
@@ -620,7 +618,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 if (postContent.isNotEmpty)
                                   Text(postContent, style: const TextStyle(color: Colors.white, fontSize: 15)),
 
-                                // 🛠️ معالجة عرض صورة المنشور بدون أخطاء
                                 if (imageUrl != null && imageUrl.isNotEmpty) ...[
                                   const SizedBox(height: 10),
                                   ClipRRect(
