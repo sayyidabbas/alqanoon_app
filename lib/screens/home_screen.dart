@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package0cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
@@ -538,10 +539,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     final comments = snapshot.data!.docs.toList();
                     if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
 
-                    // فرز التعليقات برمجياً من الأحدث للأقدم
                     comments.sort((a, b) {
-                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final aData = a.data() as Map<String, dynamic>;
+                      final bData = b.data() as Map<String, dynamic>;
+                      final aTime = aData['timestamp'] as Timestamp?;
+                      final bTime = bData['timestamp'] as Timestamp?;
+                      if (aTime == null && bTime == null) return 0;
                       if (aTime == null) return -1;
                       if (bTime == null) return 1;
                       return bTime.compareTo(aTime);
@@ -751,10 +754,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
               final posts = snapshot.data!.docs.toList();
               
-              // ترتيب المنشورات برمجياً لتجنب التعليق
               posts.sort((a, b) {
-                final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-                final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                final aData = a.data() as Map<String, dynamic>;
+                final bData = b.data() as Map<String, dynamic>;
+                final aTime = aData['timestamp'] as Timestamp?;
+                final bTime = bData['timestamp'] as Timestamp?;
+                if (aTime == null && bTime == null) return 0;
                 if (aTime == null) return -1;
                 if (bTime == null) return 1;
                 return bTime.compareTo(aTime);
