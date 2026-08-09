@@ -113,12 +113,22 @@ class UserProfileViewScreen extends StatelessWidget {
                       .collection('posts')
                       .doc(postId)
                       .collection('comments')
-                      .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-                    final comments = snapshot.data!.docs;
+                    final comments = snapshot.data!.docs.toList();
                     if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
+
+                    comments.sort((a, b) {
+                      final aData = a.data() as Map<String, dynamic>;
+                      final bData = b.data() as Map<String, dynamic>;
+                      final aTime = aData['timestamp'] as Timestamp?;
+                      final bTime = bData['timestamp'] as Timestamp?;
+                      if (aTime == null && bTime == null) return 0;
+                      if (aTime == null) return -1;
+                      if (bTime == null) return 1;
+                      return bTime.compareTo(aTime);
+                    });
 
                     return ListView.builder(
                       itemCount: comments.length,
@@ -345,11 +355,10 @@ class UserProfileViewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 📡 جلب المنشورات مرتبة تنازلياً مع مراعاة وقت النشر
             StreamBuilder<QuerySnapshot>(
               stream: peerUid != null && peerUid!.isNotEmpty
-                  ? FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: peerUid).orderBy('timestamp', descending: true).snapshots()
-                  : FirebaseFirestore.instance.collection('posts').where('username', isEqualTo: username).orderBy('timestamp', descending: true).snapshots(),
+                  ? FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: peerUid).snapshots()
+                  : FirebaseFirestore.instance.collection('posts').where('username', isEqualTo: username).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Padding(
@@ -358,7 +367,14 @@ class UserProfileViewScreen extends StatelessWidget {
                   );
                 }
 
-                final docs = snapshot.data?.docs ?? [];
+                if (snapshot.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Text('حدث خطأ أثناء جلب المنشورات.', style: TextStyle(color: Colors.white54)),
+                  );
+                }
+
+                final docs = snapshot.data?.docs.toList() ?? [];
 
                 if (docs.isEmpty) {
                   return const Padding(
@@ -366,6 +382,17 @@ class UserProfileViewScreen extends StatelessWidget {
                     child: Text('لا توجد منشورات لهذا المستخدم حتى الآن.', style: TextStyle(color: Colors.white54)),
                   );
                 }
+
+                docs.sort((a, b) {
+                  final aData = a.data() as Map<String, dynamic>;
+                  final bData = b.data() as Map<String, dynamic>;
+                  final aTime = aData['timestamp'] as Timestamp?;
+                  final bTime = bData['timestamp'] as Timestamp?;
+                  if (aTime == null && bTime == null) return 0;
+                  if (aTime == null) return -1;
+                  if (bTime == null) return 1;
+                  return bTime.compareTo(aTime);
+                });
 
                 return ListView.builder(
                   shrinkWrap: true,
