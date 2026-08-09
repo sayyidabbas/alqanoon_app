@@ -255,10 +255,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final comments = snapshot.data!.docs.toList();
                     if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
 
-                    // فرز التعليقات برمجياً من الأحدث للأقدم
                     comments.sort((a, b) {
-                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final aData = a.data() as Map<String, dynamic>;
+                      final bData = b.data() as Map<String, dynamic>;
+                      final aTime = aData['timestamp'] as Timestamp?;
+                      final bTime = bData['timestamp'] as Timestamp?;
+                      if (aTime == null && bTime == null) return 0;
                       if (aTime == null) return -1;
                       if (bTime == null) return 1;
                       return bTime.compareTo(aTime);
@@ -626,10 +628,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     }
 
-                    // فرز منشورات المستخدم برمجياً من الأحدث للأقدم
                     docs.sort((a, b) {
-                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
-                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final aData = a.data() as Map<String, dynamic>;
+                      final bData = b.data() as Map<String, dynamic>;
+                      final aTime = aData['timestamp'] as Timestamp?;
+                      final bTime = bData['timestamp'] as Timestamp?;
+                      if (aTime == null && bTime == null) return 0;
                       if (aTime == null) return -1;
                       if (bTime == null) return 1;
                       return bTime.compareTo(aTime);
