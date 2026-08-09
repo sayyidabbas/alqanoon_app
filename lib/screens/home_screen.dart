@@ -27,7 +27,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
   Timer? _countdownTimer;
 
-  // متحكمات حركة شريط الإعلانات الأخبار
   late ScrollController _tickerScrollController;
   Timer? _tickerTimer;
 
@@ -87,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 🕒 دالة تنسيق الوقت
   String _formatTimestamp(dynamic timestamp) {
     if (timestamp == null) return 'الآن';
     DateTime date;
@@ -104,11 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
     if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
     if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  // 🖼️ دالة جلب الصورة
   ImageProvider? _getProfileImage(String? url) {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('data:image')) {
@@ -511,7 +508,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 💬 نافذة التعليقات المتطورة بدعم زيادة بروفايل المعلق
   void _showCommentsModal(BuildContext context, String postId) {
     final commentController = TextEditingController();
 
@@ -535,12 +531,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       .collection('posts')
                       .doc(postId)
                       .collection('comments')
-                      .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-                    final comments = snapshot.data!.docs;
+                    
+                    final comments = snapshot.data!.docs.toList();
                     if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
+
+                    // فرز التعليقات برمجياً من الأحدث للأقدم
+                    comments.sort((a, b) {
+                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      if (aTime == null) return -1;
+                      if (bTime == null) return 1;
+                      return bTime.compareTo(aTime);
+                    });
 
                     return ListView.builder(
                       itemCount: comments.length,
@@ -705,7 +710,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_targetDuration != null) _buildCountdownCard(),
           if (_targetDuration != null) const SizedBox(height: 20),
 
-          // 📌 أولاً: المنشورات الرسمية اليدوية للمسؤول
           if (_officialPosts.isNotEmpty) ...[
             const Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
             const SizedBox(height: 12),
@@ -718,18 +722,22 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
           ],
 
-          // 📡 ثانياً: منشورات المستخدمين من Firestore مرتبة تنازلياً
           const Text('خلاصة المنشورات 🏛️', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
           const SizedBox(height: 12),
 
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('posts')
-                .orderBy('timestamp', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+              }
+
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Text('حدث خطأ أثناء تحميل المنشورات', style: TextStyle(color: Colors.white54)),
+                );
               }
 
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -741,7 +749,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               }
 
-              final posts = snapshot.data!.docs;
+              final posts = snapshot.data!.docs.toList();
+              
+              // ترتيب المنشورات برمجياً لتجنب التعليق
+              posts.sort((a, b) {
+                final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                if (aTime == null) return -1;
+                if (bTime == null) return 1;
+                return bTime.compareTo(aTime);
+              });
 
               return ListView.builder(
                 shrinkWrap: true,
@@ -770,7 +787,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // رأس المنشور (جلب معلومات المستخدم الحية)
                           StreamBuilder<DocumentSnapshot>(
                             stream: postUserId.isNotEmpty
                                 ? FirebaseFirestore.instance.collection('users').doc(postUserId).snapshots()
