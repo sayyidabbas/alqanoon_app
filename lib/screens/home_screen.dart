@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -46,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'fullName': 'أحمد علي',
       'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
       'time': '10:30 ص',
-      'bio': 'باحث قانوني متتقدم',
+      'bio': 'باحث قانوني متقدم',
       'unreadCount': 3,
       'isMuted': false,
     },
@@ -85,6 +85,36 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
+  }
+
+  // 🕒 دالة تنسيق الوقت
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'الآن';
+    DateTime date;
+    if (timestamp is Timestamp) {
+      date = timestamp.toDate();
+    } else if (timestamp is DateTime) {
+      date = timestamp;
+    } else {
+      return '';
+    }
+
+    final diff = DateTime.now().difference(date);
+    if (diff.inSeconds < 60) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inDays == 1) return 'أمس';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  // 🖼️ دالة جلب الصورة
+  ImageProvider? _getProfileImage(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      return MemoryImage(base64Decode(url.split(',').last));
+    }
+    return NetworkImage(url);
   }
 
   void _startTickerAnimation() {
@@ -248,9 +278,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openUserProfile(Map<String, dynamic> user) {
     final uid = user['uid'] ?? user['userId'] ?? '';
     final username = user['username'] ?? '';
-    final fullName = user['fullName'] ?? '';
+    final fullName = user['fullName'] ?? user['author'] ?? '';
     final bio = user['bio'] ?? 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية';
     final photoUrl = user['photoUrl'];
+
+    if (uid == FirebaseAuth.instance.currentUser?.uid) return;
 
     Navigator.push(
       context,
@@ -431,10 +463,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     return ListTile(
                                       leading: CircleAvatar(
                                         backgroundColor: AppColors.accent,
-                                        backgroundImage: photoUrl != null && photoUrl.toString().isNotEmpty
-                                            ? NetworkImage(photoUrl)
-                                            : null,
-                                        child: photoUrl == null || photoUrl.toString().isEmpty
+                                        backgroundImage: _getProfileImage(photoUrl),
+                                        child: (photoUrl == null || photoUrl.toString().isEmpty)
                                             ? Text(
                                                 fullName.isNotEmpty ? fullName[0] : 'ع',
                                                 style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
@@ -469,11 +499,158 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _toggleLike(String postId, List<dynamic> likes) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+    if (likes.contains(uid)) {
+      await postRef.update({'likes': FieldValue.arrayRemove([uid])});
+    } else {
+      await postRef.update({'likes': FieldValue.arrayUnion([uid])});
+    }
+  }
+
+  // 💬 نافذة التعليقات المتطورة بدعم زيادة بروفايل المعلق
+  void _showCommentsModal(BuildContext context, String postId) {
+    final commentController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 300,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .doc(postId)
+                      .collection('comments')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                    final comments = snapshot.data!.docs;
+                    if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
+
+                    return ListView.builder(
+                      itemCount: comments.length,
+                      itemBuilder: (context, i) {
+                        final data = comments[i].data() as Map<String, dynamic>;
+                        final author = data['author'] ?? 'مستخدم';
+                        final photoUrl = data['photoUrl'];
+                        final commentUserId = data['userId'];
+                        final username = data['username'] ?? 'user';
+
+                        return ListTile(
+                          leading: GestureDetector(
+                            onTap: () {
+                              if (commentUserId != null) {
+                                Navigator.pop(context);
+                                _openUserProfile({
+                                  'uid': commentUserId,
+                                  'username': username,
+                                  'fullName': author,
+                                  'photoUrl': photoUrl,
+                                });
+                              }
+                            },
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.accent,
+                              backgroundImage: _getProfileImage(photoUrl),
+                              child: (photoUrl == null || photoUrl.isEmpty)
+                                  ? Text(author.isNotEmpty ? author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (commentUserId != null) {
+                                    Navigator.pop(context);
+                                    _openUserProfile({
+                                      'uid': commentUserId,
+                                      'username': username,
+                                      'fullName': author,
+                                      'photoUrl': photoUrl,
+                                    });
+                                  }
+                                },
+                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ),
+                              const Spacer(),
+                              Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
+                          subtitle: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white)),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: commentController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(hintText: 'اكتب تعليقاً...', hintStyle: TextStyle(color: Colors.white38)),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: AppColors.accent),
+                    onPressed: () async {
+                      final text = commentController.text.trim();
+                      if (text.isEmpty) return;
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                        final uData = uDoc.data();
+
+                        await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
+                          'text': text,
+                          'author': uData?['fullName'] ?? user.displayName ?? 'مستخدم',
+                          'username': uData?['username'] ?? 'user',
+                          'photoUrl': uData?['photoUrl'],
+                          'userId': user.uid,
+                          'timestamp': FieldValue.serverTimestamp(),
+                        });
+                        await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+                          'commentsCount': FieldValue.increment(1),
+                        });
+                        commentController.clear();
+                      }
+                    },
+                  )
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('منصة القانون'),
+        backgroundColor: AppColors.primary,
         actions: [
           IconButton(
             icon: const Icon(Icons.search, color: AppColors.accent),
@@ -516,6 +693,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainHomeTab() {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -525,13 +704,185 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_announcements.isNotEmpty) const SizedBox(height: 16),
           if (_targetDuration != null) _buildCountdownCard(),
           if (_targetDuration != null) const SizedBox(height: 20),
-          const Text('التبليغات الرسمية والتحديثات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
+
+          // 📌 أولاً: المنشورات الرسمية اليدوية للمسؤول
+          if (_officialPosts.isNotEmpty) ...[
+            const Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
+            const SizedBox(height: 12),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _officialPosts.length,
+              itemBuilder: (context, index) => _buildPostCard(_officialPosts[index]),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 📡 ثانياً: منشورات المستخدمين من Firestore مرتبة تنازلياً
+          const Text('خلاصة المنشورات 🏛️', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
           const SizedBox(height: 12),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _officialPosts.length,
-            itemBuilder: (context, index) => _buildPostCard(_officialPosts[index]),
+
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('posts')
+                .orderBy('timestamp', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text('لا توجد منشورات حتى الآن في العامة', style: TextStyle(color: Colors.white54)),
+                  ),
+                );
+              }
+
+              final posts = snapshot.data!.docs;
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: posts.length,
+                itemBuilder: (context, index) {
+                  final doc = posts[index];
+                  final data = doc.data() as Map<String, dynamic>;
+
+                  final String postUserId = data['userId'] ?? '';
+                  final String author = data['author'] ?? 'طالب قانون';
+                  final String username = data['username'] ?? 'user';
+                  final String content = data['content'] ?? '';
+                  final String? imageUrl = data['imageUrl'] ?? data['imagePath'];
+                  final List<dynamic> likes = data['likes'] ?? [];
+                  final bool isLiked = likes.contains(currentUid);
+                  final int commentsCount = data['commentsCount'] ?? 0;
+                  final String timeAgo = _formatTimestamp(data['timestamp']);
+
+                  return Card(
+                    color: AppColors.cardBg,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // رأس المنشور (جلب معلومات المستخدم الحية)
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: postUserId.isNotEmpty
+                                ? FirebaseFirestore.instance.collection('users').doc(postUserId).snapshots()
+                                : null,
+                            builder: (context, userSnap) {
+                              String? photoUrl;
+                              if (userSnap.hasData && userSnap.data != null && userSnap.data!.exists) {
+                                final uData = userSnap.data!.data() as Map<String, dynamic>;
+                                photoUrl = uData['photoUrl'];
+                              }
+
+                              return InkWell(
+                                onTap: () {
+                                  _openUserProfile({
+                                    'uid': postUserId,
+                                    'username': username,
+                                    'fullName': author,
+                                    'photoUrl': photoUrl,
+                                  });
+                                },
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: AppColors.accent,
+                                      backgroundImage: _getProfileImage(photoUrl),
+                                      child: (photoUrl == null || photoUrl.isEmpty)
+                                          ? Text(author.isNotEmpty ? author[0] : 'ع',
+                                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(author, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                        Row(
+                                          children: [
+                                            Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 11)),
+                                            const SizedBox(width: 6),
+                                            const Text('•', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                                            const SizedBox(width: 6),
+                                            Text(timeAgo, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 10),
+                          if (content.isNotEmpty)
+                            Text(content, style: const TextStyle(color: Colors.white, fontSize: 15)),
+
+                          if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: imageUrl.startsWith('data:image')
+                                  ? Image.memory(
+                                      base64Decode(imageUrl.split(',').last),
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.network(
+                                      imageUrl,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                                    ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 10),
+                          const Divider(color: Colors.white10),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              InkWell(
+                                onTap: () => _toggleLike(doc.id, likes),
+                                child: Row(
+                                  children: [
+                                    Icon(isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                        color: isLiked ? AppColors.accent : Colors.white70, size: 20),
+                                    const SizedBox(width: 6),
+                                    Text('${likes.length}', style: TextStyle(color: isLiked ? AppColors.accent : Colors.white70)),
+                                  ],
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => _showCommentsModal(context, doc.id),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.comment_outlined, color: Colors.white70, size: 20),
+                                    const SizedBox(width: 6),
+                                    Text('$commentsCount', style: const TextStyle(color: Colors.white70)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),
@@ -598,10 +949,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       CircleAvatar(
                         backgroundColor: AppColors.accent,
-                        child: Text(
-                          chat['fullName'][0],
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                        ),
+                        backgroundImage: _getProfileImage(chat['photoUrl']),
+                        child: (chat['photoUrl'] == null || chat['photoUrl'].toString().isEmpty)
+                            ? Text(
+                                chat['fullName'][0],
+                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                              )
+                            : null,
                       ),
                       if (isMuted)
                         const Positioned(
@@ -814,8 +1168,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: AppColors.accent,
-                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                  child: photoUrl == null
+                  backgroundImage: _getProfileImage(photoUrl),
+                  child: photoUrl == null || photoUrl.isEmpty
                       ? Text(
                           name.isNotEmpty ? name[0] : 'ع',
                           style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold),
@@ -835,7 +1189,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => ProfileScreen(
                     posts: _userPosts,
-                    // 🛠️ الإصلاح المباشر: استقبال رابط الصورة الجاهز المرفوع على الفايربيس بدلاً من كائن الملف المحلي
                     onAddUserPost: (content, imageUrl) {
                       setState(() {
                         _userPosts.insert(
@@ -899,3 +1252,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
