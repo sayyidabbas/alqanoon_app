@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http; // تم استبدال firebase_storage بحزمة http للرفع المجاني
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 
@@ -32,7 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery, 
-      imageQuality: 70
+      imageQuality: 50, // ضغط الصورة لضمان سرعة الرفع والحفظ
     );
 
     if (pickedFile != null) {
@@ -42,37 +41,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 🌐 رفع الصورة مجاناً وسريعاً عبر سيرفر ImgBB الخارجي بدلاً من Firebase Storage المغلق
+  // 🌐 تحويل الصورة إلى Base64 وحفظها مباشرة دون الحاجة لسيرفرات خارجية أو Firebase Storage
   Future<String?> _uploadImageToStorage(File imageFile) async {
     try {
-      const apiKey = 'd89b9423c4a250325437bb960df76ee1'; 
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('https://api.imgbb.com/1/upload?key=$apiKey'),
-      );
-
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
-      );
-
-      final response = await request.send();
-      final responseData = await response.stream.bytesToString();
-      final jsonResponse = jsonDecode(responseData);
-
-      if (response.statusCode == 200 && jsonResponse['success'] == true) {
-        return jsonResponse['data']['url'];
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('فشل رفع الصورة على الخادم المجاني')),
-          );
-        }
-        return null;
-      }
+      final bytes = await imageFile.readAsBytes();
+      final base64String = base64Encode(bytes);
+      return 'data:image/jpeg;base64,$base64String';
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('حدث خطأ أثناء الرفع: $e')),
+          SnackBar(content: Text('حدث خطأ أثناء معالجة الصورة: $e')),
         );
       }
       return null;
@@ -399,7 +377,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   radius: 50,
                   backgroundColor: AppColors.accent,
                   backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
+                      ? (photoUrl.startsWith('data:image')
+                          ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
+                          : NetworkImage(photoUrl))
                       : null,
                   child: photoUrl == null || photoUrl.isEmpty
                       ? Text(
@@ -575,7 +555,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         CircleAvatar(
                                           radius: 16,
                                           backgroundColor: AppColors.accent,
-                                          backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                                          backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                              ? (photoUrl.startsWith('data:image')
+                                                  ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
+                                                  : NetworkImage(photoUrl))
+                                              : null,
                                           child: photoUrl == null || photoUrl.isEmpty
                                               ? Text(
                                                   fullName.isNotEmpty ? fullName[0] : 'ع',
@@ -631,24 +615,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   const SizedBox(height: 10),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      imageUrl,
-                                      width: double.infinity,
-                                      fit: BoxFit.cover,
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return Container(
-                                          height: 180,
-                                          color: Colors.white10,
-                                          child: const Center(
-                                            child: CircularProgressIndicator(color: AppColors.accent),
+                                    child: imageUrl.startsWith('data:image')
+                                        ? Image.memory(
+                                            base64Decode(imageUrl.split(',').last),
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.network(
+                                            imageUrl,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return const SizedBox.shrink();
+                                            },
                                           ),
-                                        );
-                                      },
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const SizedBox.shrink();
-                                      },
-                                    ),
                                   ),
                                 ],
 
@@ -695,3 +675,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+ 
