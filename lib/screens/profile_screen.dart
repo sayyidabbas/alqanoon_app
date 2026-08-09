@@ -7,11 +7,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
+import 'user_profile_view_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final List<PostModel> posts;
   final Function(String content, String? imageUrl) onAddUserPost;
-  final String? targetUserId; // 👈 يُمرر معرف المستخدم المطلوب زيارة بروفايله (إذا كان زائر)
+  final String? targetUserId;
 
   const ProfileScreen({
     super.key,
@@ -29,14 +30,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _selectedImage;
   bool _isUploading = false;
 
-  // معرف صاحب البروفايل المعروض (إما الزائر المحدد أو المستخدم الحالي)
   String get _profileOwnerId =>
       widget.targetUserId ?? FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // هل المستخدم الحالي هو نفسه صاحب البروفايل؟
   bool get _isMyProfile {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     return currentUid != null && currentUid == _profileOwnerId;
+  }
+
+  // 🕒 دالة تنسيق الوقت
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'الآن';
+    DateTime date;
+    if (timestamp is Timestamp) {
+      date = timestamp.toDate();
+    } else if (timestamp is DateTime) {
+      date = timestamp;
+    } else {
+      return '';
+    }
+
+    final diff = DateTime.now().difference(date);
+    if (diff.inSeconds < 60) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inDays == 1) return 'أمس';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  // 🖼️ دالة معالجة صورة البروفايل
+  ImageProvider? _getProfileImage(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      return MemoryImage(base64Decode(url.split(',').last));
+    }
+    return NetworkImage(url);
   }
 
   Future<void> _pickImage() async {
@@ -198,6 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 💬 نافذة التعليقات المتطورة بدعم رؤية بروفايل المعلق
   void _showCommentsModal(BuildContext context, String postId) {
     final commentController = TextEditingController();
 
@@ -215,7 +245,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),
               SizedBox(
-                height: 250,
+                height: 300,
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
@@ -232,8 +262,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       itemCount: comments.length,
                       itemBuilder: (context, i) {
                         final data = comments[i].data() as Map<String, dynamic>;
+                        final author = data['author'] ?? 'مستخدم';
+                        final photoUrl = data['photoUrl'];
+                        final commentUserId = data['userId'];
+                        final username = data['username'] ?? 'user';
+
                         return ListTile(
-                          title: Text(data['author'] ?? 'مستخدم', style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                          leading: GestureDetector(
+                            onTap: () {
+                              if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UserProfileViewScreen(
+                                      peerUid: commentUserId,
+                                      username: username,
+                                      fullName: author,
+                                      photoUrl: photoUrl,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.accent,
+                              backgroundImage: _getProfileImage(photoUrl),
+                              child: (photoUrl == null || photoUrl.isEmpty)
+                                  ? Text(author.isNotEmpty ? author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UserProfileViewScreen(
+                                          peerUid: commentUserId,
+                                          username: username,
+                                          fullName: author,
+                                          photoUrl: photoUrl,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ),
+                              const Spacer(),
+                              Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
                           subtitle: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white)),
                         );
                       },
@@ -257,9 +340,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (text.isEmpty) return;
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
+                        final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                        final uData = uDoc.data();
+
                         await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
                           'text': text,
-                          'author': user.displayName ?? 'مستخدم',
+                          'author': uData?['fullName'] ?? user.displayName ?? 'مستخدم',
+                          'username': uData?['username'] ?? 'user',
+                          'photoUrl': uData?['photoUrl'],
+                          'userId': user.uid,
                           'timestamp': FieldValue.serverTimestamp(),
                         });
                         await FirebaseFirestore.instance.collection('posts').doc(postId).update({
@@ -363,7 +452,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.primary,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        // 📡 يجلب بيانات صاحب البروفايل المعروض (سواء الحساب الحالي أو الزائر)
         stream: _profileOwnerId.isNotEmpty
             ? FirebaseFirestore.instance.collection('users').doc(_profileOwnerId).snapshots()
             : null,
@@ -388,12 +476,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: AppColors.accent,
-                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                      ? (photoUrl.startsWith('data:image')
-                          ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
-                          : NetworkImage(photoUrl))
-                      : null,
-                  child: photoUrl == null || photoUrl.isEmpty
+                  backgroundImage: _getProfileImage(photoUrl),
+                  child: (photoUrl == null || photoUrl.isEmpty)
                       ? Text(
                           fullName.isNotEmpty ? fullName[0] : 'ع',
                           style: const TextStyle(fontSize: 36, color: Colors.black, fontWeight: FontWeight.bold),
@@ -429,7 +513,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
 
-                // 👈 يظهر زر التعديل فقط إذا كان المستخدم يزور حسابه الشخصي
                 if (_isMyProfile)
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
@@ -445,7 +528,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Divider(color: Colors.white24),
                 const SizedBox(height: 10),
 
-                // 👈 قسم كتابة المنشور يظهر فقط في الملف الشخصي للمستخدم الذاتي
                 if (_isMyProfile) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -511,11 +593,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // 📡 منشورات صاحب البروفايل المكتوبة في قاعدة البيانات
+                // 📡 مرتبة تنازلياً حسب الوقت (الأحدث في الأعلى)
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
                       .where('userId', isEqualTo: _profileOwnerId)
+                      .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, postSnapshot) {
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -557,6 +640,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         final String postContent = data['content'] ?? '';
                         final String? imageUrl = data['imageUrl'] ?? data['imagePath'];
                         final String postAuthor = data['author'] ?? fullName;
+                        final String postTime = _formatTimestamp(data['timestamp']);
 
                         return Card(
                           color: AppColors.cardBg,
@@ -575,12 +659,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         CircleAvatar(
                                           radius: 16,
                                           backgroundColor: AppColors.accent,
-                                          backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                                              ? (photoUrl.startsWith('data:image')
-                                                  ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
-                                                  : NetworkImage(photoUrl))
-                                              : null,
-                                          child: photoUrl == null || photoUrl.isEmpty
+                                          backgroundImage: _getProfileImage(photoUrl),
+                                          child: (photoUrl == null || photoUrl.isEmpty)
                                               ? Text(
                                                   postAuthor.isNotEmpty ? postAuthor[0] : 'ع',
                                                   style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
@@ -588,10 +668,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               : null,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(postAuthor, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(postAuthor, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                            Text(postTime, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                                          ],
+                                        ),
                                       ],
                                     ),
-                                    // 👈 قائمة خيارات المنشور تظهر فقط لصاحب المنشور الذاتي
                                     if (_isMyProfile)
                                       PopupMenuButton<String>(
                                         icon: const Icon(Icons.more_vert, color: Colors.white70),
@@ -628,7 +713,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 8),
 
                                 if (postContent.isNotEmpty)
                                   Text(postContent, style: const TextStyle(color: Colors.white, fontSize: 15)),
@@ -647,9 +732,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             imageUrl,
                                             width: double.infinity,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return const SizedBox.shrink();
-                                            },
+                                            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                                           ),
                                   ),
                                 ],
