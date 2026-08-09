@@ -245,7 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🟢 التعديل المباشر: فتح الشاشة تفاعلياً وتمرير uid والمراسلة المباشرة
   void _openUserProfile(Map<String, dynamic> user) {
     final uid = user['uid'] ?? user['userId'] ?? '';
     final username = user['username'] ?? '';
@@ -836,7 +835,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => ProfileScreen(
                     posts: _userPosts,
-                    onAddUserPost: (content, imageFile) {
+                    // 🛠️ الإصلاح المباشر: استقبال رابط الصورة الجاهز المرفوع على الفايربيس بدلاً من كائن الملف المحلي
+                    onAddUserPost: (content, imageUrl) {
                       setState(() {
                         _userPosts.insert(
                           0,
@@ -846,7 +846,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             author: currentUser?.displayName ?? 'طالب قانون',
                             username: 'my_user',
                             content: content,
-                            imageFile: imageFile,
+                            imageFile: null,
                             timestamp: DateTime.now(),
                           ),
                         );
@@ -899,4 +899,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
- 
