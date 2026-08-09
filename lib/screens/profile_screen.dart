@@ -11,11 +11,13 @@ import '../models/post_model.dart';
 class ProfileScreen extends StatefulWidget {
   final List<PostModel> posts;
   final Function(String content, String? imageUrl) onAddUserPost;
+  final String? targetUserId; // 👈 يُمرر معرف المستخدم المطلوب زيارة بروفايله (إذا كان زائر)
 
   const ProfileScreen({
     super.key,
     required this.posts,
     required this.onAddUserPost,
+    this.targetUserId,
   });
 
   @override
@@ -27,11 +29,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   File? _selectedImage;
   bool _isUploading = false;
 
+  // معرف صاحب البروفايل المعروض (إما الزائر المحدد أو المستخدم الحالي)
+  String get _profileOwnerId =>
+      widget.targetUserId ?? FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  // هل المستخدم الحالي هو نفسه صاحب البروفايل؟
+  bool get _isMyProfile {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    return currentUid != null && currentUid == _profileOwnerId;
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery, 
-      imageQuality: 50, // ضغط الصورة لضمان سرعة الرفع والحفظ
+      source: ImageSource.gallery,
+      imageQuality: 50,
     );
 
     if (pickedFile != null) {
@@ -41,7 +53,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 🌐 تحويل الصورة إلى Base64 وحفظها مباشرة دون الحاجة لسيرفرات خارجية أو Firebase Storage
   Future<String?> _uploadImageToStorage(File imageFile) async {
     try {
       final bytes = await imageFile.readAsBytes();
@@ -348,17 +359,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('الملف الشخصي'),
+        title: Text(_isMyProfile ? 'الملف الشخصي' : 'بروفايل المستخدم'),
         backgroundColor: AppColors.primary,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: currentUser != null
-            ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
+        // 📡 يجلب بيانات صاحب البروفايل المعروض (سواء الحساب الحالي أو الزائر)
+        stream: _profileOwnerId.isNotEmpty
+            ? FirebaseFirestore.instance.collection('users').doc(_profileOwnerId).snapshots()
             : null,
         builder: (context, snapshot) {
-          String fullName = currentUser?.displayName ?? 'طالب قانون';
-          String username = 'my_user';
-          String bio = 'طالب قانون بجامعة بغداد';
+          String fullName = _isMyProfile ? (currentUser?.displayName ?? 'طالب قانون') : 'مستخدم';
+          String username = 'user';
+          String bio = 'طالب قانون';
           String? photoUrl;
 
           if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
@@ -416,87 +428,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
-                
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accent,
-                    side: const BorderSide(color: AppColors.accent),
+
+                // 👈 يظهر زر التعديل فقط إذا كان المستخدم يزور حسابه الشخصي
+                if (_isMyProfile)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accent,
+                      side: const BorderSide(color: AppColors.accent),
+                    ),
+                    onPressed: () => _showEditProfileDialog(fullName, username, bio),
+                    icon: const Icon(Icons.edit, size: 18),
+                    label: const Text('تعديل الملف الشخصي'),
                   ),
-                  onPressed: () => _showEditProfileDialog(fullName, username, bio),
-                  icon: const Icon(Icons.edit, size: 18),
-                  label: const Text('تعديل الملف الشخصي'),
-                ),
 
                 const SizedBox(height: 20),
                 const Divider(color: Colors.white24),
                 const SizedBox(height: 10),
 
-                // قسم كتابة المنشور
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: _postController,
-                        maxLines: 3,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: const InputDecoration(
-                          hintText: 'بماذا تفكر اليوم؟ شارك مع زملائك...',
-                          hintStyle: TextStyle(color: Colors.white38),
-                          border: InputBorder.none,
-                        ),
-                      ),
-                      if (_selectedImage != null)
-                        Stack(
-                          alignment: Alignment.topRight,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(_selectedImage!, height: 150, width: double.infinity, fit: BoxFit.cover),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.cancel, color: Colors.red),
-                              onPressed: () => setState(() => _selectedImage = null),
-                            )
-                          ],
-                        ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.image, color: AppColors.accent),
-                            onPressed: _pickImage,
+                // 👈 قسم كتابة المنشور يظهر فقط في الملف الشخصي للمستخدم الذاتي
+                if (_isMyProfile) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _postController,
+                          maxLines: 3,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            hintText: 'بماذا تفكر اليوم؟ شارك مع زملائك...',
+                            hintStyle: TextStyle(color: Colors.white38),
+                            border: InputBorder.none,
                           ),
-                          _isUploading
-                              ? const CircularProgressIndicator(color: AppColors.accent)
-                              : ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                                  onPressed: _submitPost,
-                                  child: const Text('نشر', style: TextStyle(color: Colors.black)),
-                                ),
-                        ],
-                      )
-                    ],
+                        ),
+                        if (_selectedImage != null)
+                          Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(_selectedImage!, height: 150, width: double.infinity, fit: BoxFit.cover),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.cancel, color: Colors.red),
+                                onPressed: () => setState(() => _selectedImage = null),
+                              )
+                            ],
+                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.image, color: AppColors.accent),
+                              onPressed: _pickImage,
+                            ),
+                            _isUploading
+                                ? const CircularProgressIndicator(color: AppColors.accent)
+                                : ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                                    onPressed: _submitPost,
+                                    child: const Text('نشر', style: TextStyle(color: Colors.black)),
+                                  ),
+                          ],
+                        )
+                      ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                ],
 
-                const SizedBox(height: 20),
-                const Align(
+                Align(
                   alignment: Alignment.centerRight,
-                  child: Text('منشوراتي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
+                  child: Text(
+                    _isMyProfile ? 'منشوراتي' : 'منشورات $fullName',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent),
+                  ),
                 ),
                 const SizedBox(height: 10),
 
-                // 📡 منشورات المستخدم الحقيقية المباشرة من Firestore
+                // 📡 منشورات صاحب البروفايل المكتوبة في قاعدة البيانات
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
-                      .where('userId', isEqualTo: currentUser?.uid)
+                      .where('userId', isEqualTo: _profileOwnerId)
                       .snapshots(),
                   builder: (context, postSnapshot) {
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -515,7 +534,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       return const Center(
                         child: Padding(
                           padding: EdgeInsets.all(20.0),
-                          child: Text('لم تقم بنشر أي منشور بعد.', style: TextStyle(color: Colors.white38)),
+                          child: Text('لا توجد منشورات متاحة.', style: TextStyle(color: Colors.white38)),
                         ),
                       );
                     }
@@ -537,6 +556,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         final commentsCount = data['commentsCount'] ?? 0;
                         final String postContent = data['content'] ?? '';
                         final String? imageUrl = data['imageUrl'] ?? data['imagePath'];
+                        final String postAuthor = data['author'] ?? fullName;
 
                         return Card(
                           color: AppColors.cardBg,
@@ -562,48 +582,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               : null,
                                           child: photoUrl == null || photoUrl.isEmpty
                                               ? Text(
-                                                  fullName.isNotEmpty ? fullName[0] : 'ع',
+                                                  postAuthor.isNotEmpty ? postAuthor[0] : 'ع',
                                                   style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
                                                 )
                                               : null,
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                        Text(postAuthor, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                                       ],
                                     ),
-                                    PopupMenuButton<String>(
-                                      icon: const Icon(Icons.more_vert, color: Colors.white70),
-                                      color: AppColors.cardBg,
-                                      onSelected: (value) {
-                                        if (value == 'edit') {
-                                          _editPostDialog(doc.id, postContent);
-                                        } else if (value == 'delete') {
-                                          _deletePostConfirm(doc.id);
-                                        }
-                                      },
-                                      itemBuilder: (BuildContext context) => [
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.edit, color: AppColors.accent, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('تعديل المنشور', style: TextStyle(color: Colors.white)),
-                                            ],
+                                    // 👈 قائمة خيارات المنشور تظهر فقط لصاحب المنشور الذاتي
+                                    if (_isMyProfile)
+                                      PopupMenuButton<String>(
+                                        icon: const Icon(Icons.more_vert, color: Colors.white70),
+                                        color: AppColors.cardBg,
+                                        onSelected: (value) {
+                                          if (value == 'edit') {
+                                            _editPostDialog(doc.id, postContent);
+                                          } else if (value == 'delete') {
+                                            _deletePostConfirm(doc.id);
+                                          }
+                                        },
+                                        itemBuilder: (BuildContext context) => [
+                                          const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.edit, color: AppColors.accent, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('تعديل المنشور', style: TextStyle(color: Colors.white)),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.delete, color: Colors.redAccent, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('حذف المنشور', style: TextStyle(color: Colors.redAccent)),
-                                            ],
+                                          const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                                                SizedBox(width: 8),
+                                                Text('حذف المنشور', style: TextStyle(color: Colors.redAccent)),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
+                                        ],
+                                      ),
                                   ],
                                 ),
                                 const SizedBox(height: 6),
