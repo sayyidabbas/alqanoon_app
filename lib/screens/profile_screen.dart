@@ -95,6 +95,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // دالة تغيير صورة البروفايل ورفعها لقاعدة البيانات
+  Future<void> _updateProfilePicture() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 40,
+    );
+
+    if (pickedFile != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('جاري تحديث الصورة، يرجى الانتظار...')),
+      );
+
+      final file = File(pickedFile.path);
+      final base64String = await _uploadImageToStorage(file);
+
+      if (base64String != null) {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+            'photoUrl': base64String,
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('تم تحديث صورة الملف الشخصي بنجاح!')),
+            );
+          }
+        }
+      }
+    }
+  }
+
   void _submitPost() async {
     if (_postController.text.trim().isEmpty && _selectedImage == null) return;
 
@@ -481,16 +514,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: AppColors.accent,
-                  backgroundImage: _getProfileImage(photoUrl),
-                  child: (photoUrl == null || photoUrl.isEmpty)
-                      ? Text(
-                          fullName.isNotEmpty ? fullName[0] : 'ع',
-                          style: const TextStyle(fontSize: 36, color: Colors.black, fontWeight: FontWeight.bold),
-                        )
-                      : null,
+                Stack(
+                  alignment: Alignment.bottomLeft,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: AppColors.accent,
+                      backgroundImage: _getProfileImage(photoUrl),
+                      child: (photoUrl == null || photoUrl.isEmpty)
+                          ? Text(
+                              fullName.isNotEmpty ? fullName[0] : 'ع',
+                              style: const TextStyle(fontSize: 36, color: Colors.black, fontWeight: FontWeight.bold),
+                            )
+                          : null,
+                    ),
+                    if (_isMyProfile) // إظهار زر التعديل لصاحب الحساب فقط
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        child: GestureDetector(
+                          onTap: _updateProfilePicture,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.primary, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt, color: Colors.black, size: 20),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -801,3 +856,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+ 
