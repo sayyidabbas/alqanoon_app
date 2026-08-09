@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart'; // مكتبة الصوت
 import 'package:firebase_auth/firebase_auth.dart'; // مكتبة المصادقة لفحص الجلسة
 import '../constants/app_colors.dart';
 import '../routes/app_routes.dart';
@@ -15,7 +14,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  final AudioPlayer _audioPlayer = AudioPlayer(); // مشغل الصوت
   
   // حركات مطرقة القاضي (ضربة قوية)
   late Animation<double> _gavelScale;
@@ -72,14 +70,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    // تشغيل المؤثر الصوتي لحظة اصطدام المطرقة (عند 30% من الوقت يعني بعد 1200 ملي ثانية)
-    Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) {
-        _audioPlayer.play(AssetSource('audio/gavel.mp3'));
-      }
-    });
-
-    // 🚀 حل مشكلة تسجيل الدخول: التوجيه الذكي بعد انتهاء الأنيميشن
+    // 🚀 التوجيه الذكي بعد انتهاء الأنيميشن وفحص تسجيل الدخول
     Timer(const Duration(milliseconds: 5000), () {
       if (mounted) {
         if (FirebaseAuth.instance.currentUser != null) {
@@ -96,7 +87,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void dispose() {
     _controller.dispose();
-    _audioPlayer.dispose(); // تحرير ذاكرة مشغل الصوت
     super.dispose();
   }
 
