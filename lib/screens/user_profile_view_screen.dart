@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_colors.dart';
-import '../models/post_model.dart';
 import 'chat_screen.dart';
 
 class UserProfileViewScreen extends StatelessWidget {
@@ -10,8 +9,7 @@ class UserProfileViewScreen extends StatelessWidget {
   final String fullName;
   final String bio;
   final String? photoUrl;
-  final String? peerUid; // 🟢 UID الخاص بالمستخدم الآخر لتحديد الدردشة بشكل مثالي
-  final List<PostModel> userPosts;
+  final String? peerUid; 
   final VoidCallback? onStartChat;
 
   const UserProfileViewScreen({
@@ -21,7 +19,6 @@ class UserProfileViewScreen extends StatelessWidget {
     this.bio = 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية',
     this.photoUrl,
     this.peerUid,
-    this.userPosts = const [],
     this.onStartChat,
   });
 
@@ -165,7 +162,7 @@ class UserProfileViewScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // 💳 بطاقة بيانات المستخدم
+            // بطاقة بيانات المستخدم
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -176,7 +173,6 @@ class UserProfileViewScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // 🟢 زر الـ 3 نقاط للإبلاغ والحظر
                   Align(
                     alignment: Alignment.topRight,
                     child: PopupMenuButton<String>(
@@ -210,7 +206,6 @@ class UserProfileViewScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   CircleAvatar(
                     radius: 45,
                     backgroundColor: AppColors.accent,
@@ -227,7 +222,7 @@ class UserProfileViewScreen extends StatelessWidget {
                   Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
                   const SizedBox(height: 18),
                   
-                  // 💬 زر المراسلة التفاعلي
+                  // زر المراسلة
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
@@ -236,7 +231,6 @@ class UserProfileViewScreen extends StatelessWidget {
                     ),
                     onPressed: () {
                       if (onStartChat != null) {
-                        Navigator.pop(context);
                         onStartChat!();
                       } else {
                         Navigator.push(
@@ -265,12 +259,11 @@ class UserProfileViewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 📡 جلب المنشورات المباشرة من Firestore
+            // 📡 استعلام تفاعلي مرن: يبحث عبر الـ userId أولاً وإن لم يتوفر يبحث عبر الـ username
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .where('username', isEqualTo: username)
-                  .snapshots(),
+              stream: peerUid != null && peerUid!.isNotEmpty
+                  ? FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: peerUid).snapshots()
+                  : FirebaseFirestore.instance.collection('posts').where('username', isEqualTo: username).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Padding(
@@ -355,7 +348,6 @@ class UserProfileViewScreen extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             const Divider(color: Colors.white10),
-            // 🟢 شريط التفاعل الفعلي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
