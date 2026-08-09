@@ -272,6 +272,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // دالة مخصصة لفتح الحساب الشخصي (حسابك أنت)
+  void _openMyProfile() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(
+          posts: _userPosts,
+          onAddUserPost: (content, imageUrl) {
+            setState(() {
+              _userPosts.insert(
+                0,
+                PostModel(
+                  id: DateTime.now().toString(),
+                  userId: currentUser?.uid ?? 'my_id',
+                  author: currentUser?.displayName ?? 'طالب قانون',
+                  username: 'my_user',
+                  content: content,
+                  imageFile: null,
+                  timestamp: DateTime.now(),
+                ),
+              );
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   void _openUserProfile(Map<String, dynamic> user) {
     final uid = user['uid'] ?? user['userId'] ?? '';
     final username = user['username'] ?? '';
@@ -279,7 +308,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final bio = user['bio'] ?? 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية';
     final photoUrl = user['photoUrl'];
 
-    if (uid == FirebaseAuth.instance.currentUser?.uid) return;
+    // في حال قام بالضغط على حسابه الخاص، نفتح نافذة الملف الشخصي وليس بروفايل العرض
+    if (uid == FirebaseAuth.instance.currentUser?.uid) {
+      _openMyProfile();
+      return;
+    }
 
     Navigator.push(
       context,
@@ -471,14 +504,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                       subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
                                       onTap: () {
-                                        Navigator.pop(context);
-                                        _openUserProfile({
-                                          'uid': doc.id,
-                                          'username': username,
-                                          'fullName': fullName,
-                                          'bio': bio,
-                                          'photoUrl': photoUrl,
-                                        });
+                                        Navigator.pop(context); // إغلاق نافذة البحث أولاً
+                                        
+                                        final currentUid = FirebaseAuth.instance.currentUser?.uid;
+                                        if (doc.id == currentUid) {
+                                          _openMyProfile(); // الدخول لبروفايلك الخاص إذا بحثت عن نفسك
+                                        } else {
+                                          _openUserProfile({
+                                            'uid': doc.id,
+                                            'username': username,
+                                            'fullName': fullName,
+                                            'bio': bio,
+                                            'photoUrl': photoUrl,
+                                          }); // الدخول لبروفايل الآخرين
+                                        }
                                       },
                                     );
                                   },
@@ -865,30 +904,7 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(
-                    posts: _userPosts,
-                    onAddUserPost: (content, imageUrl) {
-                      setState(() {
-                        _userPosts.insert(
-                          0,
-                          PostModel(
-                            id: DateTime.now().toString(),
-                            userId: currentUser?.uid ?? 'my_id',
-                            author: currentUser?.displayName ?? 'طالب قانون',
-                            username: 'my_user',
-                            content: content,
-                            imageFile: null,
-                            timestamp: DateTime.now(),
-                          ),
-                        );
-                      });
-                    },
-                  ),
-                ),
-              );
+              _openMyProfile();
             },
           ),
           ListTile(
@@ -933,3 +949,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
