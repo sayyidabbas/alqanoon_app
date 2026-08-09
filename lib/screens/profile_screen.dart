@@ -1,16 +1,16 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http; // تم استبدال firebase_storage بحزمة http للرفع المجاني
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   final List<PostModel> posts;
-  // 🛠️ تم تعديل المعامل لاستقبال رابط الصورة الناتجة من السيرفر بنجاح
   final Function(String content, String? imageUrl) onAddUserPost;
 
   const ProfileScreen({
@@ -42,27 +42,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 🛠️ رفع مضمون وآمن مع الانتظار
+  // 🌐 رفع الصورة مجاناً وسريعاً عبر سيرفر ImgBB الخارجي بدلاً من Firebase Storage المغلق
   Future<String?> _uploadImageToStorage(File imageFile) async {
     try {
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('post_images')
-          .child(fileName);
+      const apiKey = 'd89b9423c4a250325437bb960df76ee1'; 
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.imgbb.com/1/upload?key=$apiKey'),
+      );
 
-      final uploadTask = ref.putFile(imageFile);
-      final TaskSnapshot snapshot = await uploadTask;
+      request.files.add(
+        await http.MultipartFile.fromPath('image', imageFile.path),
+      );
 
-      if (snapshot.state == TaskState.success) {
-        final downloadUrl = await ref.getDownloadURL();
-        return downloadUrl;
+      final response = await request.send();
+      final responseData = await response.stream.bytesToString();
+      final jsonResponse = jsonDecode(responseData);
+
+      if (response.statusCode == 200 && jsonResponse['success'] == true) {
+        return jsonResponse['data']['url'];
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل رفع الصورة على الخادم المجاني')),
+          );
+        }
+        return null;
       }
-      return null;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل رفع الصورة: $e')),
+          SnackBar(content: Text('حدث خطأ أثناء الرفع: $e')),
         );
       }
       return null;
@@ -97,7 +107,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'commentsCount': 0,
       });
 
-      // 🛠️ التمرير المباشر لرابط الصورة المُنشأ بنجاح للوالد
       widget.onAddUserPost(_postController.text.trim(), imageUrl);
     }
 
@@ -686,4 +695,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
- 
