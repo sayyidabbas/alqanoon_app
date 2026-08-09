@@ -45,6 +45,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await ref.putFile(imageFile);
       return await ref.getDownloadURL();
     } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل رفع الصورة: $e')),
+        );
+      }
       return null;
     }
   }
@@ -76,6 +81,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'likes': <String>[],
         'commentsCount': 0,
       });
+
+      // استدعاء الكود الخارجي إن وجد للحفاظ على النمط
+      widget.onAddUserPost(_postController.text.trim(), _selectedImage);
     }
 
     _postController.clear();
@@ -101,6 +109,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       await postRef.update({'likes': FieldValue.arrayUnion([uid])});
     }
+  }
+
+  void _editPostDialog(String postId, String currentContent) {
+    final editController = TextEditingController(text: currentContent);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('تعديل المنشور ✏️', style: TextStyle(color: AppColors.accent)),
+        content: TextField(
+          controller: editController,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'أدخل النص الجديد...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () async {
+              final newContent = editController.text.trim();
+              if (newContent.isNotEmpty) {
+                await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+                  'content': newContent,
+                });
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تعديل المنشور بنجاح!')),
+                  );
+                }
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deletePostConfirm(String postId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('حذف المنشور 🗑️', style: TextStyle(color: Colors.redAccent)),
+        content: const Text('هل أنت تأكد من رغبتك في حذف هذا المنشور؟', style: TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف المنشور')),
+                );
+              }
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCommentsModal(BuildContext context, String postId) {
@@ -440,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         final doc = docs[index];
                         final data = doc.data() as Map<String, dynamic>;
 
-                        // 🛡️ معالجة حقل الإعجابات بأمان تام لمنع خطأ int / Iterable
+                        // 🛡️ معالجة حقل الإعجابات بأمان
                         List<String> likes = [];
                         if (data['likes'] is List) {
                           likes = List<String>.from((data['likes'] as List).map((e) => e.toString()));
@@ -448,6 +530,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         final isLiked = likes.contains(currentUser?.uid);
                         final commentsCount = data['commentsCount'] ?? 0;
+                        final String postContent = data['content'] ?? '';
+                        final String? imageUrl = data['imageUrl'] ?? data['imagePath'];
 
                         return Card(
                           color: AppColors.cardBg,
@@ -458,15 +542,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if ((data['content'] ?? '').isNotEmpty)
-                                  Text(data['content'], style: const TextStyle(color: Colors.white, fontSize: 15)),
-                                if (data['imageUrl'] != null && (data['imageUrl'] as String).isNotEmpty) ...[
+                                // زر الـ 3 نقاط (خيارات المنشور)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: AppColors.accent,
+                                          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                                          child: photoUrl == null
+                                              ? Text(
+                                                  fullName.isNotEmpty ? fullName[0] : 'ع',
+                                                  style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
+                                                )
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                      ],
+                                    ),
+                                    PopupMenuButton<String>(
+                                      icon: const Icon(Icons.more_vert, color: Colors.white70),
+                                      color: AppColors.cardBg,
+                                      onSelected: (value) {
+                                        if (value == 'edit') {
+                                          _editPostDialog(doc.id, postContent);
+                                        } else if (value == 'delete') {
+                                          _deletePostConfirm(doc.id);
+                                        }
+                                      },
+                                      itemBuilder: (BuildContext context) => [
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit, color: AppColors.accent, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('تعديل المنشور', style: TextStyle(color: Colors.white)),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('حذف المنشور', style: TextStyle(color: Colors.redAccent)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+
+                                if (postContent.isNotEmpty)
+                                  Text(postContent, style: const TextStyle(color: Colors.white, fontSize: 15)),
+
+                                if (imageUrl != null && imageUrl.isNotEmpty) ...[
                                   const SizedBox(height: 10),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(data['imageUrl'], width: double.infinity, fit: BoxFit.cover),
+                                    child: Image.network(
+                                      imageUrl,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return Container(
+                                          height: 180,
+                                          color: Colors.white10,
+                                          child: const Center(
+                                            child: CircularProgressIndicator(color: AppColors.accent),
+                                          ),
+                                        );
+                                      },
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const SizedBox();
+                                      },
+                                    ),
                                   ),
                                 ],
+
                                 const SizedBox(height: 10),
                                 const Divider(color: Colors.white10),
                                 Row(
