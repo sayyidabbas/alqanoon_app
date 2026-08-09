@@ -22,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  String _adminPin = "1234"; 
+  String _adminPin = "1234";
 
   Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
   Timer? _countdownTimer;
@@ -41,15 +41,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Map<String, dynamic>> _chatList = [
     {
+      'uid': 'user_01',
       'username': 'ahmed_legal',
       'fullName': 'أحمد علي',
       'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
       'time': '10:30 ص',
-      'bio': 'باحث قانوني متقدم',
+      'bio': 'باحث قانوني متتقدم',
       'unreadCount': 3,
       'isMuted': false,
     },
     {
+      'uid': 'user_02',
       'username': 'sara_lawyer',
       'fullName': 'سارة محمود',
       'lastMessage': 'شكراً جزيلاً لك',
@@ -157,7 +159,10 @@ class _HomeScreenState extends State<HomeScreen> {
           obscureText: true,
           keyboardType: TextInputType.number,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'أدخل رمز PIN', hintStyle: TextStyle(color: Colors.white38)),
+          decoration: const InputDecoration(
+            hintText: 'أدخل رمز PIN',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
@@ -204,23 +209,35 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           },
           onDeletePost: (index) {
-            setState(() { _officialPosts.removeAt(index); });
+            setState(() {
+              _officialPosts.removeAt(index);
+            });
           },
           onEditPost: (index, newContent) {
-            setState(() { _officialPosts[index].content = newContent; });
+            setState(() {
+              _officialPosts[index].content = newContent;
+            });
           },
           onAddBanner: (banner) {
-            setState(() { _announcements.add(banner); });
+            setState(() {
+              _announcements.add(banner);
+            });
           },
           onDeleteBanner: (index) {
-            setState(() { _announcements.removeAt(index); });
+            setState(() {
+              _announcements.removeAt(index);
+            });
           },
           onUpdateTimerDays: (days) {
-            setState(() { _targetDuration = Duration(days: days); });
+            setState(() {
+              _targetDuration = Duration(days: days);
+            });
             _startTimer();
           },
           onDeleteTimer: () {
-            setState(() { _targetDuration = null; });
+            setState(() {
+              _targetDuration = null;
+            });
             _countdownTimer?.cancel();
           },
         ),
@@ -228,46 +245,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openUserProfile(Map<String, dynamic> user) async {
+  // 🟢 التعديل المباشر: فتح الشاشة تفاعلياً وتمرير uid والمراسلة المباشرة
+  void _openUserProfile(Map<String, dynamic> user) {
+    final uid = user['uid'] ?? user['userId'] ?? '';
     final username = user['username'] ?? '';
     final fullName = user['fullName'] ?? '';
-    final bio = user['bio'] ?? '';
+    final bio = user['bio'] ?? 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية';
     final photoUrl = user['photoUrl'];
 
-    // جلب منشورات المستخدم مباشرة من الفايربيس حتى تظهر للجميع
-    final querySnap = await FirebaseFirestore.instance
-        .collection('posts')
-        .where('username', isEqualTo: username)
-        .get();
-
-    List<PostModel> posts = querySnap.docs.map((doc) {
-      final data = doc.data();
-      return PostModel(
-        id: doc.id,
-        userId: data['userId'] ?? '',
-        author: data['author'] ?? fullName,
-        username: data['username'] ?? username,
-        content: data['content'] ?? '',
-        timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        likes: List<String>.from(data['likes'] ?? []),
-        commentsCount: data['commentsCount'] ?? 0,
-      );
-    }).toList();
-
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserProfileViewScreen(
-            username: username,
-            fullName: fullName,
-            bio: bio,
-            photoUrl: photoUrl,
-            userPosts: posts,
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileViewScreen(
+          peerUid: uid,
+          username: username,
+          fullName: fullName,
+          bio: bio,
+          photoUrl: photoUrl,
+          onStartChat: () {
+            _openChatDetailScreen({
+              'uid': uid,
+              'username': username,
+              'fullName': fullName,
+              'bio': bio,
+              'photoUrl': photoUrl,
+            });
+          },
         ),
-      );
-    }
+      ),
+    );
   }
 
   void _openChatDetailScreen(Map<String, dynamic> chat) {
@@ -757,7 +763,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.3),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.3,
+        ),
         itemCount: services.length,
         itemBuilder: (context, index) => Card(
           color: AppColors.cardBg,
