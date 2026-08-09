@@ -29,7 +29,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery, 
+      imageQuality: 70
+    );
 
     if (pickedFile != null) {
       setState(() {
@@ -38,12 +41,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // 🛠️ التعديل الجوهري: رفع آمن ومضمون ومريح لـ Firebase Storage
   Future<String?> _uploadImageToStorage(File imageFile) async {
     try {
       final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance.ref().child('post_images').child(fileName);
-      await ref.putFile(imageFile);
-      return await ref.getDownloadURL();
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('post_images')
+          .child(fileName);
+
+      // البدء بإنشاء المهمة والتأكد من انتظار مكتمل تماماً
+      final uploadTask = ref.putFile(imageFile);
+      final TaskSnapshot snapshot = await uploadTask;
+
+      // أخذ الرابط فقط بعد التأكد من اكتمال حالة الرفع بنجاح
+      if (snapshot.state == TaskState.success) {
+        final downloadUrl = await ref.getDownloadURL();
+        return downloadUrl;
+      }
+      return null;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -374,8 +390,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: AppColors.accent,
-                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                  child: photoUrl == null
+                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  child: photoUrl == null || photoUrl.isEmpty
                       ? Text(
                           fullName.isNotEmpty ? fullName[0] : 'ع',
                           style: const TextStyle(fontSize: 36, color: Colors.black, fontWeight: FontWeight.bold),
@@ -542,7 +560,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // زر الـ 3 نقاط (خيارات المنشور)
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -551,8 +568,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         CircleAvatar(
                                           radius: 16,
                                           backgroundColor: AppColors.accent,
-                                          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                                          child: photoUrl == null
+                                          backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                                          child: photoUrl == null || photoUrl.isEmpty
                                               ? Text(
                                                   fullName.isNotEmpty ? fullName[0] : 'ع',
                                                   style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
@@ -603,6 +620,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 if (postContent.isNotEmpty)
                                   Text(postContent, style: const TextStyle(color: Colors.white, fontSize: 15)),
 
+                                // 🛠️ معالجة عرض صورة المنشور بدون أخطاء
                                 if (imageUrl != null && imageUrl.isNotEmpty) ...[
                                   const SizedBox(height: 10),
                                   ClipRRect(
@@ -622,7 +640,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         );
                                       },
                                       errorBuilder: (context, error, stackTrace) {
-                                        return const SizedBox();
+                                        return const SizedBox.shrink();
                                       },
                                     ),
                                   ),
