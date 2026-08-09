@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -150,6 +151,15 @@ class UserProfileViewScreen extends StatelessWidget {
     );
   }
 
+  // 🖼️ دالة مساعدة لمعالجة عرض الصور سواء Base64 أو روابط العادية
+  ImageProvider? _getProfileImage(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      return MemoryImage(base64Decode(url.split(',').last));
+    }
+    return NetworkImage(url);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -209,8 +219,8 @@ class UserProfileViewScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 45,
                     backgroundColor: AppColors.accent,
-                    backgroundImage: photoUrl != null && photoUrl!.isNotEmpty ? NetworkImage(photoUrl!) : null,
-                    child: photoUrl == null || photoUrl!.isEmpty
+                    backgroundImage: _getProfileImage(photoUrl),
+                    child: (photoUrl == null || photoUrl!.isEmpty)
                         ? Text(fullName.isNotEmpty ? fullName[0] : 'ع', style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.black))
                         : null,
                   ),
@@ -301,7 +311,7 @@ class UserProfileViewScreen extends StatelessWidget {
 
   Widget _buildFirestorePostCard(BuildContext context, String postId, Map<String, dynamic> data) {
     final String content = data['content'] ?? '';
-    final String? postImg = data['imageUrl'];
+    final String? postImg = data['imageUrl'] ?? data['imagePath'];
     final myUid = FirebaseAuth.instance.currentUser?.uid;
     final likes = List<String>.from(data['likes'] ?? []);
     final isLiked = likes.contains(myUid);
@@ -320,8 +330,8 @@ class UserProfileViewScreen extends StatelessWidget {
               children: [
                 CircleAvatar(
                   backgroundColor: AppColors.accent,
-                  backgroundImage: photoUrl != null && photoUrl!.isNotEmpty ? NetworkImage(photoUrl!) : null,
-                  child: photoUrl == null || photoUrl!.isEmpty
+                  backgroundImage: _getProfileImage(photoUrl),
+                  child: (photoUrl == null || photoUrl!.isEmpty)
                       ? Text(fullName.isNotEmpty ? fullName[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
                       : null,
                 ),
@@ -339,11 +349,23 @@ class UserProfileViewScreen extends StatelessWidget {
               const SizedBox(height: 10),
               Text(content, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.3)),
             ],
+            // 🖼️ معالجة عرض صورة المنشور بالشكل الصحيح
             if (postImg != null && postImg.isNotEmpty) ...[
               const SizedBox(height: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.network(postImg, width: double.infinity, fit: BoxFit.cover),
+                child: postImg.startsWith('data:image')
+                    ? Image.memory(
+                        base64Decode(postImg.split(',').last),
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        postImg,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                      ),
               ),
             ],
             const SizedBox(height: 10),
@@ -379,4 +401,3 @@ class UserProfileViewScreen extends StatelessWidget {
     );
   }
 }
- 
