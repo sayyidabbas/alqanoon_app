@@ -604,7 +604,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
-                      .where('userId', isEqualTo: _profileOwnerId)
                       .snapshots(),
                   builder: (context, postSnapshot) {
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -617,7 +616,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     }
 
-                    final docs = postSnapshot.data?.docs.toList() ?? [];
+                    final allDocs = postSnapshot.data?.docs.toList() ?? [];
+
+                    final docs = allDocs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return data['userId'] == _profileOwnerId;
+                    }).toList();
 
                     if (docs.isEmpty) {
                       return const Center(
