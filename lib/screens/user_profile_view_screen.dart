@@ -39,7 +39,7 @@ class UserProfileViewScreen extends StatelessWidget {
     if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
     if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
     if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
     return '${date.day}/${date.month}/${date.year}';
   }
 
@@ -47,7 +47,12 @@ class UserProfileViewScreen extends StatelessWidget {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null || peerUid == null) return;
 
-    await FirebaseFirestore.instance.collection('users').doc(myUid).collection('blockedUsers').doc(peerUid).set({
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(myUid)
+        .collection('blockedUsers')
+        .doc(peerUid)
+        .set({
       'blockedAt': FieldValue.serverTimestamp(),
       'username': username,
     });
