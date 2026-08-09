@@ -63,11 +63,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<PostModel> _officialPosts = [
     PostModel(
       id: '1',
+      userId: 'admin_id',
       author: 'إدارة منصة القانون',
       username: 'admin',
       content: 'نرحب بجميع الطلبة في منصة القانون الإلكترونية التعليمية.',
       timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      likes: 12,
+      likes: [],
     )
   ];
 
@@ -192,6 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 0,
                 PostModel(
                   id: DateTime.now().toString(),
+                  userId: 'admin',
                   author: 'إدارة منصة القانون',
                   username: 'admin',
                   content: content,
@@ -242,11 +244,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final data = doc.data();
       return PostModel(
         id: doc.id,
+        userId: data['userId'] ?? '',
         author: data['author'] ?? fullName,
         username: data['username'] ?? username,
         content: data['content'] ?? '',
         timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        likes: data['likes'] ?? 0,
+        likes: List<String>.from(data['likes'] ?? []),
+        commentsCount: data['commentsCount'] ?? 0,
       );
     }).toList();
 
@@ -675,6 +679,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPostCard(PostModel post) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final isLiked = post.likes.contains(uid);
+
     return Card(
       color: AppColors.cardBg,
       margin: const EdgeInsets.only(bottom: 12),
@@ -716,17 +723,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextButton.icon(
                   onPressed: () {
                     setState(() {
-                      post.isLiked = !post.isLiked;
-                      post.likes += post.isLiked ? 1 : -1;
+                      if (isLiked) {
+                        post.likes.remove(uid);
+                      } else {
+                        post.likes.add(uid);
+                      }
                     });
                   },
-                  icon: Icon(post.isLiked ? Icons.favorite : Icons.favorite_border, color: post.isLiked ? Colors.red : Colors.white60),
-                  label: Text('${post.likes} إعجاب', style: const TextStyle(color: Colors.white60)),
+                  icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : Colors.white60),
+                  label: Text('${post.likes.length} إعجاب', style: const TextStyle(color: Colors.white60)),
                 ),
                 TextButton.icon(
                   onPressed: () {},
                   icon: const Icon(Icons.comment_outlined, color: Colors.white60),
-                  label: Text('${post.comments.length} تعليق', style: const TextStyle(color: Colors.white60)),
+                  label: Text('${post.commentsCount} تعليق', style: const TextStyle(color: Colors.white60)),
                 ),
               ],
             )
@@ -821,6 +831,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           0,
                           PostModel(
                             id: DateTime.now().toString(),
+                            userId: currentUser?.uid ?? 'my_id',
                             author: currentUser?.displayName ?? 'طالب قانون',
                             username: 'my_user',
                             content: content,
