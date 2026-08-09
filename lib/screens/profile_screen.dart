@@ -38,7 +38,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return currentUid != null && currentUid == _profileOwnerId;
   }
 
-  // 🕒 دالة تنسيق الوقت
   String _formatTimestamp(dynamic timestamp) {
     if (timestamp == null) return 'الآن';
     DateTime date;
@@ -55,11 +54,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
     if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
     if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  // 🖼️ دالة معالجة صورة البروفايل
   ImageProvider? _getProfileImage(String? url) {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('data:image')) {
@@ -227,7 +225,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 💬 نافذة التعليقات المتطورة بدعم رؤية بروفايل المعلق
   void _showCommentsModal(BuildContext context, String postId) {
     final commentController = TextEditingController();
 
@@ -251,12 +248,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       .collection('posts')
                       .doc(postId)
                       .collection('comments')
-                      .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-                    final comments = snapshot.data!.docs;
+                    
+                    final comments = snapshot.data!.docs.toList();
                     if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد', style: TextStyle(color: Colors.white54)));
+
+                    // فرز التعليقات برمجياً من الأحدث للأقدم
+                    comments.sort((a, b) {
+                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      if (aTime == null) return -1;
+                      if (bTime == null) return 1;
+                      return bTime.compareTo(aTime);
+                    });
 
                     return ListView.builder(
                       itemCount: comments.length,
@@ -593,12 +599,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // 📡 مرتبة تنازلياً حسب الوقت (الأحدث في الأعلى)
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
                       .where('userId', isEqualTo: _profileOwnerId)
-                      .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, postSnapshot) {
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -611,7 +615,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     }
 
-                    final docs = postSnapshot.data?.docs ?? [];
+                    final docs = postSnapshot.data?.docs.toList() ?? [];
 
                     if (docs.isEmpty) {
                       return const Center(
@@ -621,6 +625,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       );
                     }
+
+                    // فرز منشورات المستخدم برمجياً من الأحدث للأقدم
+                    docs.sort((a, b) {
+                      final aTime = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      final bTime = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                      if (aTime == null) return -1;
+                      if (bTime == null) return 1;
+                      return bTime.compareTo(aTime);
+                    });
 
                     return ListView.builder(
                       shrinkWrap: true,
