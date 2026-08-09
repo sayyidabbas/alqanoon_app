@@ -23,6 +23,26 @@ class UserProfileViewScreen extends StatelessWidget {
     this.onStartChat,
   });
 
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'الآن';
+    DateTime date;
+    if (timestamp is Timestamp) {
+      date = timestamp.toDate();
+    } else if (timestamp is DateTime) {
+      date = timestamp;
+    } else {
+      return '';
+    }
+
+    final diff = DateTime.now().difference(date);
+    if (diff.inSeconds < 60) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inDays == 1) return 'أمس';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسبابيع';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
   void _blockUser(BuildContext context) async {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null || peerUid == null) return;
@@ -87,7 +107,7 @@ class UserProfileViewScreen extends StatelessWidget {
               const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
               const SizedBox(height: 10),
               SizedBox(
-                height: 250,
+                height: 300,
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('posts')
@@ -104,8 +124,61 @@ class UserProfileViewScreen extends StatelessWidget {
                       itemCount: comments.length,
                       itemBuilder: (context, i) {
                         final data = comments[i].data() as Map<String, dynamic>;
+                        final author = data['author'] ?? 'مستخدم';
+                        final cPhotoUrl = data['photoUrl'];
+                        final commentUserId = data['userId'];
+                        final cUsername = data['username'] ?? 'user';
+
                         return ListTile(
-                          title: Text(data['author'] ?? 'مستخدم', style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                          leading: GestureDetector(
+                            onTap: () {
+                              if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UserProfileViewScreen(
+                                      peerUid: commentUserId,
+                                      username: cUsername,
+                                      fullName: author,
+                                      photoUrl: cPhotoUrl,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.accent,
+                              backgroundImage: _getProfileImage(cPhotoUrl),
+                              child: (cPhotoUrl == null || cPhotoUrl.isEmpty)
+                                  ? Text(author.isNotEmpty ? author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UserProfileViewScreen(
+                                          peerUid: commentUserId,
+                                          username: cUsername,
+                                          fullName: author,
+                                          photoUrl: cPhotoUrl,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ),
+                              const Spacer(),
+                              Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
                           subtitle: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white)),
                         );
                       },
@@ -129,9 +202,15 @@ class UserProfileViewScreen extends StatelessWidget {
                       if (text.isEmpty) return;
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
+                        final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                        final uData = uDoc.data();
+
                         await FirebaseFirestore.instance.collection('posts').doc(postId).collection('comments').add({
                           'text': text,
-                          'author': user.displayName ?? 'مستخدم',
+                          'author': uData?['fullName'] ?? user.displayName ?? 'مستخدم',
+                          'username': uData?['username'] ?? 'user',
+                          'photoUrl': uData?['photoUrl'],
+                          'userId': user.uid,
                           'timestamp': FieldValue.serverTimestamp(),
                         });
                         await FirebaseFirestore.instance.collection('posts').doc(postId).update({
@@ -151,7 +230,6 @@ class UserProfileViewScreen extends StatelessWidget {
     );
   }
 
-  // 🖼️ دالة مساعدة لمعالجة عرض الصور سواء Base64 أو روابط العادية
   ImageProvider? _getProfileImage(String? url) {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('data:image')) {
@@ -172,7 +250,6 @@ class UserProfileViewScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // بطاقة بيانات المستخدم
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -232,7 +309,6 @@ class UserProfileViewScreen extends StatelessWidget {
                   Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
                   const SizedBox(height: 18),
                   
-                  // زر المراسلة
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
@@ -269,11 +345,11 @@ class UserProfileViewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 📡 استعلام تفاعلي مرن: يبحث عبر الـ userId أولاً وإن لم يتوفر يبحث عبر الـ username
+            // 📡 جلب المنشورات مرتبة تنازلياً مع مراعاة وقت النشر
             StreamBuilder<QuerySnapshot>(
               stream: peerUid != null && peerUid!.isNotEmpty
-                  ? FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: peerUid).snapshots()
-                  : FirebaseFirestore.instance.collection('posts').where('username', isEqualTo: username).snapshots(),
+                  ? FirebaseFirestore.instance.collection('posts').where('userId', isEqualTo: peerUid).orderBy('timestamp', descending: true).snapshots()
+                  : FirebaseFirestore.instance.collection('posts').where('username', isEqualTo: username).orderBy('timestamp', descending: true).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Padding(
@@ -316,6 +392,7 @@ class UserProfileViewScreen extends StatelessWidget {
     final likes = List<String>.from(data['likes'] ?? []);
     final isLiked = likes.contains(myUid);
     final commentsCount = data['commentsCount'] ?? 0;
+    final String postTime = _formatTimestamp(data['timestamp']);
 
     return Card(
       color: AppColors.cardBg,
@@ -340,7 +417,15 @@ class UserProfileViewScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    Row(
+                      children: [
+                        Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        const SizedBox(width: 6),
+                        const Text('•', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        const SizedBox(width: 6),
+                        Text(postTime, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -349,7 +434,6 @@ class UserProfileViewScreen extends StatelessWidget {
               const SizedBox(height: 10),
               Text(content, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.3)),
             ],
-            // 🖼️ معالجة عرض صورة المنشور بالشكل الصحيح
             if (postImg != null && postImg.isNotEmpty) ...[
               const SizedBox(height: 10),
               ClipRRect(
@@ -401,3 +485,4 @@ class UserProfileViewScreen extends StatelessWidget {
     );
   }
 }
+ 
