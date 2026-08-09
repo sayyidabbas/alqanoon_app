@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 🟢 تم تصحيح المسار بنجاح
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
@@ -73,7 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'content': _postController.text.trim(),
         'imageUrl': imageUrl,
         'timestamp': FieldValue.serverTimestamp(),
-        'likes': [],
+        'likes': <String>[],
         'commentsCount': 0,
       });
     }
@@ -91,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _toggleLike(String postId, List<dynamic> likes) async {
+  void _toggleLike(String postId, List<String> likes) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -415,6 +415,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       return const Center(child: CircularProgressIndicator(color: AppColors.accent));
                     }
 
+                    if (postSnapshot.hasError) {
+                      return const Center(
+                        child: Text('حدث خطأ أثناء جلب المنشورات.', style: TextStyle(color: Colors.white54)),
+                      );
+                    }
+
                     final docs = postSnapshot.data?.docs ?? [];
 
                     if (docs.isEmpty) {
@@ -433,7 +439,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       itemBuilder: (context, index) {
                         final doc = docs[index];
                         final data = doc.data() as Map<String, dynamic>;
-                        final likes = List<String>.from(data['likes'] ?? []);
+
+                        // 🛡️ معالجة حقل الإعجابات بأمان تام لمنع خطأ int / Iterable
+                        List<String> likes = [];
+                        if (data['likes'] is List) {
+                          likes = List<String>.from((data['likes'] as List).map((e) => e.toString()));
+                        }
+
                         final isLiked = likes.contains(currentUser?.uid);
                         final commentsCount = data['commentsCount'] ?? 0;
 
@@ -498,3 +510,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+ 
