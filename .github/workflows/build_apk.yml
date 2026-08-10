@@ -28,6 +28,16 @@ jobs:
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android
 
+    - name: Fix Android SDK Versions to 36
+      run: |
+        # تحديث إصدار الـ compileSdk إلى 36 لتلبية متطلبات حزمة file_picker الحديثة
+        BUILD_GRADLE="android/app/build.gradle"
+        if [ -f "$BUILD_GRADLE" ]; then
+          sed -i 's/compileSdkVersion.*/compileSdkVersion 36/g' "$BUILD_GRADLE" || true
+          sed -i 's/compileSdk =.*/compileSdk = 36/g' "$BUILD_GRADLE" || true
+          sed -i 's/compileSdk .*/compileSdk 36/g' "$BUILD_GRADLE" || true
+        fi
+
     - name: Install Dependencies
       run: flutter pub get
 
