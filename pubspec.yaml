@@ -39,7 +39,7 @@ dependencies:
   # --- حزم رفع وعرض ملفات الـ PDF ---
   supabase_flutter: ^2.5.0
   file_picker: ^8.0.3
-  syncfusion_flutter_pdfviewer: ^25.2.4
+  syncfusion_flutter_pdfviewer: ^28.1.35
 
 dev_dependencies:
   flutter_test:
