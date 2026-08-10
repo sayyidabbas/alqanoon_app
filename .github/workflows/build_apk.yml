@@ -30,15 +30,13 @@ jobs:
 
     - name: Force compileSdk 36 globally
       run: |
-        # 1. تحديث التطبيق الأساسي
-        sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle || true
-        
-        # 2. إجبار كافة الحزم الخارجية (مثل file_picker) على الإصدار 36
+        # فرض الإصدار 36 على كافة الحزم بصيغتي (compileSdk) و (compileSdkVersion) لتجنب أخطاء الإصدارات الجديدة
         echo "
         subprojects {
             afterEvaluate { project ->
                 if (project.hasProperty('android')) {
                     project.android {
+                        compileSdk = 36
                         compileSdkVersion 36
                     }
                 }
@@ -55,11 +53,13 @@ jobs:
     - name: Set App Name
       run: flutter pub run rename setAppName --targets android --value "منصة القانون"
 
-    - name: Build APK
-      run: flutter build apk --release
+    - name: Build APK (Verbose Mode)
+      # إضافة -v لطباعة تفاصيل البناء بدقة وكشف أي أخطاء صامتة
+      run: flutter build apk --release -v
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
+        # رفع مجلد المخرجات بالكامل لضمان التقاط ملف الـ APK أينما قام Gradle بحفظه
+        path: build/app/outputs/
