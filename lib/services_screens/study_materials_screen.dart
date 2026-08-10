@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_colors.dart';
 
 class StudyMaterialsScreen extends StatefulWidget {
@@ -22,10 +22,24 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
     'المرحلة الرابعة',
   ];
 
-  // التحقق من حالة الدخول للبوابة الآمنة
+  // مفتاح فريد يعتمد على المعرف الخاص بالحساب الحالي
+  String get _userAdminKey {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+    return 'is_admin_unlocked_$uid';
+  }
+
+  // الحصول على رمز الأدمن الحالي من Firestore أو الاعتماد على الافتراضي
+  Future<String> _getAdminPin() async {
+    final doc = await FirebaseFirestore.instance.collection('settings').doc('admin').get();
+    if (doc.exists && doc.data()!.containsKey('pin')) {
+      return doc.data()!['pin'].toString();
+    }
+    return '1234';
+  }
+
   Future<void> _handleAdminAccess(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
-    final bool isAdminUnlocked = prefs.getBool('is_admin_unlocked') ?? false;
+    final bool isAdminUnlocked = prefs.getBool(_userAdminKey) ?? false;
 
     if (isAdminUnlocked) {
       _navigateToAdminDashboard();
@@ -34,7 +48,6 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
     }
   }
 
-  // نافذة طلب كلمة السر
   void _showPasswordDialog(SharedPreferences prefs) {
     final TextEditingController passwordController = TextEditingController();
     showDialog(
@@ -44,10 +57,9 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
         content: TextField(
           controller: passwordController,
           obscureText: true,
+          keyboardType: TextInputType.number,
           textAlign: TextAlign.right,
-          decoration: const InputDecoration(
-            hintText: 'أدخل كلمة السر',
-          ),
+          decoration: const InputDecoration(hintText: 'أدخل كلمة السر'),
         ),
         actions: [
           TextButton(
@@ -56,16 +68,19 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (passwordController.text == '1234') {
-                await prefs.setBool('is_admin_unlocked', true);
+              final currentPin = await _getAdminPin();
+              if (passwordController.text.trim() == currentPin) {
+                await prefs.setBool(_userAdminKey, true);
                 if (mounted) {
                   Navigator.pop(context);
                   _navigateToAdminDashboard();
                 }
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('كلمة السر غير صحيحة!')),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('كلمة السر غير صحيحة!')),
+                  );
+                }
               }
             },
             child: const Text('دخول'),
@@ -90,7 +105,6 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
         title: const Text('المواد الدراسية'),
         backgroundColor: AppColors.primary,
         actions: [
-          // زر البوابة الآمنة أعلى اليمين
           IconButton(
             icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
             tooltip: 'البوابة الآمنة',
@@ -133,6 +147,72 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
 class AdminStageSelectionScreen extends StatelessWidget {
   const AdminStageSelectionScreen({super.key});
 
+  void _changePasswordDialog(BuildContext context) {
+    final oldPinController = TextEditingController();
+    final newPinController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تغيير كلمة السر للبوابة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldPinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(hintText: 'كلمة السر الحالية'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: newPinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(hintText: 'كلمة السر الجديدة'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final doc = await FirebaseFirestore.instance.collection('settings').doc('admin').get();
+              final currentPin = doc.exists && doc.data()!.containsKey('pin') ? doc.data()!['pin'] : '1234';
+
+              if (oldPinController.text.trim() == currentPin) {
+                if (newPinController.text.trim().length >= 4) {
+                  await FirebaseFirestore.instance.collection('settings').doc('admin').set(
+                    {'pin': newPinController.text.trim()},
+                    SetOptions(merge: true),
+                  );
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('تم تغيير كلمة السر بنجاح')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('يجب أن تتكون كلمة السر من 4 أرقام على الأقل')),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('كلمة السر الحالية غير صحيحة')),
+                );
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final stages = [
@@ -146,6 +226,13 @@ class AdminStageSelectionScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('إدارة المراحل (الأدمن)'),
         backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.lock_reset, color: Colors.white),
+            tooltip: 'تغيير كلمة السر',
+            onPressed: () => _changePasswordDialog(context),
+          ),
+        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -185,8 +272,7 @@ class AdminManageSubjectsScreen extends StatefulWidget {
   });
 
   @override
-  State<AdminManageSubjectsScreen> createState() =>
-      _AdminManageSubjectsScreenState();
+  State<AdminManageSubjectsScreen> createState() => _AdminManageSubjectsScreenState();
 }
 
 class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
@@ -223,6 +309,67 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
     );
   }
 
+  void _editSubjectDialog(String docId, String currentName) {
+    final controller = TextEditingController(text: currentName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تعديل اسم المادة'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'اسم المادة'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('stages')
+                    .doc('stage_${widget.stageIndex}')
+                    .collection('subjects')
+                    .doc(docId)
+                    .update({'name': controller.text.trim()});
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteSubject(String docId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف المادة'),
+        content: const Text('هل أنت تأكد من حذف هذه المادة وكافة ملفاتها؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('stages')
+          .doc('stage_${widget.stageIndex}')
+          .collection('subjects')
+          .doc(docId)
+          .delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,22 +394,41 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
           }
           final docs = snapshot.data!.docs;
 
+          if (docs.isEmpty) {
+            return const Center(child: Text('لا توجد مواد مضافة'));
+          }
+
           return ListView.builder(
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
+              final docId = docs[index].id;
+
               return Card(
                 child: ListTile(
                   title: Text(data['name'] ?? ''),
-                  trailing: const Icon(Icons.picture_as_pdf),
+                  leading: const Icon(Icons.book, color: Colors.blue),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _editSubjectDialog(docId, data['name'] ?? '');
+                      } else if (value == 'delete') {
+                        _deleteSubject(docId);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                      const PopupMenuItem(value: 'delete', child: Text('حذف', style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => AdminManagePdfsScreen(
                           stageIndex: widget.stageIndex,
-                          subjectId: docs[index].id,
-                          subjectName: data['name'],
+                          subjectId: docId,
+                          subjectName: data['name'] ?? '',
                         ),
                       ),
                     );
@@ -294,9 +460,6 @@ class AdminManagePdfsScreen extends StatefulWidget {
 }
 
 class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
-  bool _isUploading = false;
-
-  // رفع رابط المنهج مباشرة لـ Firestore
   void _addPdfUrlDialog() {
     final titleController = TextEditingController();
     final urlController = TextEditingController();
@@ -315,7 +478,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
             const SizedBox(height: 10),
             TextField(
               controller: urlController,
-              decoration: const InputDecoration(hintText: 'رابط ملف الـ PDF (Google Drive أو غيره)'),
+              decoration: const InputDecoration(hintText: 'رابط ملف Google Drive'),
             ),
           ],
         ),
@@ -346,6 +509,63 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
         ],
       ),
     );
+  }
+
+  void _editPdfDialog(String pdfId, String currentTitle, String currentUrl) {
+    final titleController = TextEditingController(text: currentTitle);
+    final urlController = TextEditingController(text: currentUrl);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تعديل الملف'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(hintText: 'عنوان المحاضرة'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(hintText: 'الرابط'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('stages')
+                  .doc('stage_${widget.stageIndex}')
+                  .collection('subjects')
+                  .doc(widget.subjectId)
+                  .collection('pdfs')
+                  .doc(pdfId)
+                  .update({
+                'title': titleController.text.trim(),
+                'url': urlController.text.trim(),
+              });
+              if (mounted) Navigator.pop(ctx);
+            },
+            child: const Text('تعديل'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deletePdf(String pdfId) async {
+    await FirebaseFirestore.instance
+        .collection('stages')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('pdfs')
+        .doc(pdfId)
+        .delete();
   }
 
   @override
@@ -381,10 +601,25 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
+              final pdfId = docs[index].id;
+
               return ListTile(
                 leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: Text(data['title'] ?? ''),
                 subtitle: Text(data['url'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _editPdfDialog(pdfId, data['title'] ?? '', data['url'] ?? '');
+                    } else if (value == 'delete') {
+                      _deletePdf(pdfId);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                    const PopupMenuItem(value: 'delete', child: Text('حذف', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
               );
             },
           );
@@ -444,7 +679,7 @@ class StudentSubjectsScreen extends StatelessWidget {
                         builder: (_) => StudentPdfsScreen(
                           stageIndex: stageIndex,
                           subjectId: docs[index].id,
-                          subjectName: data['name'],
+                          subjectName: data['name'] ?? '',
                         ),
                       ),
                     );
@@ -470,6 +705,29 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectId,
     required this.subjectName,
   });
+
+  // معالجة رابط Google Drive لفتحه في نمط العرض السريع
+  String _formatDriveUrl(String originalUrl) {
+    if (originalUrl.contains('drive.google.com') && originalUrl.contains('/view')) {
+      return originalUrl.replaceAll('/view?usp=drivesdk', '/preview').replaceAll('/view', '/preview');
+    }
+    return originalUrl;
+  }
+
+  Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
+    final formattedUrl = _formatDriveUrl(rawUrl);
+    final Uri uri = Uri.parse(formattedUrl);
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح الرابط، يرجى التأكد من صحته')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -498,9 +756,17 @@ class StudentPdfsScreen extends StatelessWidget {
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
-              return ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                title: Text(data['title'] ?? ''),
+              final String pdfUrl = data['url'] ?? '';
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
+                  title: Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('اضغط لفتح الملف وقراءته', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.open_in_new, color: Colors.blue),
+                  onTap: () => _openPdfUrl(context, pdfUrl),
+                ),
               );
             },
           );
@@ -509,3 +775,4 @@ class StudentPdfsScreen extends StatelessWidget {
     );
   }
 }
+ 
