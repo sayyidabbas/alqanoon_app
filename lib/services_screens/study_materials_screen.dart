@@ -706,27 +706,51 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // معالجة رابط Google Drive لفتحه في نمط العرض السريع
+  // معالجة الرابط بشكل آمن وتصحيح الحروف وتنسيق Google Drive
   String _formatDriveUrl(String originalUrl) {
-    if (originalUrl.contains('drive.google.com') && originalUrl.contains('/view')) {
-      return originalUrl.replaceAll('/view?usp=drivesdk', '/preview').replaceAll('/view', '/preview');
+    String trimmedUrl = originalUrl.trim();
+    if (trimmedUrl.isEmpty) return '';
+
+    // تصحيح Https إلى https
+    if (trimmedUrl.startsWith('Https://')) {
+      trimmedUrl = 'https://${trimmedUrl.substring(8)}';
+    } else if (trimmedUrl.startsWith('Http://')) {
+      trimmedUrl = 'http://${trimmedUrl.substring(7)}';
+    } else if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      trimmedUrl = 'https://$trimmedUrl';
     }
-    return originalUrl;
-  }
 
-  Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
-    final formattedUrl = _formatDriveUrl(rawUrl);
-    final Uri uri = Uri.parse(formattedUrl);
-
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الرابط، يرجى التأكد من صحته')),
-        );
+    // تجهيز رابط العرض السريع لملفات Google Drive
+    if (trimmedUrl.contains('drive.google.com')) {
+      if (trimmedUrl.contains('/view')) {
+        trimmedUrl = trimmedUrl.replaceAll('/view?usp=drivesdk', '/preview').replaceAll('/view', '/preview');
+      } else if (!trimmedUrl.contains('/preview')) {
+        trimmedUrl = '$trimmedUrl/preview';
       }
     }
+    return trimmedUrl;
+  }
+
+  void _openPdfUrl(BuildContext context, String rawTitle, String rawUrl) {
+    final formattedUrl = _formatDriveUrl(rawUrl);
+
+    if (formattedUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرابط غير صالح')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfViewerScreen(
+          title: rawTitle,
+          url: formattedUrl,
+          originalUrl: rawUrl,
+        ),
+      ),
+    );
   }
 
   @override
@@ -757,18 +781,120 @@ class StudentPdfsScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               final String pdfUrl = data['url'] ?? '';
+              final String title = data['title'] ?? '';
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: ListTile(
                   leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
-                  title: Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('اضغط لفتح الملف وقراءته', style: TextStyle(fontSize: 12)),
-                  trailing: const Icon(Icons.open_in_new, color: Colors.blue),
-                  onTap: () => _openPdfUrl(context, pdfUrl),
+                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('اضغط لقراءة الملف أو تنزيله', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.remove_red_eye, color: Colors.blue),
+                  onTap: () => _openPdfUrl(context, title, pdfUrl),
                 ),
               );
             },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 3. شاشة معاينة الـ PDF المدمجة والتحميل
+// ==========================================
+
+class PdfViewerScreen extends StatelessWidget {
+  final String title;
+  final String url;
+  final String originalUrl;
+
+  const PdfViewerScreen({
+    super.key,
+    required this.title,
+    required this.url,
+    required this.originalUrl,
+  });
+
+  Future<void> _downloadFile(BuildContext context) async {
+    final Uri uri = Uri.parse(originalUrl.trim());
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح رابط التحميل')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download, color: Colors.amber),
+            tooltip: 'تحميل الملف',
+            onPressed: () => _downloadFile(context),
+          ),
+        ],
+      ),
+      body: StreamBuilder<bool>(
+        stream: Stream.value(true),
+        builder: (context, snapshot) {
+          final Uri parseUri = Uri.parse(url);
+          return Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                color: Colors.amber.withOpacity(0.15),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 20, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'يمكنك التصفح بالأسفل، أو ضغط زر التحميل في الأعلى لحفظ الملف.',
+                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.open_in_browser),
+                      label: const Text('فتح المعاين في المتصفح المدمج'),
+                      onPressed: () async {
+                        if (await canLaunchUrl(parseUri)) {
+                          await launchUrl(parseUri, mode: LaunchMode.inAppWebView);
+                        } else {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تعذر فتح الرابط')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
