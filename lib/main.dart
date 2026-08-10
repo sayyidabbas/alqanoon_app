@@ -41,11 +41,11 @@ void main() async {
     }
   }
 
-  // تهيئة Supabase (استبدل القيم ببيانات مشروعك من لوحة تحكم Supabase)
+  // تهيئة Supabase بالرابط والمفتاح الخاصين بمشروعك
   try {
     await Supabase.initialize(
-      url: 'https://[YOUR_PROJECT_ID].supabase.co', // استبدل برابط مشروعك
-      anonKey: 'sb_publishable_...', // استبدل بالمفتاح العام (anon key)
+      url: 'https://hxtliwxlhwwrhvvgtptl.supabase.co', 
+      anonKey: 'sb_publishable_GQbawy5O49Ws8JOGLJbonQ_hMjMAfJs', 
     );
   } catch (e) {
     debugPrint('Supabase Init Error: $e');
