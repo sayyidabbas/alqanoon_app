@@ -25,9 +25,6 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
-    - name: Recreate Android Project Files
-      run: flutter create . --platforms=android
-
     - name: Fix Android SDK Versions
       run: |
         # تحديث إصدار الـ compileSdk و targetSdk إلى 34 في ملف build.gradle لتوافق حزمة الـ PDF
