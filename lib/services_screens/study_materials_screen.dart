@@ -1,10 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../constants/app_colors.dart';
 
 class StudyMaterialsScreen extends StatefulWidget {
@@ -22,7 +22,7 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
     'المرحلة الرابعة',
   ];
 
-  // التحقق من كلمة السر والوصول للبوابة الآمنة
+  // التحقق من حالة الدخول للبوابة الآمنة
   Future<void> _handleAdminAccess(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final bool isAdminUnlocked = prefs.getBool('is_admin_unlocked') ?? false;
@@ -34,7 +34,7 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
     }
   }
 
-  // نافذة إدخال كلمة السر
+  // نافذة طلب كلمة السر
   void _showPasswordDialog(SharedPreferences prefs) {
     final TextEditingController passwordController = TextEditingController();
     showDialog(
@@ -90,7 +90,7 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
         title: const Text('المواد الدراسية'),
         backgroundColor: AppColors.primary,
         actions: [
-          // زر البوابة الآمنة في أعلى اليمين (أو اليسار حسب اتجاه اللغة)
+          // زر البوابة الآمنة أعلى اليمين
           IconButton(
             icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
             tooltip: 'البوابة الآمنة',
@@ -108,11 +108,13 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
               title: Text(stages[index], textAlign: TextAlign.right),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
-                // الانتقال إلى قائمة المواد الخاصة بالمرحلة للطلاب
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => StudentSubjectsScreen(stageIndex: index + 1, stageName: stages[index]),
+                    builder: (_) => StudentSubjectsScreen(
+                      stageIndex: index + 1,
+                      stageName: stages[index],
+                    ),
                   ),
                 );
               },
@@ -125,7 +127,7 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
 }
 
 // ==========================================
-// 1. شاشات الأدمن (البوابة الآمنة)
+// 1. لوحة تحكم الأدمن (البوابة الآمنة)
 // ==========================================
 
 class AdminStageSelectionScreen extends StatelessWidget {
@@ -133,10 +135,18 @@ class AdminStageSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stages = ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة'];
+    final stages = [
+      'المرحلة الأولى',
+      'المرحلة الثانية',
+      'المرحلة الثالثة',
+      'المرحلة الرابعة'
+    ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('إدارة المراحل (الأدمن)')),
+      appBar: AppBar(
+        title: const Text('إدارة المراحل (الأدمن)'),
+        backgroundColor: AppColors.primary,
+      ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: stages.length,
@@ -149,7 +159,10 @@ class AdminStageSelectionScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => AdminManageSubjectsScreen(stageIndex: index + 1, stageName: stages[index]),
+                    builder: (_) => AdminManageSubjectsScreen(
+                      stageIndex: index + 1,
+                      stageName: stages[index],
+                    ),
                   ),
                 );
               },
@@ -161,15 +174,19 @@ class AdminStageSelectionScreen extends StatelessWidget {
   }
 }
 
-// لوحة إدارة المواد الدراسية للأدمن
 class AdminManageSubjectsScreen extends StatefulWidget {
   final int stageIndex;
   final String stageName;
 
-  const AdminManageSubjectsScreen({super.key, required this.stageIndex, required this.stageName});
+  const AdminManageSubjectsScreen({
+    super.key,
+    required this.stageIndex,
+    required this.stageName,
+  });
 
   @override
-  State<AdminManageSubjectsScreen> createState() => _AdminManageSubjectsScreenState();
+  State<AdminManageSubjectsScreen> createState() =>
+      _AdminManageSubjectsScreenState();
 }
 
 class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
@@ -184,7 +201,10 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
           decoration: const InputDecoration(hintText: 'اسم المادة الدراسية'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
           ElevatedButton(
             onPressed: () async {
               if (controller.text.isNotEmpty) {
@@ -206,7 +226,10 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('مواد ${widget.stageName}')),
+      appBar: AppBar(
+        title: Text('مواد ${widget.stageName}'),
+        backgroundColor: AppColors.primary,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addSubjectDialog,
         label: const Text('إضافة مادة'),
@@ -219,7 +242,9 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
             .collection('subjects')
             .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final docs = snapshot.data!.docs;
 
           return ListView.builder(
@@ -252,7 +277,6 @@ class _AdminManageSubjectsScreenState extends State<AdminManageSubjectsScreen> {
   }
 }
 
-// لوحة إدارة وملفات PDF للمادة (الأدمن)
 class AdminManagePdfsScreen extends StatefulWidget {
   final int stageIndex;
   final String subjectId;
@@ -272,57 +296,69 @@ class AdminManagePdfsScreen extends StatefulWidget {
 class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
   bool _isUploading = false;
 
-  Future<void> _uploadPdf() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
+  // رفع رابط المنهج مباشرة لـ Firestore
+  void _addPdfUrlDialog() {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إضافة رابط منهج PDF'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(hintText: 'عنوان المنهج أو المحاضرة'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(hintText: 'رابط ملف الـ PDF (Google Drive أو غيره)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleController.text.isNotEmpty && urlController.text.isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('stages')
+                    .doc('stage_${widget.stageIndex}')
+                    .collection('subjects')
+                    .doc(widget.subjectId)
+                    .collection('pdfs')
+                    .add({
+                  'title': titleController.text.trim(),
+                  'url': urlController.text.trim(),
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
     );
-
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final fileName = result.files.single.name;
-
-      setState(() => _isUploading = true);
-
-      try {
-        // 1. رفع الملف إلى Firebase Storage
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('pdf_materials/stage_${widget.stageIndex}/${widget.subjectId}/$fileName');
-        
-        await ref.putFile(file);
-        final downloadUrl = await ref.getDownloadURL();
-
-        // 2. حفظ الرابط والمعلومات في Firestore
-        await FirebaseFirestore.instance
-            .collection('stages')
-            .doc('stage_${widget.stageIndex}')
-            .collection('subjects')
-            .doc(widget.subjectId)
-            .collection('pdfs')
-            .add({
-          'title': fileName,
-          'url': downloadUrl,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفع المنهج بنجاح!')));
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء الرفع: $e')));
-      } finally {
-        setState(() => _isUploading = false);
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('مناهج ${widget.subjectName}')),
+      appBar: AppBar(
+        title: Text('مناهج ${widget.subjectName}'),
+        backgroundColor: AppColors.primary,
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isUploading ? null : _uploadPdf,
-        label: Text(_isUploading ? 'جاري الرفع...' : 'إضافة منهج PDF'),
-        icon: _isUploading ? const CircularProgressIndicator(color: Colors.white) : const Icon(Icons.upload_file),
+        onPressed: _addPdfUrlDialog,
+        label: const Text('إضافة منهج'),
+        icon: const Icon(Icons.add_link),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -338,7 +374,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد ملفات مرفوعة بعد'));
+            return const Center(child: Text('لا توجد مناهج مضافة بعد'));
           }
 
           return ListView.builder(
@@ -346,8 +382,9 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               return ListTile(
-                leading: const Icon(Icons.pdf_customize, color: Colors.red),
+                leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: Text(data['title'] ?? ''),
+                subtitle: Text(data['url'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
               );
             },
           );
@@ -358,19 +395,26 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
 }
 
 // ==========================================
-// 2. شاشات عرض المحتوى للطلاب
+// 2. واجهات عرض المحتوى للطلاب
 // ==========================================
 
 class StudentSubjectsScreen extends StatelessWidget {
   final int stageIndex;
   final String stageName;
 
-  const StudentSubjectsScreen({super.key, required this.stageIndex, required this.stageName});
+  const StudentSubjectsScreen({
+    super.key,
+    required this.stageIndex,
+    required this.stageName,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('مواد $stageName')),
+      appBar: AppBar(
+        title: Text('مواد $stageName'),
+        backgroundColor: AppColors.primary,
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('stages')
@@ -430,7 +474,10 @@ class StudentPdfsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('مناهج $subjectName')),
+      appBar: AppBar(
+        title: Text('مناهج $subjectName'),
+        backgroundColor: AppColors.primary,
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('stages')
@@ -444,7 +491,7 @@ class StudentPdfsScreen extends StatelessWidget {
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد مناهج متاح حالياً'));
+            return const Center(child: Text('لا توجد مناهج متاحة حالياً'));
           }
 
           return ListView.builder(
@@ -454,13 +501,6 @@ class StudentPdfsScreen extends StatelessWidget {
               return ListTile(
                 leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
                 title: Text(data['title'] ?? ''),
-                trailing: const Icon(Icons.download),
-                onTap: () async {
-                  final url = Uri.parse(data['url']);
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  }
-                },
               );
             },
           );
