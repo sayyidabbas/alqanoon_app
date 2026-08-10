@@ -1,4 +1,4 @@
-name: law_platform
+Name: law_platform
 description: "تطبيق منصة القانون - تطبيق خاص بالأجهزة الذكية"
 publish_to: 'none'
 
@@ -26,6 +26,9 @@ dependencies:
 
   # 🌐 حزمة إرسال الطلبات لرفع الصور لسيرفر الرفع المجاني
   http: ^1.2.0
+
+  # 🔗 حزمة فتح الروابط الخارجية وملفات الـ PDF
+  url_launcher: ^6.3.0
 
   # --- حزم الفايربيس للخدمات السحابية ---
   firebase_core: ^3.1.0
