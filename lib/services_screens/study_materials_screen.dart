@@ -1,10 +1,12 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../constants/app_colors.dart';
 
 class StudyMaterialsScreen extends StatefulWidget {
@@ -22,13 +24,11 @@ class _StudyMaterialsScreenState extends State<StudyMaterialsScreen> {
     'المرحلة الرابعة',
   ];
 
-  // مفتاح فريد يعتمد على المعرف الخاص بالحساب الحالي
   String get _userAdminKey {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
     return 'is_admin_unlocked_$uid';
   }
 
-  // الحصول على رمز الأدمن الحالي من Firestore أو الاعتماد على الافتراضي
   Future<String> _getAdminPin() async {
     final doc = await FirebaseFirestore.instance.collection('settings').doc('admin').get();
     if (doc.exists && doc.data()!.containsKey('pin')) {
@@ -460,53 +460,106 @@ class AdminManagePdfsScreen extends StatefulWidget {
 }
 
 class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
-  void _addPdfUrlDialog() {
+  
+  // دالة الرفع الجديدة من الهاتف
+  void _addPdfDialog() {
     final titleController = TextEditingController();
-    final urlController = TextEditingController();
+    File? selectedFile;
+    bool isUploading = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('إضافة رابط منهج PDF'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(hintText: 'عنوان المنهج أو المحاضرة'),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('رفع منهج PDF جديد', textAlign: TextAlign.right),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(hintText: 'عنوان المحاضرة أو المنهج'),
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: Text(selectedFile == null ? 'اختيار ملف PDF من الهاتف' : 'تم اختيار الملف'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: selectedFile == null ? Colors.blue : Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: isUploading ? null : () async {
+                    FilePickerResult? result = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['pdf'],
+                    );
+
+                    if (result != null && result.files.single.path != null) {
+                      setStateDialog(() {
+                        selectedFile = File(result.files.single.path!);
+                      });
+                    }
+                  },
+                ),
+                if (isUploading) ...[
+                  const SizedBox(height: 15),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 10),
+                  const Text('جاري الرفع للسيرفر، لا تغلق النافذة...', style: TextStyle(fontSize: 12)),
+                ]
+              ],
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(hintText: 'رابط ملف Google Drive'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleController.text.isNotEmpty && urlController.text.isNotEmpty) {
-                await FirebaseFirestore.instance
-                    .collection('stages')
-                    .doc('stage_${widget.stageIndex}')
-                    .collection('subjects')
-                    .doc(widget.subjectId)
-                    .collection('pdfs')
-                    .add({
-                  'title': titleController.text.trim(),
-                  'url': urlController.text.trim(),
-                  'createdAt': FieldValue.serverTimestamp(),
-                });
-                if (mounted) Navigator.pop(ctx);
-              }
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: isUploading ? null : () => Navigator.pop(ctx),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: (isUploading || selectedFile == null || titleController.text.isEmpty)
+                    ? null
+                    : () async {
+                        setStateDialog(() { isUploading = true; });
+                        try {
+                          final fileName = '${DateTime.now().millisecondsSinceEpoch}.pdf';
+                          
+                          // الرفع لسيرفر Supabase
+                          await Supabase.instance.client.storage
+                              .from('pdfs')
+                              .upload(fileName, selectedFile!);
+
+                          final publicUrl = Supabase.instance.client.storage
+                              .from('pdfs')
+                              .getPublicUrl(fileName);
+
+                          // الحفظ في الفايرستور
+                          await FirebaseFirestore.instance
+                              .collection('stages')
+                              .doc('stage_${widget.stageIndex}')
+                              .collection('subjects')
+                              .doc(widget.subjectId)
+                              .collection('pdfs')
+                              .add({
+                            'title': titleController.text.trim(),
+                            'url': publicUrl,
+                            'fileName': fileName,
+                            'createdAt': FieldValue.serverTimestamp(),
+                          });
+
+                          if (mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('حدث خطأ: $e')),
+                          );
+                          setStateDialog(() { isUploading = false; });
+                        }
+                      },
+                child: const Text('رفع وحفظ'),
+              ),
+            ],
+          );
+        }
       ),
     );
   }
@@ -557,7 +610,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
     );
   }
 
-  void _deletePdf(String pdfId) async {
+  void _deletePdf(String pdfId, String? fileName) async {
     await FirebaseFirestore.instance
         .collection('stages')
         .doc('stage_${widget.stageIndex}')
@@ -566,6 +619,15 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
         .collection('pdfs')
         .doc(pdfId)
         .delete();
+
+    // مسح الملف من Supabase إذا كان مرفوعاً عبر التطبيق
+    if (fileName != null && fileName.isNotEmpty) {
+      try {
+        await Supabase.instance.client.storage.from('pdfs').remove([fileName]);
+      } catch (e) {
+        debugPrint('خطأ في حذف الملف: $e');
+      }
+    }
   }
 
   @override
@@ -576,9 +638,9 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
         backgroundColor: AppColors.primary,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addPdfUrlDialog,
-        label: const Text('إضافة منهج'),
-        icon: const Icon(Icons.add_link),
+        onPressed: _addPdfDialog,
+        label: const Text('رفع ملف PDF'),
+        icon: const Icon(Icons.upload_file),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -612,7 +674,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                     if (value == 'edit') {
                       _editPdfDialog(pdfId, data['title'] ?? '', data['url'] ?? '');
                     } else if (value == 'delete') {
-                      _deletePdf(pdfId);
+                      _deletePdf(pdfId, data['fileName']);
                     }
                   },
                   itemBuilder: (context) => [
@@ -706,35 +768,8 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // معالجة الرابط بشكل آمن وتصحيح الحروف وتنسيق Google Drive
-  String _formatDriveUrl(String originalUrl) {
-    String trimmedUrl = originalUrl.trim();
-    if (trimmedUrl.isEmpty) return '';
-
-    // تصحيح Https إلى https
-    if (trimmedUrl.startsWith('Https://')) {
-      trimmedUrl = 'https://${trimmedUrl.substring(8)}';
-    } else if (trimmedUrl.startsWith('Http://')) {
-      trimmedUrl = 'http://${trimmedUrl.substring(7)}';
-    } else if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
-      trimmedUrl = 'https://$trimmedUrl';
-    }
-
-    // تجهيز رابط العرض السريع لملفات Google Drive
-    if (trimmedUrl.contains('drive.google.com')) {
-      if (trimmedUrl.contains('/view')) {
-        trimmedUrl = trimmedUrl.replaceAll('/view?usp=drivesdk', '/preview').replaceAll('/view', '/preview');
-      } else if (!trimmedUrl.contains('/preview')) {
-        trimmedUrl = '$trimmedUrl/preview';
-      }
-    }
-    return trimmedUrl;
-  }
-
   void _openPdfUrl(BuildContext context, String rawTitle, String rawUrl) {
-    final formattedUrl = _formatDriveUrl(rawUrl);
-
-    if (formattedUrl.isEmpty) {
+    if (rawUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الرابط غير صالح')),
       );
@@ -746,8 +781,7 @@ class StudentPdfsScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => PdfViewerScreen(
           title: rawTitle,
-          url: formattedUrl,
-          originalUrl: rawUrl,
+          url: rawUrl,
         ),
       ),
     );
@@ -767,6 +801,7 @@ class StudentPdfsScreen extends StatelessWidget {
             .collection('subjects')
             .doc(subjectId)
             .collection('pdfs')
+            .orderBy('createdAt', descending: true) // تم إضافة ترتيب الأحدث
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -808,17 +843,15 @@ class StudentPdfsScreen extends StatelessWidget {
 class PdfViewerScreen extends StatelessWidget {
   final String title;
   final String url;
-  final String originalUrl;
 
   const PdfViewerScreen({
     super.key,
     required this.title,
     required this.url,
-    required this.originalUrl,
   });
 
   Future<void> _downloadFile(BuildContext context) async {
-    final Uri uri = Uri.parse(originalUrl.trim());
+    final Uri uri = Uri.parse(url.trim());
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
@@ -830,8 +863,23 @@ class PdfViewerScreen extends StatelessWidget {
     }
   }
 
+  // هذه الدالة للتوافق مع الروابط القديمة من Google Drive
+  String _formatDriveUrl(String originalUrl) {
+    String trimmedUrl = originalUrl.trim();
+    if (trimmedUrl.contains('drive.google.com')) {
+      if (trimmedUrl.contains('/view')) {
+        trimmedUrl = trimmedUrl.replaceAll('/view?usp=drivesdk', '/preview').replaceAll('/view', '/preview');
+      } else if (!trimmedUrl.contains('/preview')) {
+        trimmedUrl = '$trimmedUrl/preview';
+      }
+    }
+    return trimmedUrl;
+  }
+
   @override
   Widget build(BuildContext context) {
+    bool isDriveLink = url.contains('drive.google.com');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -844,60 +892,68 @@ class PdfViewerScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: StreamBuilder<bool>(
-        stream: Stream.value(true),
-        builder: (context, snapshot) {
-          final Uri parseUri = Uri.parse(url);
-          return Column(
+      body: isDriveLink 
+      ? _buildOldDriveViewer(context) // إذا كان الرابط قديم (جوجل درايف)
+      : SfPdfViewer.network(          // إذا كان الرابط جديد (Supabase)
+          url,
+          canShowScrollHead: false,
+          canShowScrollStatus: false,
+        ),
+    );
+  }
+
+  // الواجهة القديمة الخاصة بروابط درايف لكي لا تتأثر الميزات السابقة
+  Widget _buildOldDriveViewer(BuildContext context) {
+    final formattedDriveUrl = _formatDriveUrl(url);
+    final Uri parseUri = Uri.parse(formattedDriveUrl);
+
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          color: Colors.amber.withOpacity(0.15),
+          child: Row(
             children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                color: Colors.amber.withOpacity(0.15),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, size: 20, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'يمكنك التصفح بالأسفل، أو ضغط زر التحميل في الأعلى لحفظ الملف.',
-                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const Icon(Icons.info_outline, size: 20, color: Colors.amber),
+              const SizedBox(width: 8),
               Expanded(
-                child: Container(
-                  color: Colors.black,
-                  child: Center(
-                    child: TextButton.icon(
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      icon: const Icon(Icons.open_in_browser),
-                      label: const Text('فتح المعاين في المتصفح المدمج'),
-                      onPressed: () async {
-                        if (await canLaunchUrl(parseUri)) {
-                          await launchUrl(parseUri, mode: LaunchMode.inAppWebView);
-                        } else {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('تعذر فتح الرابط')),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ),
+                child: Text(
+                  'هذا الملف مرفوع على Google Drive. اضغط على الزر أدناه لمعاينته أو تنزيله.',
+                  style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9)),
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        ),
+        Expanded(
+          child: Container(
+            color: Colors.black,
+            child: Center(
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                icon: const Icon(Icons.open_in_browser),
+                label: const Text('فتح الملف'),
+                onPressed: () async {
+                  if (await canLaunchUrl(parseUri)) {
+                    await launchUrl(parseUri, mode: LaunchMode.inAppWebView);
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تعذر فتح الرابط')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
