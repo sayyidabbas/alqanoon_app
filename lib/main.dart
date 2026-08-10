@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
@@ -38,6 +39,16 @@ void main() async {
     if (!e.toString().contains('duplicate-app')) {
       await Firebase.initializeApp();
     }
+  }
+
+  // تهيئة Supabase (استبدل القيم ببيانات مشروعك من لوحة تحكم Supabase)
+  try {
+    await Supabase.initialize(
+      url: 'https://[YOUR_PROJECT_ID].supabase.co', // استبدل برابط مشروعك
+      anonKey: 'sb_publishable_...', // استبدل بالمفتاح العام (anon key)
+    );
+  } catch (e) {
+    debugPrint('Supabase Init Error: $e');
   }
 
   runApp(const LawPlatformApp());
