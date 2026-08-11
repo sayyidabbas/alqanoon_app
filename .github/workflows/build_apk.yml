@@ -47,26 +47,18 @@ jobs:
       run: |
         MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
         if [ -f "$MANIFEST_PATH" ]; then
-          python3 -c "
-          import xml.etree.ElementTree as ET
-          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
-          tree = ET.parse('$MANIFEST_PATH')
-          root = tree.getroot()
-          if root.find('queries') is None:
-              queries = ET.Element('queries')
-              
-              intent1 = ET.SubElement(queries, 'intent')
-              ET.SubElement(intent1, 'action', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.action.VIEW'})
-              ET.SubElement(intent1, 'category', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.category.BROWSABLE'})
-              ET.SubElement(intent1, 'data', {'{http://schemas.android.com/apk/res/android}scheme': 'https'})
-
-              intent2 = ET.SubElement(queries, 'intent')
-              ET.SubElement(intent2, 'action', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.action.VIEW'})
-              ET.SubElement(intent2, 'data', {'{http://schemas.android.com/apk/res/android}mimeType': 'application/pdf'})
-
-              root.insert(0, queries)
-              tree.write('$MANIFEST_PATH', encoding='utf-8', xml_declaration=True)
-          "
+          sed -i '/<application/i \
+            <queries>\
+                <intent>\
+                    <action android:name="android.intent.action.VIEW" />\
+                    <category android:name="android.intent.category.BROWSABLE" />\
+                    <data android:scheme="https" />\
+                </intent>\
+                <intent>\
+                    <action android:name="android.intent.action.VIEW" />\
+                    <data android:mimeType="application/pdf" />\
+                </intent>\
+            </queries>' "$MANIFEST_PATH"
         fi
 
     - name: Install Dependencies
