@@ -765,7 +765,7 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة المعدلة لفتح الرابط مباشرة عبر المتصفح أو تطبيق القراءة في النظام
+  // الدالة التي تم تعديلها لتجاوز قيود canLaunchUrl
   Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
     if (rawUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -775,10 +775,22 @@ class StudentPdfsScreen extends StatelessWidget {
     }
 
     final Uri uri = Uri.parse(rawUrl.trim());
-    if (await canLaunchUrl(uri)) {
-      // استخدام النمط الخارجي ليفتح المتصفح أو تطبيق التنزيلات
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    
+    try {
+      // إجبار تشغيل الرابط مباشرة بدون التحقق باستخدام canLaunchUrl
+      final bool success = await launchUrl(
+        uri, 
+        mode: LaunchMode.externalApplication,
+      );
+      
+      // في حال فشل الفتح الفعلي
+      if (!success && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح الملف تأكد من وجود متصفح')),
+        );
+      }
+    } catch (e) {
+      // التقاط أي أخطاء غير متوقعة
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذر فتح الملف')),
