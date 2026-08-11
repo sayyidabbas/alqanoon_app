@@ -28,6 +28,9 @@ jobs:
     - name: Install Dependencies
       run: flutter pub get
 
+    - name: Create Android Directories
+      run: mkdir -p android/app
+
     - name: Copy Firebase Config
       run: cp google-services.json android/app/
 
