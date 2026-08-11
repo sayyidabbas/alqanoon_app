@@ -71,10 +71,10 @@ jobs:
       run: flutter pub run rename setAppName --targets android --value "منصة القانون"
 
     - name: Build APK
-      run: flutter build apk --release || true
+      run: flutter build apk --release
 
     - name: Find and Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        path: '**/*.apk'
+        path: build/app/outputs/flutter-apk/app-release.apk
