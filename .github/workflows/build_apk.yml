@@ -10,11 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # تم التحديث إلى v4 لإزالة التحذيرات
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # تم التحديث إلى v4 لإزالة التحذيرات
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
@@ -30,15 +28,15 @@ jobs:
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android
 
-    - name: Force compileSdk 36 globally
+    - name: Force compileSdk 35 globally
       run: |
         echo "
         subprojects {
             afterEvaluate { project ->
                 if (project.hasProperty('android')) {
                     project.android {
-                        compileSdk = 36
-                        compileSdkVersion 36
+                        compileSdk = 35
+                        compileSdkVersion 35
                     }
                 }
             }
@@ -49,18 +47,16 @@ jobs:
       run: flutter pub get
 
     - name: Copy Firebase Config
-      run: cp google-services.json android/app/
+      run: cp google-services.json android/app/ || true
 
     - name: Set App Name
-      run: flutter pub run rename setAppName --targets android --value "منصة القانون"
+      run: flutter pub run rename setAppName --targets android --value "منصة القانون" || true
 
-    - name: Build APK (Bypass Flutter CLI Check)
-      run: flutter build apk --release || true
+    - name: Build APK
+      run: flutter build apk --release
 
     - name: Find and Upload APK
-      # تم التحديث إلى v4
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        # سيبحث الخادم عن أي ملف بصيغة apk في جميع مجلدات المشروع بلا استثناء
-        path: '**/*.apk'
+        path: build/app/outputs/flutter-apk/app-release.apk
