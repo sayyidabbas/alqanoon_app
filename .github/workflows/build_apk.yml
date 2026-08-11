@@ -25,16 +25,19 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
-    - name: Install Dependencies
-      run: flutter pub get
-
-    - name: Copy Firebase Config
-      run: cp google-services.json android/app/ || true
+    - name: Recreate Android Project Files
+      run: flutter create . --platforms=android
 
     - name: Force compileSdk 36
       run: |
         sed -i 's/compileSdkVersion.*/compileSdkVersion 36/' android/app/build.gradle || true
         sed -i 's/compileSdk =.*/compileSdk = 36/' android/app/build.gradle || true
+
+    - name: Install Dependencies
+      run: flutter pub get
+
+    - name: Copy Firebase Config
+      run: cp google-services.json android/app/ || true
 
     - name: Set App Name
       run: flutter pub run rename setAppName --targets android --value "منصة القانون" || true
@@ -47,3 +50,4 @@ jobs:
       with:
         name: law-platform-apk
         path: build/app/outputs/flutter-apk/app-release.apk
+        
