@@ -765,20 +765,40 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة المعدلة لفتح الرابط مباشرة عبر المتصفح أو تطبيق القراءة في النظام
+  // الدالة المحدثة لفتح الرابط مباشرة عبر المتصفح أو تطبيق Google Drive الخارجي
   Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
     if (rawUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرابط غير صالح')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('الرابط غير صالح')),
+        );
+      }
       return;
     }
 
-    final Uri uri = Uri.parse(rawUrl.trim());
-    if (await canLaunchUrl(uri)) {
-      // استخدام النمط الخارجي ليفتح المتصفح أو تطبيق التنزيلات
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      final Uri uri = Uri.parse(rawUrl.trim());
+
+      // فتح الرابط بنمط خارجي لاستدعاء التطبيقات المتاحة للنظام (Google Drive أو Chrome)
+      bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      // في حال تعذر الفتح كـ Application خارجي يتم التجربة بالنظام الافتراضي
+      if (!launched) {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+      }
+
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح الملف')),
+        );
+      }
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذر فتح الملف')),
