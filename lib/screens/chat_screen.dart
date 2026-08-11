@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+Import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/app_colors.dart';
@@ -6,14 +6,14 @@ import '../constants/app_colors.dart';
 class ChatScreen extends StatefulWidget {
   final String userName;
   final String userHandle;
-  final String peerUid; // 🟢 جعلنا الـ peerUid إجبارياً (required) لحل المشكلة
+  final String? peerUid;
   final List<Map<String, dynamic>>? initialMessages;
 
   const ChatScreen({
     super.key,
     required this.userName,
     required this.userHandle,
-    required this.peerUid, // 🟢 تعديل هام
+    this.peerUid,
     this.initialMessages,
   });
 
@@ -27,8 +27,11 @@ class _ChatScreenState extends State<ChatScreen> {
   // 🟢 توحيد المعرف الحقيقي بناءً على UID لكلا الطرفين لضمان المراسلة المباشرة
   String _getChatId() {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    // نعتمد الآن حصرياً على peerUid
-    List<String> ids = [myUid, widget.peerUid]..sort();
+    final targetId = (widget.peerUid != null && widget.peerUid!.isNotEmpty)
+        ? widget.peerUid!
+        : widget.userHandle;
+
+    List<String> ids = [myUid, targetId]..sort();
     return ids.join('_');
   }
 
@@ -47,22 +50,16 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': FieldValue.serverTimestamp(),
     };
 
-    // 1. حفظ الرسالة في مجموعة الفرعية (messages)
     await FirebaseFirestore.instance
         .collection('chats')
         .doc(chatId)
         .collection('messages')
         .add(messageData);
 
-    // 2. تحديث بيانات غرفة المحادثة الأساسية لتظهر في قائمة الدردشات للطرفين
     await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
       'lastMessage': text,
       'lastUpdated': FieldValue.serverTimestamp(),
-      // 🟢 حفظ الـ UID الحقيقي لكلا الطرفين لضمان ظهور المحادثة للطرفين
-      'users': [myUid, widget.peerUid], 
-      // اختياري: حفظ بيانات المستخدمين لعرضها في القائمة مباشرة دون استعلام إضافي
-      'user_${myUid}_name': FirebaseAuth.instance.currentUser?.displayName ?? 'أنا',
-      'user_${widget.peerUid}_name': widget.userName,
+      'users': [myUid, widget.peerUid ?? widget.userHandle],
     }, SetOptions(merge: true));
   }
 
