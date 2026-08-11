@@ -340,7 +340,7 @@ class UserProfileViewScreen extends StatelessWidget {
                             builder: (context) => ChatScreen(
                               userName: fullName,
                               userHandle: username,
-                              peerUid: peerUid,
+                              peerUid: peerUid ?? '',
                             ),
                           ),
                         );
