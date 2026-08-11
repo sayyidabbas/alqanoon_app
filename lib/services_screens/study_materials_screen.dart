@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:android_intent_plus/android_intent.dart'; // حزمة الأندرويد المضافة
 import '../constants/app_colors.dart';
 
 class StudyMaterialsScreen extends StatefulWidget {
@@ -765,7 +766,7 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة الجديدة التي ترسل الرابط للنظام ليستدعي هو نافذة الاختيار (مثل الصورة الثانية)
+  // دالة فتح ملفات الـ PDF عبر AndroidIntent لإظهار خيارات التطبيقات (درايف أو المتصفح)
   Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
     if (rawUrl.isEmpty) {
       if (context.mounted) {
@@ -777,24 +778,16 @@ class StudentPdfsScreen extends StatelessWidget {
     }
 
     try {
-      final Uri uri = Uri.parse(rawUrl.trim());
-
-      // استخدام النمط الخارجي المباشر ليقوم هاتف الأندرويد بإظهار نافذة الاختيار
-      // الخاصة به (Chrome أو Drive PDF Viewer)
-      bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
+      final intent = AndroidIntent(
+        action: 'action_view',
+        data: rawUrl.trim(),
+        type: 'application/pdf', // إجبار النظام على التعامل معه كملف PDF لإظهار خيارات التطبيقات
       );
-
-      if (!launched && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف')),
-        );
-      }
+      await intent.launch();
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف')),
+          const SnackBar(content: Text('تعذر فتح الملف، يرجى التأكد من وجود تطبيق قارئ PDF')),
         );
       }
     }
@@ -838,7 +831,7 @@ class StudentPdfsScreen extends StatelessWidget {
                   title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: const Text('اضغط لفتح الملف وعرضه', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.open_in_new, color: Colors.blue),
-                  onTap: () => _openPdfUrl(context, pdfUrl), // استدعاء الدالة المباشرة هنا
+                  onTap: () => _openPdfUrl(context, pdfUrl),
                 ),
               );
             },
