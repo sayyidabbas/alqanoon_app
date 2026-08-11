@@ -28,15 +28,15 @@ jobs:
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android
 
-    - name: Force compileSdk 35 globally
+    - name: Force compileSdk 36 globally
       run: |
         echo "
         subprojects {
             afterEvaluate { project ->
                 if (project.hasProperty('android')) {
                     project.android {
-                        compileSdk = 35
-                        compileSdkVersion 35
+                        compileSdk = 36
+                        compileSdkVersion 36
                     }
                 }
             }
