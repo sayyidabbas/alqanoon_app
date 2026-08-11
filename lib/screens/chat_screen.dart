@@ -6,14 +6,14 @@ import '../constants/app_colors.dart';
 class ChatScreen extends StatefulWidget {
   final String userName;
   final String userHandle;
-  final String? peerUid;
+  final String peerUid; // 🟢 جعلنا الـ peerUid إجبارياً (required) لحل المشكلة
   final List<Map<String, dynamic>>? initialMessages;
 
   const ChatScreen({
     super.key,
     required this.userName,
     required this.userHandle,
-    this.peerUid,
+    required this.peerUid, // 🟢 تعديل هام
     this.initialMessages,
   });
 
@@ -27,11 +27,8 @@ class _ChatScreenState extends State<ChatScreen> {
   // 🟢 توحيد المعرف الحقيقي بناءً على UID لكلا الطرفين لضمان المراسلة المباشرة
   String _getChatId() {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    final targetId = (widget.peerUid != null && widget.peerUid!.isNotEmpty)
-        ? widget.peerUid!
-        : widget.userHandle;
-
-    List<String> ids = [myUid, targetId]..sort();
+    // نعتمد الآن حصرياً على peerUid
+    List<String> ids = [myUid, widget.peerUid]..sort();
     return ids.join('_');
   }
 
@@ -50,16 +47,22 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': FieldValue.serverTimestamp(),
     };
 
+    // 1. حفظ الرسالة في مجموعة الفرعية (messages)
     await FirebaseFirestore.instance
         .collection('chats')
         .doc(chatId)
         .collection('messages')
         .add(messageData);
 
+    // 2. تحديث بيانات غرفة المحادثة الأساسية لتظهر في قائمة الدردشات للطرفين
     await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
       'lastMessage': text,
       'lastUpdated': FieldValue.serverTimestamp(),
-      'users': [myUid, widget.peerUid ?? widget.userHandle],
+      // 🟢 حفظ الـ UID الحقيقي لكلا الطرفين لضمان ظهور المحادثة للطرفين
+      'users': [myUid, widget.peerUid], 
+      // اختياري: حفظ بيانات المستخدمين لعرضها في القائمة مباشرة دون استعلام إضافي
+      'user_${myUid}_name': FirebaseAuth.instance.currentUser?.displayName ?? 'أنا',
+      'user_${widget.peerUid}_name': widget.userName,
     }, SetOptions(merge: true));
   }
 
