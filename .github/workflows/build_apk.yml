@@ -1,4 +1,4 @@
-name: Build Android APk
+name: Build Android APK
 
 on:
   push:
@@ -64,4 +64,3 @@ jobs:
         name: law-platform-apk
         # سيبحث الخادم عن أي ملف بصيغة apk في جميع مجلدات المشروع بلا استثناء
         path: '**/*.apk'
-        
