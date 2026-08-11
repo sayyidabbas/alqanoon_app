@@ -28,8 +28,8 @@ jobs:
     - name: Install Dependencies
       run: flutter pub get
 
-    - name: Create Android Directories
-      run: mkdir -p android/app
+    - name: Generate Android Structure Properly
+      run: flutter create . --platforms=android --org com.lawplatform.app
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/
@@ -43,9 +43,6 @@ jobs:
           sed -i 's/targetSdkVersion 34/targetSdkVersion 36/g' "$BUILD_GRADLE"
           sed -i 's/targetSdk = 34/targetSdk = 36/g' "$BUILD_GRADLE"
         fi
-
-    - name: Set App Name
-      run: flutter pub run rename setAppName --targets android --value "منصة القانون"
 
     - name: Build APK
       run: flutter build apk --release
