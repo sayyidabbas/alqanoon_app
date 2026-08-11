@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
     - name: Checkout Repository
       uses: actions/checkout@v4
 
@@ -25,32 +26,39 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
+    # إنشاء ملفات Android الحقيقية
+    - name: Generate Android Project
+      run: flutter create . --platforms=android --org com.lawplatform.app
+
     - name: Install Dependencies
       run: flutter pub get
-
-    - name: Generate Android Structure Properly
-      run: flutter create . --platforms=android --org com.lawplatform.app
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/
 
-    - name: Force compileSdk 36 and targetSdk 36
+    # تعديل SDK إذا كان الملف موجود
+    - name: Force SDK 36
       run: |
-        BUILD_GRADLE="android/app/build.gradle"
-        if [ -f "$BUILD_GRADLE" ]; then
-          sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$BUILD_GRADLE"
-          sed -i 's/compileSdk = 34/compileSdk = 36/g' "$BUILD_GRADLE"
-          sed -i 's/targetSdkVersion 34/targetSdkVersion 36/g' "$BUILD_GRADLE"
-          sed -i 's/targetSdk = 34/targetSdk = 36/g' "$BUILD_GRADLE"
+        if [ -f android/app/build.gradle ]; then
+          sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion 34/targetSdkVersion 36/g' android/app/build.gradle
         fi
+
+        if [ -f android/app/build.gradle.kts ]; then
+          sed -i 's/compileSdk = 34/compileSdk = 36/g' android/app/build.gradle.kts
+          sed -i 's/targetSdk = 34/targetSdk = 36/g' android/app/build.gradle.kts
+        fi
+
+    # تغيير اسم التطبيق بدون rename
+    - name: Set App Name
+      run: |
+        sed -i 's/android:label="[^"]*"/android:label="منصة القانون"/' android/app/src/main/AndroidManifest.xml
 
     - name: Build APK
       run: flutter build apk --release
 
-    - name: Find and Upload APK
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        path: |
-          build/app/outputs/flutter-apk/*.apk
-          build/app/outputs/apk/release/*.apk
+        path: build/app/outputs/flutter-apk/*.apk
