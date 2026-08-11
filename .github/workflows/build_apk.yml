@@ -1,4 +1,4 @@
-name: Build Android APK
+Name: Build Android APK
 
 on:
   push:
@@ -10,11 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # تم التحديث إلى v4 لإزالة التحذيرات
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # تم التحديث إلى v4 لإزالة التحذيرات
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
@@ -45,6 +43,32 @@ jobs:
         }
         " >> android/build.gradle
 
+    - name: Add Android Queries Permission
+      run: |
+        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+        if [ -f "$MANIFEST_PATH" ]; then
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          tree = ET.parse('$MANIFEST_PATH')
+          root = tree.getroot()
+          if root.find('queries') is None:
+              queries = ET.Element('queries')
+              
+              intent1 = ET.SubElement(queries, 'intent')
+              ET.SubElement(intent1, 'action', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.action.VIEW'})
+              ET.SubElement(intent1, 'category', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.category.BROWSABLE'})
+              ET.SubElement(intent1, 'data', {'{http://schemas.android.com/apk/res/android}scheme': 'https'})
+
+              intent2 = ET.SubElement(queries, 'intent')
+              ET.SubElement(intent2, 'action', {'{http://schemas.android.com/apk/res/android}name': 'android.intent.action.VIEW'})
+              ET.SubElement(intent2, 'data', {'{http://schemas.android.com/apk/res/android}mimeType': 'application/pdf'})
+
+              root.insert(0, queries)
+              tree.write('$MANIFEST_PATH', encoding='utf-8', xml_declaration=True)
+          "
+        fi
+
     - name: Install Dependencies
       run: flutter pub get
 
@@ -58,9 +82,7 @@ jobs:
       run: flutter build apk --release || true
 
     - name: Find and Upload APK
-      # تم التحديث إلى v4
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        # سيبحث الخادم عن أي ملف بصيغة apk في جميع مجلدات المشروع بلا استثناء
         path: '**/*.apk'
