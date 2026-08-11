@@ -70,11 +70,11 @@ jobs:
     - name: Set App Name
       run: flutter pub run rename setAppName --targets android --value "منصة القانون"
 
-    - name: Build APK (Bypass Flutter CLI Check)
-      run: flutter build apk --release || true
+    - name: Build APK
+      run: flutter build apk --release --verbose
 
     - name: Find and Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        path: '**/*.apk'
+        path: build/app/outputs/flutter-apk/app-release.apk
