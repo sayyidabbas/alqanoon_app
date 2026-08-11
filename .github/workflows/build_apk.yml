@@ -25,25 +25,6 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
-    - name: Recreate Android Project Files
-      run: flutter create . --platforms=android
-
-    - name: Force compileSdk 36 on all packages
-      run: |
-        cat << 'EOF' >> android/build.gradle
-
-        subprojects {
-            subproject ->
-                subproject.afterEvaluate {
-                    if (subproject.plugins.hasPlugin('com.android.application') || subproject.plugins.hasPlugin('com.android.library')) {
-                        subproject.android {
-                            compileSdk = 36
-                        }
-                    }
-                }
-        }
-        EOF
-
     - name: Install Dependencies
       run: flutter pub get
 
@@ -61,4 +42,3 @@ jobs:
       with:
         name: law-platform-apk
         path: build/app/outputs/flutter-apk/app-release.apk
-        
