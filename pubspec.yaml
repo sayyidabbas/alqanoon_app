@@ -1,4 +1,4 @@
-name: law_platform
+Name: law_platform
 description: "تطبيق منصة القانون - تطبيق خاص بالأجهزة الذكية"
 publish_to: 'none'
 
@@ -9,47 +9,58 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutter
+  name: law_platform
+  description: "تطبيق منصة القانون - تطبيق خاص بالأجهزة الذكية"
+  publish_to: 'none'
 
-  # حزمة دعم اللغة العربية واللغات الأخرى (RTL)
-  flutter_localizations:
-    sdk: flutter
+  version: 1.0.0+1
 
-  # حزمة الأيقونات الإضافية
-  cupertino_icons: ^1.0.8
+  environment:
+    sdk: '>=3.0.0 <4.0.0'
 
-  # لحفظ الرمز السري وحالة تسجيل دخول البوابة الآمنة محلياً
-  shared_preferences: ^2.2.2
+  dependencies:
+    flutter:
+      sdk: flutter
 
-  # لاختيار الصور من المعرض والكاميرا
-  image_picker: ^1.0.7
+    # حزمة دعم اللغة العربية واللغات الأخرى (RTL)
+    flutter_localizations:
+      sdk: flutter
 
-  # 🌐 حزمة إرسال الطلبات لرفع الصور لسيرفر الرفع المجاني
-  http: ^1.2.0
+    # حزمة الأيقونات الإضافية
+    cupertino_icons: ^1.0.8
 
-  # 🔗 حزمة فتح الروابط الخارجية وملفات الـ PDF مباشرة
-  url_launcher: ^6.3.0
+    # لحفظ الرمز السري وحالة تسجيل دخول البوابة الآمنة محلياً
+    shared_preferences: ^2.2.2
 
-  # --- حزم الفايربيس للخدمات السحابية ---
-  firebase_core: ^3.1.0
-  firebase_auth: ^5.1.0
-  cloud_firestore: ^5.0.1
-  firebase_storage: ^12.0.1
+    # لاختيار الصور من المعرض والكاميرا
+    image_picker: ^1.0.7
 
-  # --- حزم رفع الملفات للسحابة ---
-  supabase_flutter: ^2.5.0
-  file_picker: ^8.0.3
+    # 🌐 حزمة إرسال الطلبات لرفع الصور لسيرفر الرفع المجاني
+    http: ^1.2.0
 
-  # حزمة فتح ملفات الـ PDF مع إظهار خيارات التطبيقات في أندرويد
-  android_intent_plus: ^4.0.3
+    # 🔗 حزمة فتح الروابط الخارجية وملفات الـ PDF مباشرة
+    url_launcher: ^6.3.0
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
+    # --- حزم الفايربيس للخدمات السحابية ---
+    firebase_core: ^3.1.0
+    firebase_auth: ^5.1.0
+    cloud_firestore: ^5.0.1
+    firebase_storage: ^12.0.1
 
-  # حزمة تغيير اسم التطبيق المعتمدة
-  rename: ^3.0.2
+    # --- حزم رفع الملفات للسحابة ---
+    supabase_flutter: ^2.5.0
+    file_picker: ^8.0.3
 
-flutter:
-  uses-material-design: true
+    # حزمة فتح ملفات الـ PDF مع إظهار خيارات التطبيقات في أندرويد
+    android_intent_plus: ^4.0.3
+
+  dev_dependencies:
+    flutter_test:
+      sdk: flutter
+    flutter_lints: ^3.0.0
+
+    # حزمة تغيير اسم التطبيق المعتمدة
+    rename: ^3.0.2
+
+  flutter:
+    uses-material-design: true
