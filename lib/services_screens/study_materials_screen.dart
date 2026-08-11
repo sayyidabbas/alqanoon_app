@@ -765,38 +765,69 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة المحدثة لفتح الرابط مباشرة عبر المتصفح أو تطبيق Google Drive الخارجي
-  Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
+  // عرض القائمة السفلية لاختيار طريقة الفتح
+  void _showOpenOptions(BuildContext context, String rawUrl) {
     if (rawUrl.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('الرابط غير صالح')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرابط غير صالح')),
+      );
       return;
     }
 
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              const ListTile(
+                title: Text(
+                  'اختر طريقة فتح الملف',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.open_in_browser, color: Colors.blue),
+                title: const Text('فتح عبر المتصفح'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchUri(context, rawUrl, LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.space_dashboard_outlined, color: Colors.green),
+                title: const Text('فتح عبر تطبيق خارجي / Drive'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchUri(context, rawUrl, LaunchMode.externalNonBrowserApplication);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // الدالة المسؤولة عن فتح الرابط بناءً على اختيار المستخدم
+  Future<void> _launchUri(BuildContext context, String rawUrl, LaunchMode mode) async {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
-
-      // فتح الرابط بنمط خارجي لاستدعاء التطبيقات المتاحة للنظام (Google Drive أو Chrome)
-      bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-
-      // في حال تعذر الفتح كـ Application خارجي يتم التجربة بالنظام الافتراضي
-      if (!launched) {
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-        );
-      }
-
+      bool launched = await launchUrl(uri, mode: mode);
+      
+      // في حال فشل النمط الخارجي (كعدم توفر تطبيق Drive)، نلجأ للمتصفح كبديل احتياطي
       if (!launched && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف')),
-        );
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!launched && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تعذر فتح الملف')),
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -845,7 +876,7 @@ class StudentPdfsScreen extends StatelessWidget {
                   title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: const Text('اضغط لفتح الملف وعرضه', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.open_in_new, color: Colors.blue),
-                  onTap: () => _openPdfUrl(context, pdfUrl),
+                  onTap: () => _showOpenOptions(context, pdfUrl),
                 ),
               );
             },
