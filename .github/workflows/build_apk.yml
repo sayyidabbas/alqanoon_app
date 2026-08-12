@@ -1,4 +1,4 @@
-name: Build Android APK
+Name: Build Android APK
 
 on:
   push:
@@ -25,9 +25,6 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
-    - name: Recreate Android Project Files
-      run: flutter create . --platforms=android
-
     - name: Force compileSdk 36 globally
       run: |
         echo "
@@ -52,7 +49,6 @@ jobs:
     - name: Set App Name
       run: flutter pub run rename setAppName --targets android --value "منصة القانون"
 
-    # تم إزالة || true لإظهار الخطأ الحقيقي إن وجد
     - name: Build APK
       run: flutter build apk --release
 
