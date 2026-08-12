@@ -38,7 +38,6 @@ dependencies:
 
   # --- حزم رفع الملفات للسحابة ---
   supabase_flutter: ^2.5.0
-  file_picker: ^8.0.3
 
 dev_dependencies:
   flutter_test:
