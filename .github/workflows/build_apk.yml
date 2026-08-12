@@ -28,13 +28,25 @@ jobs:
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android
 
+    - name: Set compileSdk 34 for all modules
+      run: |
+        cat << 'EOF' >> android/build.gradle
+        subprojects {
+            project.plugins.withId('com.android.application') {
+                project.android {
+                    compileSdkVersion 34
+                }
+            }
+            project.plugins.withId('com.android.library') {
+                project.android {
+                    compileSdkVersion 34
+                }
+            }
+        }
+        EOF
+
     - name: Install Dependencies
       run: flutter pub get
-
-    - name: Set SDK Version to 34 globally
-      run: |
-        echo "flutter.compileSdkVersion=34" >> android/local.properties
-        echo "flutter.targetSdkVersion=34" >> android/local.properties
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/
