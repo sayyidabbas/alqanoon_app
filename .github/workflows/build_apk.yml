@@ -31,10 +31,10 @@ jobs:
     - name: Install Dependencies
       run: flutter pub get
 
-    - name: Force compileSdk 36
+    - name: Set compileSdk to 34
       run: |
-        sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' android/app/build.gradle || true
-        sed -i 's/compileSdk .*/compileSdk 36/g' android/app/build.gradle || true
+        sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
+        sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/ || true
@@ -43,4 +43,10 @@ jobs:
       run: flutter pub run rename setAppName --targets android --value "منصة القانون" || true
 
     - name: Build APK
-      run: flutter build apk --release --substitute-state-file-path=false
+      run: flutter build apk --release
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: law-platform-apk
+        path: build/app/outputs/flutter-apk/app-release.apk
