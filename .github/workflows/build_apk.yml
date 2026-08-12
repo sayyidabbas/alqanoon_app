@@ -19,31 +19,19 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
-    # تثبيت إصدار مستقر يمنع تعارضات AGP 9 و .kts
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.5'
         channel: 'stable'
-
-    - name: Recreate Android Project Files
-      run: flutter create . --platforms=android
-
-    # ضبط إصدار الـ SDK إلى 34 بطريقة آمنة ومعتمدة
-    - name: Configure Android SDK 34
-      run: |
-        echo "flutter.compileSdkVersion=34" >> android/local.properties
-        echo "flutter.targetSdkVersion=34" >> android/local.properties
-        echo "android.suppressUnsupportedCompileSdk=34" >> android/gradle.properties
 
     - name: Install Dependencies
       run: flutter pub get
 
     - name: Copy Firebase Config
-      run: cp google-services.json android/app/
+      run: cp google-services.json android/app/ || true
 
     - name: Set App Name
-      run: flutter pub run rename setAppName --targets android --value "منصة القانون"
+      run: flutter pub run rename setAppName --targets android --value "منصة القانون" || true
 
     - name: Build APK
       run: flutter build apk --release
@@ -52,6 +40,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
-        path: |
-          build/app/outputs/flutter-apk/app-release.apk
-          build/app/outputs/apk/release/*.apk
+        path: build/app/outputs/flutter-apk/app-release.apk
