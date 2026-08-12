@@ -28,8 +28,9 @@ jobs:
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android --org com.lawplatform.app
 
-    - name: Set SDK Version 34 in local.properties
+    - name: Set SDK Versions in local.properties
       run: |
+        echo "flutter.minSdkVersion=23" >> android/local.properties
         echo "flutter.compileSdkVersion=34" >> android/local.properties
         echo "flutter.targetSdkVersion=34" >> android/local.properties
 
