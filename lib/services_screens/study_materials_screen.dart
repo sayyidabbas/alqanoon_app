@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_selector/file_selector.dart'; // المكتبة الجديدة لاختيار الملفات
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
 
@@ -482,20 +482,28 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                 ),
                 const SizedBox(height: 15),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.image),
-                  label: Text(selectedFile == null ? 'اختيار صورة/ملف من المعرض' : 'تم اختيار الملف'),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: Text(selectedFile == null ? 'اختيار ملف PDF من الهاتف' : 'تم اختيار الملف'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: selectedFile == null ? Colors.blue : Colors.green,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: isUploading ? null : () async {
-                    final picker = ImagePicker();
-                    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                    try {
+                      // تحديد اختيار الملفات لتكون بصيغة PDF فقط
+                      const XTypeGroup typeGroup = XTypeGroup(
+                        label: 'PDFs',
+                        extensions: <String>['pdf'],
+                      );
+                      final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
 
-                    if (pickedFile != null) {
-                      setStateDialog(() {
-                        selectedFile = File(pickedFile.path);
-                      });
+                      if (file != null) {
+                        setStateDialog(() {
+                          selectedFile = File(file.path);
+                        });
+                      }
+                    } catch (e) {
+                      debugPrint('Error picking file: $e');
                     }
                   },
                 ),
@@ -518,7 +526,8 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                     : () async {
                         setStateDialog(() { isUploading = true; });
                         try {
-                          final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+                          // تغيير الصيغة المحفوظة إلى PDF
+                          final fileName = '${DateTime.now().millisecondsSinceEpoch}.pdf';
                           
                           // الرفع لسيرفر Supabase
                           await Supabase.instance.client.storage
@@ -634,7 +643,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addPdfDialog,
-        label: const Text('رفع ملف جديد'),
+        label: const Text('رفع ملف PDF'),
         icon: const Icon(Icons.upload_file),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -776,6 +785,7 @@ class StudentPdfsScreen extends StatelessWidget {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
 
+      // يقوم هذا السطر بتمرير الأمر لنظام الهاتف ليفتح الخيارات (Drive أو المتصفح)
       bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
@@ -838,7 +848,7 @@ class StudentPdfsScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
                   title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('اضغط لفتح الملف وعرضه', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('اضغط لفتح الملف أو تحميله', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.open_in_new, color: Colors.blue),
                   onTap: () => _openPdfUrl(context, pdfUrl),
                 ),
@@ -850,4 +860,3 @@ class StudentPdfsScreen extends StatelessWidget {
     );
   }
 }
- 
