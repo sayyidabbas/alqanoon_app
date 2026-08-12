@@ -31,10 +31,12 @@ jobs:
     - name: Install Dependencies
       run: flutter pub get
 
-    - name: Set compileSdk to 34
+    - name: Set Android SDK Versions (Supports Android 7.0+)
       run: |
         sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
         sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
+        sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
+        sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/ || true
