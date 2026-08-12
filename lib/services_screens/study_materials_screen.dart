@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
 
@@ -471,7 +471,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
-            title: const Text('رفع منهج PDF جديد', textAlign: TextAlign.right),
+            title: const Text('رفع ملف جديد', textAlign: TextAlign.right),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -482,21 +482,19 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                 ),
                 const SizedBox(height: 15),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.picture_as_pdf),
-                  label: Text(selectedFile == null ? 'اختيار ملف PDF من الهاتف' : 'تم اختيار الملف'),
+                  icon: const Icon(Icons.image),
+                  label: Text(selectedFile == null ? 'اختيار صورة/ملف من المعرض' : 'تم اختيار الملف'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: selectedFile == null ? Colors.blue : Colors.green,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: isUploading ? null : () async {
-                    FilePickerResult? result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ['pdf'],
-                    );
+                    final picker = ImagePicker();
+                    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-                    if (result != null && result.files.single.path != null) {
+                    if (pickedFile != null) {
                       setStateDialog(() {
-                        selectedFile = File(result.files.single.path!);
+                        selectedFile = File(pickedFile.path);
                       });
                     }
                   },
@@ -520,7 +518,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                     : () async {
                         setStateDialog(() { isUploading = true; });
                         try {
-                          final fileName = '${DateTime.now().millisecondsSinceEpoch}.pdf';
+                          final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
                           
                           // الرفع لسيرفر Supabase
                           await Supabase.instance.client.storage
@@ -636,7 +634,7 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addPdfDialog,
-        label: const Text('رفع ملف PDF'),
+        label: const Text('رفع ملف جديد'),
         icon: const Icon(Icons.upload_file),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -765,7 +763,6 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة المحدثة لفتح الرابط مباشرة عبر المتصفح أو تطبيق Google Drive الخارجي
   Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
     if (rawUrl.isEmpty) {
       if (context.mounted) {
@@ -779,13 +776,11 @@ class StudentPdfsScreen extends StatelessWidget {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
 
-      // فتح الرابط بنمط خارجي لاستدعاء التطبيقات المتاحة للنظام (Google Drive أو Chrome)
       bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
 
-      // في حال تعذر الفتح كـ Application خارجي يتم التجربة بالنظام الافتراضي
       if (!launched) {
         launched = await launchUrl(
           uri,
