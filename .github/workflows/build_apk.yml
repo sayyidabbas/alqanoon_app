@@ -32,7 +32,7 @@ jobs:
       run: |
         GRADLE_PROP="android/gradle/wrapper/gradle-wrapper.properties"
         if [ -f "$GRADLE_PROP" ]; then
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.9-all.zip|g' "$GRADLE_PROP"
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|g' "$GRADLE_PROP"
         fi
 
     - name: Install Dependencies
@@ -43,7 +43,7 @@ jobs:
         sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
         sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
-        sed -i 's/minSdk .*/minSdkVersion 24/g' android/app/build.gradle || true
+        sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/ || true
