@@ -25,6 +25,10 @@ jobs:
         flutter-version: '3.x'
         channel: 'stable'
 
+    # إعادة إنشاء مجلد الأندرويد المفقود
+    - name: Recreate Android Folder
+      run: flutter create . --platforms=android
+
     - name: Install Dependencies
       run: flutter pub get
 
