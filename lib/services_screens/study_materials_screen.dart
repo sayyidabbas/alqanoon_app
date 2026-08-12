@@ -4,8 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:file_selector/file_selector.dart'; // المكتبة الجديدة لاختيار الملفات
+import 'package:file_selector/file_selector.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import '../constants/app_colors.dart';
 
 class StudyMaterialsScreen extends StatefulWidget {
@@ -756,7 +759,7 @@ class StudentSubjectsScreen extends StatelessWidget {
   }
 }
 
-class StudentPdfsScreen extends StatelessWidget {
+class StudentPdfsScreen extends StatefulWidget {
   final int stageIndex;
   final String subjectId;
   final String subjectName;
@@ -768,9 +771,18 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
+  @override
+  State<StudentPdfsScreen> createState() => _StudentPdfsScreenState();
+}
+
+class _StudentPdfsScreenState extends State<StudentPdfsScreen> {
+  bool _isDownloading = false;
+  double _downloadProgress = 0.0;
+  String _downloadingTitle = '';
+
+  Future<void> _downloadAndOpenPdf(String rawUrl, String title) async {
     if (rawUrl.isEmpty) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('الرابط غير صالح')),
         );
@@ -778,30 +790,50 @@ class StudentPdfsScreen extends StatelessWidget {
       return;
     }
 
-    try {
-      final Uri uri = Uri.parse(rawUrl.trim());
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+      _downloadingTitle = title;
+    });
 
-      bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
+    try {
+      // 1. تحديد مجلد الحفظ المؤقت داخل الهاتف
+      final directory = await getApplicationDocumentsDirectory();
+      final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '_');
+      final filePath = '${directory.path}/$safeTitle.pdf';
+
+      // 2. تحميل الملف باستخدام مكتبة Dio مع تتبع نسبة الإنجاز
+      final dio = Dio();
+      await dio.download(
+        rawUrl.trim(),
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
       );
 
-      if (!launched) {
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-        );
-      }
+      setState(() {
+        _isDownloading = false;
+      });
 
-      if (!launched && context.mounted) {
+      // 3. فتح الملف المحفوظ تلقائياً باستخدام قارئ اليد الداخلي
+      final result = await OpenFilex.open(filePath);
+      if (result.type != ResultType.done && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف')),
+          SnackBar(content: Text('تعذر فتح الملف: ${result.message}')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      setState(() {
+        _isDownloading = false;
+      });
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح الملف')),
+          SnackBar(content: Text('حدث خطأ أثناء التنزيل: $e')),
         );
       }
     }
@@ -811,50 +843,80 @@ class StudentPdfsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('مناهج $subjectName'),
+        title: Text('مناهج ${widget.subjectName}'),
         backgroundColor: AppColors.primary,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('stages')
-            .doc('stage_$stageIndex')
-            .collection('subjects')
-            .doc(subjectId)
-            .collection('pdfs')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final docs = snapshot.data!.docs;
+      body: Stack(
+        children: [
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('stages')
+                .doc('stage_${widget.stageIndex}')
+                .collection('subjects')
+                .doc(widget.subjectId)
+                .collection('pdfs')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              final docs = snapshot.data!.docs;
 
-          if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد مناهج متاحة حالياً'));
-          }
+              if (docs.isEmpty) {
+                return const Center(child: Text('لا توجد مناهج متاحة حالياً'));
+              }
 
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final String pdfUrl = data['url'] ?? '';
-              final String title = data['title'] ?? '';
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  final String pdfUrl = data['url'] ?? '';
+                  final String title = data['title'] ?? '';
 
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
-                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('اضغط لفتح الملف أو تحميله', style: TextStyle(fontSize: 12)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.download, color: Colors.blue),
-                    tooltip: 'تحميل أو فتح الملف',
-                    onPressed: () => _openPdfUrl(context, pdfUrl),
-                  ),
-                  onTap: () => _openPdfUrl(context, pdfUrl),
-                ),
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
+                      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text('اضغط للتحميل والفتح داخل التطبيق', style: TextStyle(fontSize: 12)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.download, color: Colors.blue),
+                        tooltip: 'تحميل وفتح',
+                        onPressed: _isDownloading ? null : () => _downloadAndOpenPdf(pdfUrl, title),
+                      ),
+                      onTap: _isDownloading ? null : () => _downloadAndOpenPdf(pdfUrl, title),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
+          ),
+          if (_isDownloading)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 15),
+                        Text(
+                          'جاري تحميل: $_downloadingTitle',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 10),
+                        Text('${(_downloadProgress * 100).toStringAsFixed(0)}%'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
