@@ -790,19 +790,33 @@ class _StudentPdfsScreenState extends State<StudentPdfsScreen> {
       return;
     }
 
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0.0;
-      _downloadingTitle = title;
-    });
-
     try {
-      // 1. تحديد مجلد الحفظ المؤقت داخل الهاتف
+      // 1. تحديد مسار الحفظ المحلي للملف داخل الهاتف
       final directory = await getApplicationDocumentsDirectory();
       final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '_');
       final filePath = '${directory.path}/$safeTitle.pdf';
 
-      // 2. تحميل الملف باستخدام مكتبة Dio مع تتبع نسبة الإنجاز
+      // 2. التحقق مما إذا كان الملف موجوداً بالفعل على الهاتف
+      final fileExists = await File(filePath).exists();
+
+      if (fileExists) {
+        // إذا كان الملف موجوداً، افتحه مباشرة دون أي تنزيل جديد
+        final result = await OpenFilex.open(filePath);
+        if (result.type != ResultType.done && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تعذر فتح الملف: ${result.message}')),
+          );
+        }
+        return;
+      }
+
+      // 3. إذا لم يكن موجوداً، ابدأ عملية التنزيل لأول مرة مع إظهار شاشة التحميل
+      setState(() {
+        _isDownloading = true;
+        _downloadProgress = 0.0;
+        _downloadingTitle = title;
+      });
+
       final dio = Dio();
       await dio.download(
         rawUrl.trim(),
@@ -820,7 +834,7 @@ class _StudentPdfsScreenState extends State<StudentPdfsScreen> {
         _isDownloading = false;
       });
 
-      // 3. فتح الملف المحفوظ تلقائياً باستخدام قارئ اليد الداخلي
+      // 4. فتح الملف بعد اكتمال التنزيل بنجاح
       final result = await OpenFilex.open(filePath);
       if (result.type != ResultType.done && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
