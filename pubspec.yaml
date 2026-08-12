@@ -40,9 +40,6 @@ dependencies:
   supabase_flutter: ^2.5.0
   file_picker: ^8.0.3
 
-  # حزمة فتح ملفات الـ PDF مع إظهار خيارات التطبيقات في أندرويد
-  android_intent_plus: ^4.0.3
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
