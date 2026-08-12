@@ -490,7 +490,6 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                   ),
                   onPressed: isUploading ? null : () async {
                     try {
-                      // تحديد اختيار الملفات لتكون بصيغة PDF فقط
                       const XTypeGroup typeGroup = XTypeGroup(
                         label: 'PDFs',
                         extensions: <String>['pdf'],
@@ -526,10 +525,8 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                     : () async {
                         setStateDialog(() { isUploading = true; });
                         try {
-                          // تغيير الصيغة المحفوظة إلى PDF
                           final fileName = '${DateTime.now().millisecondsSinceEpoch}.pdf';
                           
-                          // الرفع لسيرفر Supabase
                           await Supabase.instance.client.storage
                               .from('pdfs')
                               .upload(fileName, selectedFile!);
@@ -538,7 +535,6 @@ class _AdminManagePdfsScreenState extends State<AdminManagePdfsScreen> {
                               .from('pdfs')
                               .getPublicUrl(fileName);
 
-                          // الحفظ في الفايرستور
                           await FirebaseFirestore.instance
                               .collection('stages')
                               .doc('stage_${widget.stageIndex}')
@@ -785,12 +781,9 @@ class StudentPdfsScreen extends StatelessWidget {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
 
-      // إجبار النظام على التعامل مع الرابط كملف PDF صريح لتفعيل خيارات التطبيقات (قارئ PDF، درايف، أو المتصفح)
       bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
-        webViewConfiguration: const WebViewConfiguration(enableJavaScript: false),
-        browserConfiguration: const BrowserConfiguration(showTitle: true),
       );
 
       if (!launched) {
@@ -851,7 +844,11 @@ class StudentPdfsScreen extends StatelessWidget {
                   leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
                   title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: const Text('اضغط لفتح الملف أو تحميله', style: TextStyle(fontSize: 12)),
-                  trailing: const Icon(Icons.open_in_new, color: Colors.blue),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.download, color: Colors.blue),
+                    tooltip: 'تحميل أو فتح الملف',
+                    onPressed: () => _openPdfUrl(context, pdfUrl),
+                  ),
                   onTap: () => _openPdfUrl(context, pdfUrl),
                 ),
               );
