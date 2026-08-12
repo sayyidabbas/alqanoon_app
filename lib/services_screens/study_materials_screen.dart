@@ -785,10 +785,12 @@ class StudentPdfsScreen extends StatelessWidget {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
 
-      // يقوم هذا السطر بتمرير الأمر لنظام الهاتف ليفتح الخيارات (Drive أو المتصفح)
+      // إجبار النظام على التعامل مع الرابط كملف PDF صريح لتفعيل خيارات التطبيقات (قارئ PDF، درايف، أو المتصفح)
       bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
+        webViewConfiguration: const WebViewConfiguration(enableJavaScript: false),
+        browserConfiguration: const BrowserConfiguration(showTitle: true),
       );
 
       if (!launched) {
@@ -860,3 +862,4 @@ class StudentPdfsScreen extends StatelessWidget {
     );
   }
 }
+ 
