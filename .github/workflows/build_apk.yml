@@ -19,31 +19,22 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
+    # تثبيت إصدار مستقر يمنع تعارضات AGP 9 و .kts
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.x'
+        flutter-version: '3.24.5'
         channel: 'stable'
 
     - name: Recreate Android Project Files
       run: flutter create . --platforms=android
 
-    - name: Set compileSdk 34 for all modules
+    # ضبط إصدار الـ SDK إلى 34 بطريقة آمنة ومعتمدة
+    - name: Configure Android SDK 34
       run: |
-        cat << 'EOF' >> android/build.gradle
-        subprojects {
-            project.plugins.withId('com.android.application') {
-                project.android {
-                    compileSdkVersion 34
-                }
-            }
-            project.plugins.withId('com.android.library') {
-                project.android {
-                    compileSdkVersion 34
-                }
-            }
-        }
-        EOF
+        echo "flutter.compileSdkVersion=34" >> android/local.properties
+        echo "flutter.targetSdkVersion=34" >> android/local.properties
+        echo "android.suppressUnsupportedCompileSdk=34" >> android/gradle.properties
 
     - name: Install Dependencies
       run: flutter pub get
