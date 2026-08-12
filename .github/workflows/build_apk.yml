@@ -22,7 +22,16 @@ jobs:
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
+        flutter-version: '3.24.5'
         channel: 'stable'
+
+    - name: Recreate Android Folder
+      run: flutter create . --platforms=android
+
+    - name: Set SDK Version to 34
+      run: |
+        echo "flutter.compileSdkVersion=34" >> android/local.properties
+        echo "flutter.targetSdkVersion=34" >> android/local.properties
 
     - name: Install Dependencies
       run: flutter pub get
