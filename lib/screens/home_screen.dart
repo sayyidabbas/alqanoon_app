@@ -11,7 +11,6 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
-import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,29 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   final List<Map<String, dynamic>> _blockedUsers = [];
-
-  final List<Map<String, dynamic>> _chatList = [
-    {
-      'uid': 'user_01',
-      'username': 'ahmed_legal',
-      'fullName': 'أحمد علي',
-      'lastMessage': 'السلام عليكم، هل لديك ملازم المرحلة الثالثة؟',
-      'time': '10:30 ص',
-      'bio': 'باحث قانوني متقدم',
-      'unreadCount': 3,
-      'isMuted': false,
-    },
-    {
-      'uid': 'user_02',
-      'username': 'sara_lawyer',
-      'fullName': 'سارة محمود',
-      'lastMessage': 'شكراً جزيلاً لك',
-      'time': 'أمس',
-      'bio': 'طالبة قانون - المرحلة الرابعة',
-      'unreadCount': 0,
-      'isMuted': true,
-    },
-  ];
 
   final List<PostModel> _officialPosts = [
     PostModel(
@@ -321,91 +297,9 @@ class _HomeScreenState extends State<HomeScreen> {
           fullName: fullName,
           bio: bio,
           photoUrl: photoUrl,
-          onStartChat: () {
-            _openChatDetailScreen({
-              'uid': uid,
-              'username': username,
-              'fullName': fullName,
-              'bio': bio,
-              'photoUrl': photoUrl,
-            });
-          },
+          onStartChat: () {},
         ),
       ),
-    );
-  }
-
-  void _openChatDetailScreen(Map<String, dynamic> chat) {
-    setState(() {
-      chat['unreadCount'] = 0;
-    });
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          userName: chat['fullName'] ?? 'مستخدم',
-          userHandle: chat['username'] ?? 'user',
-          peerUid: chat['uid'],
-        ),
-      ),
-    );
-  }
-
-  void _showChatOptionsBottomSheet(Map<String, dynamic> chat, int index) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.cardBg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        bool isMuted = chat['isMuted'] ?? false;
-        return Wrap(
-          children: [
-            ListTile(
-              leading: Icon(isMuted ? Icons.notifications_active : Icons.notifications_off, color: AppColors.accent),
-              title: Text(isMuted ? 'إلغاء كتم التنبيهات' : 'كتم التنبيهات', style: const TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  chat['isMuted'] = !isMuted;
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text(!isMuted ? 'تم كتم المحادثة' : 'تم تفعيل التنبيهات')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.block, color: Colors.orangeAccent),
-              title: const Text('حظر المستخدم', style: TextStyle(color: Colors.orangeAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _blockedUsers.add(chat);
-                  _chatList.removeAt(index);
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text('تم حظر ${chat['fullName']}')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.redAccent),
-              title: const Text('حذف المحادثة', style: TextStyle(color: Colors.redAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _chatList.removeAt(index);
-                });
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف المحادثة')),
-                );
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -561,7 +455,6 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentIndex,
         children: [
           _buildMainHomeTab(),
-          _buildChatTab(),
           _buildServicesTab(),
         ],
       ),
@@ -573,7 +466,6 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_rounded), label: 'الدردشة'),
           BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
         ],
       ),
@@ -634,82 +526,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildChatTab() {
-    return _chatList.isEmpty
-        ? const Center(
-            child: Text(
-              'لا توجد محادثات حتى الآن.\nيمكنك البحث عن زملائك ومراسلتهم!',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
-            ),
-          )
-        : ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: _chatList.length,
-            separatorBuilder: (context, index) => const Divider(color: Colors.white10),
-            itemBuilder: (context, index) {
-              final chat = _chatList[index];
-              final unread = chat['unreadCount'] ?? 0;
-              final isMuted = chat['isMuted'] ?? false;
-              String unreadText = unread > 9 ? '+9' : '$unread';
-
-              return ListTile(
-                tileColor: AppColors.cardBg,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                leading: GestureDetector(
-                  onTap: () {
-                    _openUserProfile(chat);
-                  },
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: AppColors.accent,
-                        backgroundImage: _getProfileImage(chat['photoUrl']),
-                        child: (chat['photoUrl'] == null || chat['photoUrl'].toString().isEmpty)
-                            ? Text(
-                                chat['fullName'][0],
-                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                              )
-                            : null,
-                      ),
-                      if (isMuted)
-                        const Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Icon(Icons.volume_off, size: 14, color: Colors.white60),
-                        ),
-                    ],
-                  ),
-                ),
-                title: Text(chat['fullName'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                subtitle: Text(chat['lastMessage'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70)),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(chat['time'], style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    if (unread > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          unreadText,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                  ],
-                ),
-                onTap: () => _openChatDetailScreen(chat),
-                onLongPress: () => _showChatOptionsBottomSheet(chat, index),
-              );
-            },
-          );
   }
 
   Widget _buildCountdownCard() {
@@ -822,7 +638,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // قسم الخدمات المحدث للربط بالملفات المستقلة
   Widget _buildServicesTab() {
     List<Map<String, dynamic>> services = [
       {'icon': Icons.menu_book, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
@@ -922,8 +737,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     blockedUsers: _blockedUsers,
                     onUnblockUser: (index) {
                       setState(() {
-                        final unblocked = _blockedUsers.removeAt(index);
-                        _chatList.add(unblocked);
+                        _blockedUsers.removeAt(index);
                       });
                     },
                   ),
@@ -952,3 +766,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
