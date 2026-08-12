@@ -31,10 +31,10 @@ jobs:
     - name: Install Dependencies
       run: flutter pub get
 
-    - name: Set compileSdk to 34
+    - name: Set SDK Version to 34 globally
       run: |
-        sed -i 's/compileSdkVersion.*/compileSdkVersion 34/g' android/app/build.gradle || true
-        sed -i 's/compileSdk =.*/compileSdk = 34/g' android/app/build.gradle.kts || true
+        echo "flutter.compileSdkVersion=34" >> android/local.properties
+        echo "flutter.targetSdkVersion=34" >> android/local.properties
 
     - name: Copy Firebase Config
       run: cp google-services.json android/app/
