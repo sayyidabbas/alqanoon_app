@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_colors.dart';
-import 'chat_screen.dart';
 
 class UserProfileViewScreen extends StatelessWidget {
   final String username;
@@ -334,15 +333,8 @@ class UserProfileViewScreen extends StatelessWidget {
                       if (onStartChat != null) {
                         onStartChat!();
                       } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(
-                              userName: fullName,
-                              userHandle: username,
-                              peerUid: peerUid ?? '',
-                            ),
-                          ),
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('ميزة الدردشة غير متاحة حالياً')),
                         );
                       }
                     },
