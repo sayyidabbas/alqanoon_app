@@ -765,7 +765,7 @@ class StudentPdfsScreen extends StatelessWidget {
     required this.subjectName,
   });
 
-  // الدالة الجديدة التي ترسل الرابط للنظام ليستدعي هو نافذة الاختيار (مثل الصورة الثانية)
+  // الدالة المحدثة لفتح الرابط مباشرة عبر المتصفح أو تطبيق Google Drive الخارجي
   Future<void> _openPdfUrl(BuildContext context, String rawUrl) async {
     if (rawUrl.isEmpty) {
       if (context.mounted) {
@@ -779,12 +779,19 @@ class StudentPdfsScreen extends StatelessWidget {
     try {
       final Uri uri = Uri.parse(rawUrl.trim());
 
-      // استخدام النمط الخارجي المباشر ليقوم هاتف الأندرويد بإظهار نافذة الاختيار
-      // الخاصة به (Chrome أو Drive PDF Viewer)
+      // فتح الرابط بنمط خارجي لاستدعاء التطبيقات المتاحة للنظام (Google Drive أو Chrome)
       bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
+
+      // في حال تعذر الفتح كـ Application خارجي يتم التجربة بالنظام الافتراضي
+      if (!launched) {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+      }
 
       if (!launched && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -838,7 +845,7 @@ class StudentPdfsScreen extends StatelessWidget {
                   title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: const Text('اضغط لفتح الملف وعرضه', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.open_in_new, color: Colors.blue),
-                  onTap: () => _openPdfUrl(context, pdfUrl), // استدعاء الدالة المباشرة هنا
+                  onTap: () => _openPdfUrl(context, pdfUrl),
                 ),
               );
             },
@@ -848,3 +855,4 @@ class StudentPdfsScreen extends StatelessWidget {
     );
   }
 }
+ 
