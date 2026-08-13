@@ -1303,7 +1303,7 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
 }
 
 // ==========================================
-// 5. نظام غرفة التحدي الثنائي المباشر (1v1 Live Battle)
+// 5. نظام غرفة التحدي الثنائي المباشر (1v1 Live Battle) مع البحث أو إنشاء غرفة خاصة
 // ==========================================
 
 class QuizBattleLobbyScreen extends StatefulWidget {
@@ -1332,7 +1332,40 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
   String get myName => currentUser?.displayName ?? currentUser?.email?.split('@').first ?? 'طالب';
   String get myPhoto => currentUser?.photoURL ?? '';
 
-  void _findOrCreateBattleRoom() async {
+  // دالة لجلب بنك الأسئلة واختيار 10 أسئلة عشوائية
+  Future<List<dynamic>> _fetchRandomQuestions() async {
+    final battlesRef = FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId);
+
+    final setsSnapshot = await battlesRef.collection('question_sets').get();
+    List<dynamic> allPoolQuestions = [];
+    for (var doc in setsSnapshot.docs) {
+      List qList = doc.data()['questions'] ?? [];
+      allPoolQuestions.addAll(qList);
+    }
+
+    if (allPoolQuestions.length < 5) return [];
+
+    allPoolQuestions.shuffle();
+    int takeCount = min(10, allPoolQuestions.length);
+    List selectedQuestions = allPoolQuestions.sublist(0, takeCount);
+
+    for (var q in selectedQuestions) {
+      List options = List.from(q['options']);
+      String correctOptionText = options[q['correctIndex'] ?? 0];
+      options.shuffle();
+      int newCorrectIndex = options.indexOf(correctOptionText);
+      q['options'] = options;
+      q['correctIndex'] = newCorrectIndex;
+    }
+    return selectedQuestions;
+  }
+
+  // البحث العشوائي عن غرفة منتظرة
+  void _findRandomBattleRoom() async {
     setState(() => _isSearching = true);
 
     final battlesRef = FirebaseFirestore.instance
@@ -1342,7 +1375,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         .doc(widget.subjectId)
         .collection('battle_rooms');
 
-    final waitingRooms = await battlesRef.where('status', isEqualTo: 'waiting').get();
+    final waitingRooms = await battlesRef.where('status', isEqualTo: 'waiting').where('isPrivate', isEqualTo: false).get();
 
     String roomId;
     if (waitingRooms.docs.isNotEmpty) {
@@ -1357,34 +1390,15 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         'status': 'started',
       });
     } else {
-      final setsSnapshot = await battlesRef.parent!.collection('question_sets').get();
-      List<dynamic> allPoolQuestions = [];
-      for (var doc in setsSnapshot.docs) {
-        List qList = doc.data()['questions'] ?? [];
-        allPoolQuestions.addAll(qList);
-      }
-
-      if (allPoolQuestions.length < 5) {
+      List selectedQuestions = await _fetchRandomQuestions();
+      if (selectedQuestions.length < 5) {
         setState(() => _isSearching = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('عذراً، لا توجد أسئلة كافية لبدء التحدي (يجب أن يكون هناك 5 أسئلة على الأقل)')),
+            const SnackBar(content: Text('عذراً، لا توجد أسئلة كافية لبدء التحدي (يجب 5 أسئلة على الأقل)')),
           );
         }
         return;
-      }
-
-      allPoolQuestions.shuffle();
-      int takeCount = min(10, allPoolQuestions.length);
-      List selectedQuestions = allPoolQuestions.sublist(0, takeCount);
-
-      for (var q in selectedQuestions) {
-        List options = List.from(q['options']);
-        String correctOptionText = options[q['correctIndex'] ?? 0];
-        options.shuffle();
-        int newCorrectIndex = options.indexOf(correctOptionText);
-        q['options'] = options;
-        q['correctIndex'] = newCorrectIndex;
       }
 
       final newRoom = await battlesRef.add({
@@ -1401,15 +1415,181 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         'player2Time': 0,
         'player2Answers': [],
         'status': 'waiting',
+        'isPrivate': false,
+        'roomCode': '',
         'questions': selectedQuestions,
         'createdAt': FieldValue.serverTimestamp(),
       });
       roomId = newRoom.id;
     }
 
-    setState(() {
-      _currentRoomId = roomId;
+    setState(() => _currentRoomId = roomId);
+    _listenToRoom(roomId);
+  }
+
+  // إنشاء غرفة خاصة بكود سري
+  void _createPrivateRoomDialog() async {
+    List selectedQuestions = await _fetchRandomQuestions();
+    if (selectedQuestions.length < 5) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا توجد أسئلة كافية في المادة')),
+        );
+      }
+      return;
+    }
+
+    String roomCode = (1000 + Random().nextInt(9000)).toString();
+
+    setState(() => _isSearching = true);
+
+    final battlesRef = FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('battle_rooms');
+
+    final newRoom = await battlesRef.add({
+      'player1': myUid,
+      'player1Name': myName,
+      'player1Photo': myPhoto,
+      'player1Score': 0,
+      'player1Time': 0,
+      'player1Answers': [],
+      'player2': null,
+      'player2Name': '',
+      'player2Photo': '',
+      'player2Score': 0,
+      'player2Time': 0,
+      'player2Answers': [],
+      'status': 'waiting',
+      'isPrivate': true,
+      'roomCode': roomCode,
+      'questions': selectedQuestions,
+      'createdAt': FieldValue.serverTimestamp(),
     });
+
+    setState(() => _currentRoomId = newRoom.id);
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('تم إنشاء الغرفة الخاصة', textAlign: TextAlign.right),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('أعطِ هذا الكود لزميلك لينضم إليك:', textAlign: TextAlign.right),
+              const SizedBox(height: 15),
+              Text(roomCode, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+              const SizedBox(height: 15),
+              const Text('جارِ انتظار انضمام الزميل...', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _cancelSearch();
+              },
+              child: const Text('إلغاء الغرفة', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    _listenToRoom(newRoom.id);
+  }
+
+  // نافذة إدخال الكود للانضمام لغرفة خاصة
+  void _joinPrivateRoomDialog() {
+    final codeController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('الانضمام لغرفة خاصة', textAlign: TextAlign.right),
+        content: TextField(
+          controller: codeController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'أدخل كود الغرفة (4 أرقام)'),
+          textAlign: TextAlign.right,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              String code = codeController.text.trim();
+              if (code.isEmpty) return;
+              Navigator.pop(ctx);
+
+              setState(() => _isSearching = true);
+
+              final battlesRef = FirebaseFirestore.instance
+                  .collection('question_bank')
+                  .doc('stage_${widget.stageIndex}')
+                  .collection('subjects')
+                  .doc(widget.subjectId)
+                  .collection('battle_rooms');
+
+              final query = await battlesRef.where('roomCode', isEqualTo: code).where('status', isEqualTo: 'waiting').get();
+
+              if (query.docs.isEmpty) {
+                setState(() => _isSearching = false);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('لم يتم العثور على غرفة بهذا الكود أو أن المباراة قد بدأت بالفعل!')),
+                  );
+                }
+                return;
+              }
+
+              final roomDoc = query.docs.first;
+              _currentRoomId = roomDoc.id;
+
+              await battlesRef.doc(_currentRoomId).update({
+                'player2': myUid,
+                'player2Name': myName,
+                'player2Photo': myPhoto,
+                'player2Score': 0,
+                'player2Time': 0,
+                'player2Answers': [],
+                'status': 'started',
+              });
+
+              // الانتقال للعد التنازلي مباشرة لأن الانضمام اكتمل
+              final data = roomDoc.data();
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BattleCountdownScreen(
+                      roomData: data,
+                      isPlayer1: false,
+                      subjectName: widget.subjectName,
+                      roomId: _currentRoomId!,
+                      stageDocPath: 'stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('انضمام'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _listenToRoom(String roomId) {
+    final battlesRef = FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('battle_rooms');
 
     _roomSubscription = battlesRef.doc(roomId).snapshots().listen((snapshot) {
       if (!snapshot.exists) return;
@@ -1419,6 +1599,9 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       if (status == 'started') {
         _roomSubscription?.cancel();
         if (mounted) {
+          // إغلاق نافذة كود الغرفة إن كانت مفتوحة
+          try { Navigator.pop(context); } catch (_) {}
+
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -1427,6 +1610,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                 isPlayer1: data['player1'] == myUid,
                 subjectName: widget.subjectName,
                 roomId: roomId,
+                stageDocPath: 'stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms',
               ),
             ),
           );
@@ -1435,10 +1619,9 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
     });
   }
 
-  @override
-  void dispose() {
+  void _cancelSearch() {
     _roomSubscription?.cancel();
-    if (_currentRoomId != null && _isSearching) {
+    if (_currentRoomId != null) {
       FirebaseFirestore.instance
           .collection('question_bank')
           .doc('stage_${widget.stageIndex}')
@@ -1448,6 +1631,15 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
           .doc(_currentRoomId)
           .delete();
     }
+    setState(() {
+      _isSearching = false;
+      _currentRoomId = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _cancelSearch();
     super.dispose();
   }
 
@@ -1510,7 +1702,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                     const SizedBox(height: 40),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _cancelSearch,
                       child: const Text('إلغاء البحث'),
                     ),
                   ],
@@ -1527,21 +1719,48 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'المادة: ${widget.subjectName}\nتحدى زملاءك في أسئلة عشوائية، من ينهي الأسئلة بدقة أسرع يفوز!',
+                      'المادة: ${widget.subjectName}\nاختر طريقة اللعب المناسبة لك:',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
                     const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
+                      child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.deepOrange,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        onPressed: _findOrCreateBattleRoom,
-                        child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.search),
+                        onPressed: _findRandomBattleRoom,
+                        label: const Text('بحث عشوائي عن خصم', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Colors.deepOrange, width: 2),
+                        ),
+                        icon: const Icon(Icons.add_box, color: Colors.deepOrange),
+                        onPressed: _createPrivateRoomDialog,
+                        label: const Text('إنشاء غرفة خاصة (برمز سري)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Colors.blue, width: 2),
+                        ),
+                        icon: const Icon(Icons.login, color: Colors.blue),
+                        onPressed: _joinPrivateRoomDialog,
+                        label: const Text('انضمام إلى غرفة برمز', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
                       ),
                     ),
                   ],
@@ -1553,7 +1772,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
 }
 
 // ==========================================
-// 6. شاشة العد التنازلي التمهيدي قبل البدء (3 ثوانٍ متحركة)
+// 6. شاشة العد التنازلي التمهيدي قبل البدء
 // ==========================================
 
 class BattleCountdownScreen extends StatefulWidget {
@@ -1561,6 +1780,7 @@ class BattleCountdownScreen extends StatefulWidget {
   final bool isPlayer1;
   final String subjectName;
   final String roomId;
+  final String stageDocPath;
 
   const BattleCountdownScreen({
     super.key,
@@ -1568,6 +1788,7 @@ class BattleCountdownScreen extends StatefulWidget {
     required this.isPlayer1,
     required this.subjectName,
     required this.roomId,
+    required this.stageDocPath,
   });
 
   @override
@@ -1610,6 +1831,7 @@ class _BattleCountdownScreenState extends State<BattleCountdownScreen> with Sing
               isPlayer1: widget.isPlayer1,
               roomData: widget.roomData,
               subjectName: widget.subjectName,
+              stageDocPath: widget.stageDocPath,
             ),
           ),
         );
@@ -1701,6 +1923,7 @@ class ActiveQuizBattleScreen extends StatefulWidget {
   final bool isPlayer1;
   final Map<String, dynamic> roomData;
   final String subjectName;
+  final String stageDocPath;
 
   const ActiveQuizBattleScreen({
     super.key,
@@ -1708,6 +1931,7 @@ class ActiveQuizBattleScreen extends StatefulWidget {
     required this.isPlayer1,
     required this.roomData,
     required this.subjectName,
+    required this.stageDocPath,
   });
 
   @override
@@ -1793,29 +2017,15 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
       try {
         await FirebaseFirestore.instance
-            .collection('question_bank')
-            .doc(widget.roomData['stageDoc'] ?? 'stage_1')
-            .collection('battle_rooms')
+            .collection(widget.stageDocPath)
             .doc(widget.roomId)
             .update({
           scoreField: myScore,
           timeField: _totalElapsedSeconds,
           answersField: _myAnswersLog,
         });
-      } catch (_) {
-        try {
-          await FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).get().then((snapshot) {
-            if (snapshot.docs.isNotEmpty) {
-              snapshot.docs.first.reference.update({
-                scoreField: myScore,
-                timeField: _totalElapsedSeconds,
-                answersField: _myAnswersLog,
-              });
-            }
-          });
-        } catch (e) {
-          // تجاهل الخطأ البسيط لضمان استمرارية اللعب دون انقطاع
-        }
+      } catch (e) {
+        // تجاهل الخطأ البسيط لضمان استمرارية اللعب
       }
     }
   }
@@ -1850,6 +2060,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
               myTotalTime: _totalElapsedSeconds,
               myAnswersLog: _myAnswersLog,
               subjectName: widget.subjectName,
+              stageDocPath: widget.stageDocPath,
             ),
           ),
         );
@@ -1875,7 +2086,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
     return StreamBuilder<DocumentSnapshot>(
       stream: widget.roomId.isNotEmpty 
-          ? FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).snapshots().map((snapshot) => snapshot.docs.first)
+          ? FirebaseFirestore.instance.collection(widget.stageDocPath).doc(widget.roomId).snapshots()
           : null,
       builder: (context, snapshot) {
         int oppScore = 0;
@@ -2030,7 +2241,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 }
 
 // ==========================================
-// 8. شاشة النتائج النهائية التفصيلية (Battle Results Screen)
+// 8. شاشة النتائج النهائية التفصيلية (Battle Results Screen) مع إصلاح الألوان ووضوح إجابات الخصم
 // ==========================================
 
 class BattleResultsScreen extends StatefulWidget {
@@ -2041,6 +2252,7 @@ class BattleResultsScreen extends StatefulWidget {
   final int myTotalTime;
   final List<Map<String, dynamic>> myAnswersLog;
   final String subjectName;
+  final String stageDocPath;
 
   const BattleResultsScreen({
     super.key,
@@ -2051,6 +2263,7 @@ class BattleResultsScreen extends StatefulWidget {
     required this.myTotalTime,
     required this.myAnswersLog,
     required this.subjectName,
+    required this.stageDocPath,
   });
 
   @override
@@ -2074,13 +2287,13 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     }
 
     try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collectionGroup('battle_rooms')
-          .where(FieldPath.documentId, isEqualTo: widget.roomId)
+      final docSnapshot = await FirebaseFirestore.instance
+          .collection(widget.stageDocPath)
+          .doc(widget.roomId)
           .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
-        final data = querySnapshot.docs.first.data();
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data()!;
         final oppScoreKey = widget.isPlayer1 ? 'player2Score' : 'player1Score';
         final oppTimeKey = widget.isPlayer1 ? 'player2Time' : 'player1Time';
         final oppAnswersKey = widget.isPlayer1 ? 'player2Answers' : 'player1Answers';
@@ -2161,18 +2374,18 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Card(
-                    color: resultColor.withOpacity(0.1),
-                    elevation: 4,
+                    color: resultColor,
+                    elevation: 6,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     child: Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: Column(
                         children: [
-                          Icon(resultIcon, size: 60, color: resultColor),
+                          Icon(resultIcon, size: 60, color: Colors.white),
                           const SizedBox(height: 10),
                           Text(
                             winnerText,
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -2282,7 +2495,7 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                                   Text(
                                     'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
                                     style: TextStyle(
-                                      color: (oppAns != null && oppAns['isCorrect'] == true) ? Colors.green : Colors.grey,
+                                      color: (oppAns != null && oppAns['isCorrect'] == true) ? Colors.green : Colors.red,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -2323,4 +2536,3 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     );
   }
 }
- 
