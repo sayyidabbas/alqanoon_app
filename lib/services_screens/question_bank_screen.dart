@@ -1410,7 +1410,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         .get();
 
     String roomId;
-    // التأكد من عدم الانضمام إلى الغرفة الخاصة بك بنفسك
     var validRooms = waitingRooms.docs.where((doc) => doc.data()['player1'] != myUid).toList();
 
     if (validRooms.isNotEmpty) {
@@ -2523,7 +2522,7 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Row(
-                                mainAxisAlignment: MainAttributes.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween, // تم التصحيح هنا من MainAttributes إلى MainAxisAlignment
                                 children: [
                                   Text(
                                     'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
@@ -2569,4 +2568,3 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     );
   }
 }
- 
