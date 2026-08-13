@@ -1,41 +1,3 @@
-/**
- * ==============================================================================
- * 🔒 FIRESTORE SECURITY RULES (قواعد أمان فايرستور المقترحة للتطبيق)
- * ==============================================================================
- * rules_version = '2';
- * service cloud.firestore {
- *   match /databases/{database}/documents {
- *     
- *     // حماية الإعدادات (كلمة سر الأدمن)
- *     match /settings/admin {
- *       allow read: if request.auth != null;
- *       allow write: if request.auth != null;
- *     }
- * 
- *     // بنك الأسئلة: القراءة للجميع، التعديل والحذف فقط للأدمن أو عبر الشروط المأذونة
- *     match /question_bank/{stageId}/subjects/{subjectId} {
- *       allow read: if request.auth != null;
- *       allow write: if request.auth != null; // يمكن تخصيصها لاحقاً لترتبط بصلاحيات الأدمن
- *       
- *       match /question_sets/{setId} {
- *         allow read: if request.auth != null;
- *         allow write: if request.auth != null;
- *       }
- * 
- *       // غرف التحدي: السماح للمشاركين فقط بتحديث نقاطهم وحالتهم
- *       match /battle_rooms/{roomId} {
- *         allow read: if request.auth != null;
- *         allow create: if request.auth != null;
- *         allow update: if request.auth != null && 
- *           (request.auth.uid == resource.data.player1 || request.auth.uid == resource.data.player2 || request.auth.uid == request.resource.data.player2);
- *         allow delete: if request.auth != null;
- *       }
- *     }
- *   }
- * }
- * ==============================================================================
- */
-
 import 'dart:async' as async_lib;
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -1188,16 +1150,16 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
     if (answered) return;
     _timer?.cancel();
 
-    // تشغيل الاهتزاز والصوت عند الإجابة
+    // تشغيل الاهتزاز والصوت عند الإجابة (تم استخدام AssetSource لتصحيح الخطأ)
     HapticFeedback.mediumImpact();
     final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
     if (index == correct) {
       try {
-        await _audioPlayer.play(Source.asset('sounds/correct.mp3'));
+        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
       } catch (_) {}
     } else {
       try {
-        await _audioPlayer.play(Source.asset('sounds/wrong.mp3'));
+        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
       } catch (_) {}
     }
 
@@ -1815,11 +1777,11 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     if (index == correct) {
       myScore++;
       try {
-        await _audioPlayer.play(Source.asset('sounds/correct.mp3'));
+        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
       } catch (_) {}
     } else {
       try {
-        await _audioPlayer.play(Source.asset('sounds/wrong.mp3'));
+        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
       } catch (_) {}
     }
 
@@ -1833,7 +1795,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       final scoreField = widget.isPlayer1 ? 'player1Score' : 'player2Score';
       await FirebaseFirestore.instance
           .collection('question_bank')
-          .doc(widget.roomData['stagePath'] ?? 'stage_1') // مسار افتراضي او معدل
+          .doc(widget.roomData['stagePath'] ?? 'stage_1')
           .collection('battle_rooms')
           .doc(widget.roomId)
           .update({scoreField: myScore});
@@ -2163,3 +2125,4 @@ class BattleResultsScreen extends StatelessWidget {
     );
   }
 }
+ 
