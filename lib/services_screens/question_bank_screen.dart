@@ -1347,7 +1347,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
     String roomId;
     if (waitingRooms.docs.isNotEmpty) {
       roomId = waitingRooms.docs.first.id;
-      // انضمام كـ player2 مع تهيئة بياناته وحقول النقاط/الوقت
       await battlesRef.doc(roomId).update({
         'player2': myUid,
         'player2Name': myName,
@@ -1388,7 +1387,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         q['correctIndex'] = newCorrectIndex;
       }
 
-      // إنشاء الغرفة كـ player1 مع تهيئة حقول النقاط والوقت والإجابات
       final newRoom = await battlesRef.add({
         'player1': myUid,
         'player1Name': myName,
@@ -1788,7 +1786,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       });
     });
 
-    // مزامنة النقاط والحالة فوراً مع فايرستور
     if (widget.roomId.isNotEmpty) {
       final scoreField = widget.isPlayer1 ? 'player1Score' : 'player2Score';
       final timeField = widget.isPlayer1 ? 'player1Time' : 'player2Time';
@@ -1797,8 +1794,8 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       try {
         await FirebaseFirestore.instance
             .collection('question_bank')
-            .doc(widget.roomData['stageDoc'] ?? 'stage_1') // سيتم التعامل مع مسار الغرفة مباشرة عبر الـ doc
-            .collection('battle_rooms') // ملاحظة: المسار يتم تحديثه أدناه بشكل دقيق
+            .doc(widget.roomData['stageDoc'] ?? 'stage_1')
+            .collection('battle_rooms')
             .doc(widget.roomId)
             .update({
           scoreField: myScore,
@@ -1806,9 +1803,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
           answersField: _myAnswersLog,
         });
       } catch (_) {
-        // تحديث مباشر عبر الاستعلام المباشر للغرفة لو وجد مسار مختلف
         try {
-          // البحث والتحديث المباشر للغرفة
           await FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).get().then((snapshot) {
             if (snapshot.docs.isNotEmpty) {
               snapshot.docs.first.reference.update({
@@ -1843,7 +1838,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       _battleTimer?.cancel();
       _stopwatchTimer?.cancel();
       
-      // الانتقال إلى شاشة النتائج النهائية التفصيلية
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -1879,7 +1873,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
     final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
 
-    // استماع حي لتقدم ونتيجة الخصم من فايرستور
     return StreamBuilder<DocumentSnapshot>(
       stream: widget.roomId.isNotEmpty 
           ? FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).snapshots().map((snapshot) => snapshot.docs.first)
@@ -1912,7 +1905,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // بطاقة عرض الطرفين بأساميهم وصورهم الحقيقية ونتيجة الخصم الحية في الوقت الفعلي
                 Card(
                   elevation: 2,
                   child: Padding(
@@ -2123,7 +2115,6 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     double oppAccuracy = (oppScore / totalQuestions) * 100;
     String oppName = opponentData?['name'] ?? 'الخصم';
 
-    // تحديد الفائز بدقة (بناءً على النقاط أولاً، ثم الوقت المستغرق الأقل كمرجح عند تعادل النقاط)
     String winnerText = '';
     Color resultColor = Colors.blue;
     IconData resultIcon = Icons.sports_esports;
@@ -2140,7 +2131,6 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
         resultColor = Colors.red;
         resultIcon = Icons.sentiment_dissatisfied;
       } else {
-        // تعادل في النقاط، نحتكم للوقت الأقل
         if (widget.myTotalTime < oppTime) {
           winnerText = 'تعادل في النقاط، لكنك فزت لسرعة إنجازك! ⚡';
           resultColor = Colors.green;
@@ -2170,9 +2160,8 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // بطاقة الفائز الصريحة
                   Card(
-                    color: resultColor.shade50,
+                    color: resultColor.withOpacity(0.1),
                     elevation: 4,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     child: Padding(
@@ -2183,7 +2172,7 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                           const SizedBox(height: 10),
                           Text(
                             winnerText,
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: resultColor.shade900),
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -2191,7 +2180,6 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // مقارنة تفصيلية للإحصائيات (نسبة الدقة والوقت)
                   Row(
                     children: [
                       Expanded(
@@ -2242,7 +2230,6 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                     textAlign: TextAlign.right,
                   ),
                   const SizedBox(height: 10),
-                  // مقارنة إجابات الأسئلة بسجل الخصم
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -2336,3 +2323,4 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     );
   }
 }
+ 
