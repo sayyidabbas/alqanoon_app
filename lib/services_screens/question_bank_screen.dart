@@ -461,7 +461,40 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
   final TextEditingController _bulkController = TextEditingController();
   bool _isSaving = false;
 
-  void _parseAndSaveQuestions() async {
+  List<Map<String, dynamic>> _parseQuestions() {
+    final text = _bulkController.text.trim();
+    final blocks = text.split(RegExp(r'\n\s*\n'));
+    List<Map<String, dynamic>> questionsList = [];
+
+    for (var block in blocks) {
+      final lines = block.trim().split('\n');
+      if (lines.length < 2) continue;
+
+      String questionText = lines[0].trim();
+      List<String> options = [];
+      int correctIndex = 0;
+
+      for (int i = 1; i < lines.length; i++) {
+        String optLine = lines[i].trim();
+        if (optLine.contains('✅')) {
+          correctIndex = options.length;
+          optLine = optLine.replaceAll('✅', '').trim();
+        }
+        options.add(optLine);
+      }
+
+      if (options.isNotEmpty) {
+        questionsList.add({
+          'question': questionText,
+          'options': options,
+          'correctIndex': correctIndex,
+        });
+      }
+    }
+    return questionsList;
+  }
+
+  void _onSavePressed() async {
     final text = _bulkController.text.trim();
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -470,38 +503,60 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
       return;
     }
 
+    final newQuestions = _parseQuestions();
+    if (newQuestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لم يتم التعرف على أي أسئلة. تأكد من النمط الصحيح!')),
+      );
+      return;
+    }
+
+    // جلب مجموعات الأسئلة الحالية لنفترض إمكانية الدمج معها
+    final setsSnapshot = await FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('question_sets')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    if (!mounted) return;
+
+    if (setsSnapshot.docs.isEmpty) {
+      // إذا لم تكن هناك مجموعات مسبقاً، قم بإنشاء مجموعة جديدة تلقائياً
+      _saveAsNewSet(newQuestions);
+    } else {
+      // عرض نافذة تخيير المستخدم (مستقل أم دمج مع مجموعة سابقة)
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('طريقة الحفظ', textAlign: TextAlign.right),
+          content: const Text('كيف تريد حفظ الأسئلة الجديدة؟', textAlign: TextAlign.right),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _saveAsNewSet(newQuestions);
+              },
+              child: const Text('مجموعة مستقلة جديدة'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showMergeTargetDialog(setsSnapshot.docs, newQuestions);
+              },
+              child: const Text('دمج مع مجموعة سابقة'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _saveAsNewSet(List<Map<String, dynamic>> newQuestions) async {
     setState(() => _isSaving = true);
-
     try {
-      final blocks = text.split(RegExp(r'\n\s*\n'));
-      List<Map<String, dynamic>> questionsList = [];
-
-      for (var block in blocks) {
-        final lines = block.trim().split('\n');
-        if (lines.length < 2) continue;
-
-        String questionText = lines[0].trim();
-        List<String> options = [];
-        int correctIndex = 0;
-
-        for (int i = 1; i < lines.length; i++) {
-          String optLine = lines[i].trim();
-          if (optLine.contains('✅')) {
-            correctIndex = options.length;
-            optLine = optLine.replaceAll('✅', '').trim();
-          }
-          options.add(optLine);
-        }
-
-        if (options.isNotEmpty) {
-          questionsList.add({
-            'question': questionText,
-            'options': options,
-            'correctIndex': correctIndex,
-          });
-        }
-      }
-
       await FirebaseFirestore.instance
           .collection('question_bank')
           .doc('stage_${widget.stageIndex}')
@@ -510,7 +565,7 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
           .collection('question_sets')
           .add({
         'title': 'مجموعة أسئلة (${DateTime.now().toString().substring(0, 16)})',
-        'questions': questionsList,
+        'questions': newQuestions,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -518,7 +573,7 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إضافة الأسئلة بنجاح!')),
+          const SnackBar(content: Text('تم إضافة الأسئلة كمجموعة جديدة بنجاح!')),
         );
       }
     } catch (e) {
@@ -526,6 +581,76 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('حدث خطأ: $e')),
+        );
+      }
+    }
+  }
+
+  void _showMergeTargetDialog(List<QueryDocumentSnapshot> existingDocs, List<Map<String, dynamic>> newQuestions) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('اختر المجموعة للدمج معها', textAlign: TextAlign.right),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: existingDocs.length,
+            itemBuilder: (context, index) {
+              final docData = existingDocs[index].data() as Map<String, dynamic>;
+              final docId = existingDocs[index].id;
+              final title = docData['title'] ?? 'مجموعة بدون عنوان';
+              
+              return ListTile(
+                title: Text(title, textAlign: TextAlign.right),
+                trailing: const Icon(Icons.merge_type, color: Colors.blue),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _executeMerge(docId, docData['questions'] ?? [], newQuestions);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeMerge(String targetSetId, List existingQuestions, List<Map<String, dynamic>> newQuestions) async {
+    setState(() => _isSaving = true);
+    try {
+      // إضافتها فوق الأسئلة القديمة (في بداية القائمة)
+      List updatedQuestions = [...newQuestions, ...existingQuestions];
+
+      await FirebaseFirestore.instance
+          .collection('question_bank')
+          .doc('stage_${widget.stageIndex}')
+          .collection('subjects')
+          .doc(widget.subjectId)
+          .collection('question_sets')
+          .doc(targetSetId)
+          .update({
+        'questions': updatedQuestions,
+      });
+
+      setState(() => _isSaving = false);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم دمج وإضافة الأسئلة فوق المجموعة السابقة بنجاح!')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء الدمج: $e')),
         );
       }
     }
@@ -565,7 +690,7 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                onPressed: _isSaving ? null : _parseAndSaveQuestions,
+                onPressed: _isSaving ? null : _onSavePressed,
                 icon: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Icon(Icons.cloud_upload),
                 label: Text(_isSaving ? 'جاري الحفظ...' : 'حفظ الأسئلة'),
               ),
