@@ -1605,7 +1605,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                       isPlayer1: false,
                       subjectName: widget.subjectName,
                       roomId: _currentRoomId!,
-                      stageDocPath: 'question_bank/stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms',
+                      stageDocPath: 'question_bank/stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms/$_currentRoomId',
                     ),
                   ),
                 );
@@ -1644,7 +1644,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                 isPlayer1: data['player1'] == myUid,
                 subjectName: widget.subjectName,
                 roomId: roomId,
-                stageDocPath: 'question_bank/stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms',
+                stageDocPath: 'question_bank/stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms/$roomId',
               ),
             ),
           );
@@ -2522,7 +2522,7 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween, // تم التصحيح هنا من MainAttributes إلى MainAxisAlignment
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
