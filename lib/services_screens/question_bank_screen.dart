@@ -1193,11 +1193,11 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
     final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
     if (index == correct) {
       try {
-        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
+        await _audioPlayer.play(Source.asset('sounds/correct.mp3'));
       } catch (_) {}
     } else {
       try {
-        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
+        await _audioPlayer.play(Source.asset('sounds/wrong.mp3'));
       } catch (_) {}
     }
 
@@ -1815,11 +1815,11 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     if (index == correct) {
       myScore++;
       try {
-        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
+        await _audioPlayer.play(Source.asset('sounds/correct.mp3'));
       } catch (_) {}
     } else {
       try {
-        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
+        await _audioPlayer.play(Source.asset('sounds/wrong.mp3'));
       } catch (_) {}
     }
 
@@ -2163,4 +2163,3 @@ class BattleResultsScreen extends StatelessWidget {
     );
   }
 }
- 
