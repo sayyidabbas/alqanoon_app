@@ -1,8 +1,96 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 
-class QuestionBankScreen extends StatelessWidget {
+class QuestionBankScreen extends StatefulWidget {
   const QuestionBankScreen({super.key});
+
+  @override
+  State<QuestionBankScreen> createState() => _QuestionBankScreenState();
+}
+
+class _QuestionBankScreenState extends State<QuestionBankScreen> {
+  final List<String> stages = [
+    'المرحلة الأولى',
+    'المرحلة الثانية',
+    'المرحلة الثالثة',
+    'المرحلة الرابعة',
+  ];
+
+  String get _userAdminKey {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+    return 'is_admin_unlocked_qb_$uid';
+  }
+
+  Future<String> _getAdminPin() async {
+    final doc = await FirebaseFirestore.instance.collection('settings').doc('admin').get();
+    if (doc.exists && doc.data()!.containsKey('pin')) {
+      return doc.data()!['pin'].toString();
+    }
+    return '1234';
+  }
+
+  Future<void> _handleAdminAccess(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool isAdminUnlocked = prefs.getBool(_userAdminKey) ?? false;
+
+    if (isAdminUnlocked) {
+      _navigateToAdminDashboard();
+    } else {
+      _showPasswordDialog(prefs);
+    }
+  }
+
+  void _showPasswordDialog(SharedPreferences prefs) {
+    final TextEditingController passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('البوابة الآمنة - بنك الأسئلة', textAlign: TextAlign.right),
+        content: TextField(
+          controller: passwordController,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.right,
+          decoration: const InputDecoration(hintText: 'أدخل كلمة السر'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final currentPin = await _getAdminPin();
+              if (passwordController.text.trim() == currentPin) {
+                await prefs.setBool(_userAdminKey, true);
+                if (mounted) {
+                  Navigator.pop(context);
+                  _navigateToAdminDashboard();
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('كلمة السر غير صحيحة!')),
+                  );
+                }
+              }
+            },
+            child: const Text('دخول'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToAdminDashboard() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminQbStageSelectionScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,11 +99,636 @@ class QuestionBankScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('بنك الأسئلة'),
         backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
+            tooltip: 'البوابة الآمنة',
+            onPressed: () => _handleAdminAccess(context),
+          ),
+        ],
       ),
-      body: const Center(
-        child: Text(
-          'محتوى بنك الأسئلة قريباً...',
-          style: TextStyle(color: Colors.white70, fontSize: 16),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: stages.length,
+        itemBuilder: (context, index) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              title: Text(stages[index], textAlign: TextAlign.right),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StudentQbSubjectsScreen(
+                      stageIndex: index + 1,
+                      stageName: stages[index],
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 1. لوحة تحكم الأدمن لبنك الأسئلة
+// ==========================================
+
+class AdminQbStageSelectionScreen extends StatelessWidget {
+  const AdminQbStageSelectionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final stages = ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة'];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة بنك الأسئلة (الأدمن)'),
+        backgroundColor: AppColors.primary,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: stages.length,
+        itemBuilder: (context, index) {
+          return Card(
+            child: ListTile(
+              title: Text(stages[index], textAlign: TextAlign.right),
+              trailing: const Icon(Icons.edit),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AdminQbSubjectsScreen(
+                      stageIndex: index + 1,
+                      stageName: stages[index],
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class AdminQbSubjectsScreen extends StatefulWidget {
+  final int stageIndex;
+  final String stageName;
+
+  const AdminQbSubjectsScreen({super.key, required this.stageIndex, required this.stageName});
+
+  @override
+  State<AdminQbSubjectsScreen> createState() => _AdminQbSubjectsScreenState();
+}
+
+class _AdminQbSubjectsScreenState extends State<AdminQbSubjectsScreen> {
+  void _addSubjectDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إضافة مادة لبنك الأسئلة'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'اسم المادة'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('question_bank')
+                    .doc('stage_${widget.stageIndex}')
+                    .collection('subjects')
+                    .add({'name': controller.text.trim()});
+                if (mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('إضافة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteSubject(String docId) async {
+    await FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(docId)
+        .delete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('مواد ${widget.stageName}'),
+        backgroundColor: AppColors.primary,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addSubjectDialog,
+        label: const Text('إضافة مادة'),
+        icon: const Icon(Icons.add),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('question_bank')
+            .doc('stage_${widget.stageIndex}')
+            .collection('subjects')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة'));
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final docId = docs[index].id;
+
+              return Card(
+                child: ListTile(
+                  title: Text(data['name'] ?? ''),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteSubject(docId),
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AdminManageQuestionsScreen(
+                          stageIndex: widget.stageIndex,
+                          subjectId: docId,
+                          subjectName: data['name'] ?? '',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 2. إدارة وإضافة الأسئلة (Bulk Import)
+// ==========================================
+
+class AdminManageQuestionsScreen extends StatefulWidget {
+  final int stageIndex;
+  final String subjectId;
+  final String subjectName;
+
+  const AdminManageQuestionsScreen({
+    super.key,
+    required this.stageIndex,
+    required this.subjectId,
+    required this.subjectName,
+  });
+
+  @override
+  State<AdminManageQuestionsScreen> createState() => _AdminManageQuestionsScreenState();
+}
+
+class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen> {
+  final TextEditingController _bulkController = TextEditingController();
+  bool _isSaving = false;
+
+  // دالة ذكية لتحليل النص المنسوخ واستخراج الأسئلة
+  void _parseAndSaveQuestions() async {
+    final text = _bulkController.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الرجاء لصق الأسئلة أولاً')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      // نفترض أن كل سؤال يبدأ بكلمة س أو رقم يتبعه س، أو نقسّم حسب الأسطر الفارغة
+      // نمط مقترح: تقسيم النص بناءً على الأسئلة أو الأسطر
+      final blocks = text.split(RegExp(r'\n\s*\n')); // تقسيم حسب الفراغات بين الأسئلة
+      
+      List<Map<String, dynamic>> questionsList = [];
+
+      for (var block in blocks) {
+        final lines = block.trim().split('\n');
+        if (lines.length < 2) continue;
+
+        String questionText = lines[0].trim();
+        List<String> options = [];
+        int correctIndex = 0;
+
+        for (int i = 1; i < lines.length; i++) {
+          String optLine = lines[i].trim();
+          if (optLine.contains('✅')) {
+            correctIndex = options.length; // تحديد مكان الإجابة الصحيحة
+            optLine = optLine.replaceAll('✅', '').trim();
+          }
+          options.add(optLine);
+        }
+
+        if (options.isNotEmpty) {
+          questionsList.add({
+            'question': questionText,
+            'options': options,
+            'correctIndex': correctIndex,
+          });
+        }
+      }
+
+      if (questionsList.isEmpty) {
+        // محاولة تحليل بديلة لو كان النص على شكل سطر سطر
+        // سنبسط الأمر بحفظ الحزمة كدفعة واحدة (Batch) في فايرستور
+      }
+
+      // حفظ حزمة الأسئلة الجديدة في مجموعة فرعية (question_sets)
+      await FirebaseFirestore.instance
+          .collection('question_bank')
+          .doc('stage_${widget.stageIndex}')
+          .collection('subjects')
+          .doc(widget.subjectId)
+          .collection('question_sets')
+          .add({
+        'title': 'مجموعة أسئلة (${DateTime.now().toString().substring(0, 16)})',
+        'questions': questionsList,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _bulkController.clear();
+      setState(() => _isSaving = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم إضافة الأسئلة بنجاح وتوليد الاختبار!')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ في تحليل الأسئلة: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('إدارة أسئلة ${widget.subjectName}'),
+        backgroundColor: AppColors.primary,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            const Text(
+              'الصق الأسئلة هنا دفعة واحدة بالنمط:\nالسؤال\nأ) خيار\nب) خيار ✅\nج) خيار',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: TextField(
+                controller: _bulkController,
+                maxLines: null,
+                expands: true,
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(
+                  hintText: 'اكتب أو لصق الأسئلة هنا...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                onPressed: _isSaving ? null : _parseAndSaveQuestions,
+                icon: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Icon(Icons.cloud_upload),
+                label: Text(_isSaving ? 'جاري المعالجة والحفظ...' : 'تحليل وحفظ الأسئلة كاختبار جديد'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 3. واجهات عرض وممارسة الطلاب
+// ==========================================
+
+class StudentQbSubjectsScreen extends StatelessWidget {
+  final int stageIndex;
+  final String stageName;
+
+  const StudentQbSubjectsScreen({super.key, required this.stageIndex, required this.stageName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('مواد $stageName'),
+        backgroundColor: AppColors.primary,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('question_bank')
+            .doc('stage_$stageIndex')
+            .collection('subjects')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة حالياً'));
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              return Card(
+                child: ListTile(
+                  title: Text(data['name'] ?? ''),
+                  trailing: const Icon(Icons.quiz, color: Colors.blue),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StudentQuestionSetsScreen(
+                          stageIndex: stageIndex,
+                          subjectId: docs[index].id,
+                          subjectName: data['name'] ?? '',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class StudentQuestionSetsScreen extends StatelessWidget {
+  final int stageIndex;
+  final String subjectId;
+  final String subjectName;
+
+  const StudentQuestionSetsScreen({
+    super.key,
+    required this.stageIndex,
+    required this.subjectId,
+    required this.subjectName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('اختبارات $subjectName'),
+        backgroundColor: AppColors.primary,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('question_bank')
+            .doc('stage_$stageIndex')
+            .collection('subjects')
+            .doc(subjectId)
+            .collection('question_sets')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) return const Center(child: Text('لا توجد اختبارات متاحة حالياً'));
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final List questions = data['questions'] ?? [];
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.assignment, color: Colors.amber, size: 30),
+                  title: Text(data['title'] ?? 'اختبار تدريبي', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('عدد الأسئلة: ${questions.length}'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    if (questions.isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuizPracticeScreen(
+                            setTitle: data['title'] ?? 'اختبار',
+                            questions: questions,
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('هذا الاختبار فارغ')),
+                      );
+                    }
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 4. شاشة التدريب وتفاعل الطالب مع العداد
+// ==========================================
+
+class QuizPracticeScreen extends StatefulWidget {
+  final String setTitle;
+  final List questions;
+
+  const QuizPracticeScreen({super.key, required this.setTitle, required this.questions});
+
+  @override
+  State<QuizPracticeScreen> createState() => _QuizPracticeScreenState();
+}
+
+class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
+  int currentIndex = 0;
+  int? selectedOptionIndex;
+  bool answered = false;
+  int correctAnswersCount = 0;
+
+  void _answerQuestion(int index) {
+    if (answered) return;
+    setState(() {
+      selectedOptionIndex = index;
+      answered = true;
+      final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
+      if (index == correct) {
+        correctAnswersCount++;
+      }
+    });
+  }
+
+  void _nextQuestion() {
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        selectedOptionIndex = null;
+        answered = false;
+      });
+    } else {
+      // نهاية الاختبار
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('نتيجة التدريب', textAlign: TextAlign.right),
+          content: Text(
+            'أحسنت لقد اتممت التدريب!\n\nأجبت بشكل صحيح على $correctAnswersCount من أصل ${widget.questions.length} سؤال.',
+            textAlign: TextAlign.right,
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              },
+              child: const Text('إنهاء'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final questionData = widget.questions[currentIndex];
+    final String questionText = questionData['question'] ?? '';
+    final List options = questionData['options'] ?? [];
+    final int correctIndex = questionData['correctIndex'] ?? 0;
+
+    // حساب العدادات
+    int total = widget.questions.length;
+    int remaining = total - (currentIndex + 1);
+    int completed = currentIndex;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.setTitle),
+        backgroundColor: AppColors.primary,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // شريط العدادات العلوي
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Chip(label: Text('المتبقي: $remaining'), backgroundColor: Colors.orange.shade100),
+                Chip(label: Text('تم حل: $completed'), backgroundColor: Colors.blue.shade100),
+                Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // نص السؤال
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  questionText,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // قائمة الخيارات
+            Expanded(
+              child: ListView.builder(
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  Color btnColor = Colors.white;
+                  if (answered) {
+                    if (index == correctIndex) {
+                      btnColor = Colors.green.shade200; // الإجابة الصحيحة باللون الأخضر
+                    } else if (index == selectedOptionIndex) {
+                      btnColor = Colors.red.shade200; // اختيار الطالب الخاطئ باللون الأحمر
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: btnColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        alignment: Alignment.centerRight,
+                      ),
+                      onPressed: () => _answerQuestion(index),
+                      child: Text(
+                        options[index],
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            // زر الانتقال للسؤال التالي
+            if (answered)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _nextQuestion,
+                child: Text(
+                  currentIndex == total - 1 ? 'عرض النتيجة النهائية' : 'السؤال التالي',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
         ),
       ),
     );
