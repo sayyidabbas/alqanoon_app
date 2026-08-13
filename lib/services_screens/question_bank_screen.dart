@@ -1,4 +1,4 @@
-import 'dart:async';
+Import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1339,6 +1339,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 40),
+                    // تم إصلاح الخطأ برفع onPressed إلى الـ ElevatedButton وإزالة الـ SizedBox الخاطئ
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                       onPressed: () => Navigator.pop(context),
@@ -1365,13 +1366,15 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                     const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        onPressed: _findOrCreateBattleRoom,
+                        child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 16)),
                       ),
-                      onPressed: _findOrCreateBattleRoom,
-                      child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 16)),
                     ),
                   ],
                 ),
@@ -1462,10 +1465,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       _startTimer();
     } else {
       _battleTimer?.cancel();
-      // رفع النتيجة لـ Firebase
-      final myScoreField = widget.isPlayer1 ? 'score1' : 'score2';
-      final battlesRef = FirebaseFirestore.instance.collection('question_bank') // يمكن تعديل المسار حسب المرجع الكامل لو احتجت، أو حفظه بنسخة مبسطة
-          ;
       
       // إظهار النتيجة النهائية
       showDialog(
