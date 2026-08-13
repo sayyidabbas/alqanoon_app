@@ -1422,6 +1422,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         'player2Score': 0,
         'player2Time': 0,
         'player2Answers': [],
+        'player2Finished': false, // تمت إضافتها هنا
         'status': 'started',
       });
     } else {
@@ -1443,12 +1444,14 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         'player1Score': 0,
         'player1Time': 0,
         'player1Answers': [],
+        'player1Finished': false, // تمت إضافتها هنا
         'player2': null,
         'player2Name': '',
         'player2Photo': '',
         'player2Score': 0,
         'player2Time': 0,
         'player2Answers': [],
+        'player2Finished': false, // تمت إضافتها هنا
         'status': 'waiting',
         'isPrivate': false,
         'roomCode': '',
@@ -1491,12 +1494,14 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       'player1Score': 0,
       'player1Time': 0,
       'player1Answers': [],
+      'player1Finished': false, // تمت إضافتها هنا
       'player2': null,
       'player2Name': '',
       'player2Photo': '',
       'player2Score': 0,
       'player2Time': 0,
       'player2Answers': [],
+      'player2Finished': false, // تمت إضافتها هنا
       'status': 'waiting',
       'isPrivate': true,
       'roomCode': roomCode,
@@ -1592,6 +1597,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                 'player2Score': 0,
                 'player2Time': 0,
                 'player2Answers': [],
+                'player2Finished': false, // تمت إضافتها هنا
                 'status': 'started',
               });
 
@@ -1949,7 +1955,7 @@ class _BattleCountdownScreenState extends State<BattleCountdownScreen> with Sing
 }
 
 // ==========================================
-// 7. شاشة تفاعل التحدي الثنائي النشط
+// 7. شاشة تفاعل التحدي الثنائي النشط (تم التعديل لإضافة شاشة الانتظار)
 // ==========================================
 
 class ActiveQuizBattleScreen extends StatefulWidget {
@@ -1984,11 +1990,55 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   int _totalElapsedSeconds = 0;
   final List<Map<String, dynamic>> _myAnswersLog = [];
 
+  // متغيرات جديدة للانتظار
+  bool _isWaitingForOpponent = false;
+  async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
+
   @override
   void initState() {
     super.initState();
     _startStopwatch();
     _startTimer();
+    _listenToRoomStatus(); // بدء المراقبة
+  }
+
+  // دالة لمراقبة حالة انتهاء الخصم
+  void _listenToRoomStatus() {
+    if (widget.roomId.isEmpty) return;
+    
+    _roomSubscription = FirebaseFirestore.instance
+        .doc(widget.stageDocPath)
+        .snapshots()
+        .listen((snapshot) {
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      final bool p1Finished = data['player1Finished'] ?? false;
+      final bool p2Finished = data['player2Finished'] ?? false;
+
+      // الانتقال للنتائج فقط في حالة انتهاء كلا اللاعبين
+      if (p1Finished && p2Finished) {
+        _roomSubscription?.cancel();
+        
+        if (mounted && _isWaitingForOpponent) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => BattleResultsScreen(
+                roomId: widget.roomId,
+                isPlayer1: widget.isPlayer1,
+                roomData: widget.roomData,
+                myFinalScore: myScore,
+                myTotalTime: _totalElapsedSeconds,
+                myAnswersLog: _myAnswersLog,
+                subjectName: widget.subjectName,
+                stageDocPath: widget.stageDocPath,
+              ),
+            ),
+          );
+        }
+      }
+    });
   }
 
   void _startStopwatch() {
@@ -2018,6 +2068,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   void dispose() {
     _battleTimer?.cancel();
     _stopwatchTimer?.cancel();
+    _roomSubscription?.cancel();
     super.dispose();
   }
 
@@ -2078,31 +2129,55 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       });
       _startTimer();
     } else {
+      // إنهاء المؤقتات
       _battleTimer?.cancel();
       _stopwatchTimer?.cancel();
       
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => BattleResultsScreen(
-              roomId: widget.roomId,
-              isPlayer1: widget.isPlayer1,
-              roomData: widget.roomData,
-              myFinalScore: myScore,
-              myTotalTime: _totalElapsedSeconds,
-              myAnswersLog: _myAnswersLog,
-              subjectName: widget.subjectName,
-              stageDocPath: widget.stageDocPath,
-            ),
-          ),
-        );
+      // إظهار لوحة الانتظار
+      setState(() {
+        _isWaitingForOpponent = true;
+      });
+
+      // إعلام قاعدة البيانات بانتهاء هذا اللاعب
+      if (widget.roomId.isNotEmpty) {
+        await FirebaseFirestore.instance.doc(widget.stageDocPath).update({
+          widget.isPlayer1 ? 'player1Finished' : 'player2Finished': true,
+        });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // عرض لوحة الانتظار إذا كان اللاعب قد أتم الأسئلة
+    if (_isWaitingForOpponent) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('تحدي: ${widget.subjectName}'),
+          backgroundColor: Colors.deepOrange,
+          automaticallyImplyLeading: false,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: Colors.deepOrange),
+              const SizedBox(height: 30),
+              const Text(
+                'أحسنت! لقد أنهيت التحدي 👏',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 15),
+              const Text(
+                'الرجاء الانتظار لحين انتهاء الخصم لعرض النتائج...',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final questions = widget.roomData['questions'] ?? [];
     if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
 
@@ -2260,7 +2335,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                     ),
                     onPressed: _nextQuestion,
                     child: Text(
-                      currentIndex == total - 1 ? 'عرض النتيجة النهائية' : 'السؤال التالي',
+                      currentIndex == total - 1 ? 'إنهاء وانتظار النتيجة' : 'السؤال التالي',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
