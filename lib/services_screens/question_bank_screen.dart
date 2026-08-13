@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -781,7 +783,28 @@ class StudentQbSubjectsScreen extends StatelessWidget {
               return Card(
                 child: ListTile(
                   title: Text(data['name'] ?? ''),
-                  trailing: const Icon(Icons.quiz, color: Colors.blue),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.sports_esports, color: Colors.deepOrange),
+                        tooltip: 'تحدي ثنائي 1v1',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QuizBattleLobbyScreen(
+                                stageIndex: stageIndex,
+                                subjectId: docs[index].id,
+                                subjectName: data['name'] ?? '',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const Icon(Icons.quiz, color: Colors.blue),
+                    ],
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -853,15 +876,7 @@ class StudentQuestionSetsScreen extends StatelessWidget {
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
                     if (questions.isNotEmpty) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => QuizPracticeScreen(
-                            setTitle: data['title'] ?? 'اختبار',
-                            questions: questions,
-                          ),
-                        ),
-                      );
+                      _showQuizOptionsDialog(context, data['title'] ?? 'اختبار', questions);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('هذا الاختبار فارغ')),
@@ -876,17 +891,94 @@ class StudentQuestionSetsScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _showQuizOptionsDialog(BuildContext context, String title, List originalQuestions) {
+    int selectedTimerSeconds = 30; // افتراضي 30 ثانية لكل سؤال
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('إعدادات بدء الاختبار', textAlign: TextAlign.right),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('اختر وقت المؤقت لكل سؤال:'),
+              const SizedBox(height: 10),
+              DropdownButton<int>(
+                value: selectedTimerSeconds,
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(value: 15, child: Text('15 ثانية', textAlign: TextAlign.right)),
+                  DropdownMenuItem(value: 30, child: Text('30 ثانية', textAlign: TextAlign.right)),
+                  DropdownMenuItem(value: 60, child: Text('60 ثانية', textAlign: TextAlign.right)),
+                  DropdownMenuItem(value: 0, child: Text('بدون وقت (حر)', textAlign: TextAlign.right)),
+                ],
+                onChanged: (val) {
+                  setDialogState(() => selectedTimerSeconds = val!);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                
+                // معالجة العشوائية (بنك الأسئلة العشوائي)
+                List randomizedQuestions = List.from(originalQuestions);
+                randomizedQuestions.shuffle();
+
+                // خلط الخيارات أيضاً لكل سؤال مع تحديث correctIndex
+                for (var q in randomizedQuestions) {
+                  List options = List.from(q['options']);
+                  String correctOptionText = options[q['correctIndex'] ?? 0];
+                  options.shuffle();
+                  int newCorrectIndex = options.indexOf(correctOptionText);
+                  q['options'] = options;
+                  q['correctIndex'] = newCorrectIndex;
+                }
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => QuizPracticeScreen(
+                      setTitle: title,
+                      questions: randomizedQuestions,
+                      timerSeconds: selectedTimerSeconds,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('بدء الاختبار'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ==========================================
-// 4. شاشة التدريب وتفاعل الطالب مع العداد
+// 4. شاشة التدريب الفردي (مع المؤقت والعشوائي)
 // ==========================================
 
 class QuizPracticeScreen extends StatefulWidget {
   final String setTitle;
   final List questions;
+  final int timerSeconds;
 
-  const QuizPracticeScreen({super.key, required this.setTitle, required this.questions});
+  const QuizPracticeScreen({
+    super.key,
+    required this.setTitle,
+    required this.questions,
+    required this.timerSeconds,
+  });
 
   @override
   State<QuizPracticeScreen> createState() => _QuizPracticeScreenState();
@@ -897,9 +989,43 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
   int? selectedOptionIndex;
   bool answered = false;
   int correctAnswersCount = 0;
+  
+  Timer? _timer;
+  int _remainingSeconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startQuestionTimer();
+  }
+
+  void _startQuestionTimer() {
+    if (widget.timerSeconds <= 0) return;
+    _remainingSeconds = widget.timerSeconds;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _remainingSeconds--;
+        });
+      } else {
+        timer.cancel();
+        if (!answered) {
+          _answerQuestion(-1); // انتهاء الوقت بدون إجابة
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   void _answerQuestion(int index) {
     if (answered) return;
+    _timer?.cancel();
     setState(() {
       selectedOptionIndex = index;
       answered = true;
@@ -917,7 +1043,9 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
         selectedOptionIndex = null;
         answered = false;
       });
+      _startQuestionTimer();
     } else {
+      _timer?.cancel();
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -956,6 +1084,18 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
       appBar: AppBar(
         title: Text(widget.setTitle),
         backgroundColor: AppColors.primary,
+        actions: [
+          if (widget.timerSeconds > 0)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  '$_remaining ث',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -1020,6 +1160,424 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _nextQuestion,
+                child: Text(
+                  currentIndex == total - 1 ? 'عرض النتيجة النهائية' : 'السؤال التالي',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int get _remaining => _remainingSeconds;
+}
+
+// ==========================================
+// 5. نظام غرفة التحدي الثنائي المباشر (1v1 Live Battle)
+// ==========================================
+
+class QuizBattleLobbyScreen extends StatefulWidget {
+  final int stageIndex;
+  final String subjectId;
+  final String subjectName;
+
+  const QuizBattleLobbyScreen({
+    super.key,
+    required this.stageIndex,
+    required this.subjectId,
+    required this.subjectName,
+  });
+
+  @override
+  State<QuizBattleLobbyScreen> createState() => _QuizBattleLobbyScreenState();
+}
+
+class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
+  bool _isSearching = false;
+  String? _currentRoomId;
+  StreamSubscription<DocumentSnapshot>? _roomSubscription;
+
+  final String myUid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+
+  void _findOrCreateBattleRoom() async {
+    setState(() => _isSearching = true);
+
+    final battlesRef = FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('battle_rooms');
+
+    // 1. البحث عن غرفة تنتظر لاعباً
+    final waitingRooms = await battlesRef.where('status', isEqualTo: 'waiting').get();
+
+    String roomId;
+    if (waitingRooms.docs.isNotEmpty) {
+      // الانضمام لغرفة موجودة
+      roomId = waitingRooms.docs.first.id;
+      await battlesRef.doc(roomId).update({
+        'player2': myUid,
+        'status': 'started',
+      });
+    } else {
+      // إنشاء غرفة جديدة
+      // سحب أسئلة عشوائية (5 أسئلة أو أكثر من مجموعات الأسئلة للمادة)
+      final setsSnapshot = await battlesRef.parent!.collection('question_sets').get();
+      List<dynamic> allPoolQuestions = [];
+      for (var doc in setsSnapshot.docs) {
+        List qList = doc.data()['questions'] ?? [];
+        allPoolQuestions.addAll(qList);
+      }
+
+      if (allPoolQuestions.length < 5) {
+        setState(() => _isSearching = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('عذراً، لا توجد أسئلة كافية لبدء التحدي (يجب أن يكون هناك 5 أسئلة على الأقل)')),
+          );
+        }
+        return;
+      }
+
+      allPoolQuestions.shuffle();
+      // اختيار عشوائي بحد أدنى 5 أسئلة أو كل الأسئلة لو كانت أكثر
+      int takeCount = min(10, allPoolQuestions.length);
+      List selectedQuestions = allPoolQuestions.sublist(0, takeCount);
+
+      // خلط الخيارات
+      for (var q in selectedQuestions) {
+        List options = List.from(q['options']);
+        String correctOptionText = options[q['correctIndex'] ?? 0];
+        options.shuffle();
+        int newCorrectIndex = options.indexOf(correctOptionText);
+        q['options'] = options;
+        q['correctIndex'] = newCorrectIndex;
+      }
+
+      final newRoom = await battlesRef.add({
+        'player1': myUid,
+        'player2': null,
+        'status': 'waiting',
+        'questions': selectedQuestions,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      roomId = newRoom.id;
+    }
+
+    setState(() {
+      _currentRoomId = roomId;
+    });
+
+    // 2. الاستماع لتغيرات حالة الغرفة لبدء المعركة
+    _roomSubscription = battlesRef.doc(roomId).snapshots().listen((snapshot) {
+      if (!snapshot.exists) return;
+      final data = snapshot.data() as Map<String, dynamic>;
+      final status = data['status'];
+
+      if (status == 'started') {
+        _roomSubscription?.cancel();
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ActiveQuizBattleScreen(
+                roomId: roomId,
+                isPlayer1: data['player1'] == myUid,
+                questions: data['questions'],
+                subjectName: widget.subjectName,
+              ),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _roomSubscription?.cancel();
+    // إذا خرج الطالب قبل اكتمال الغرفة، نحذف الغرفة المنتظرة
+    if (_currentRoomId != null && _isSearching) {
+      FirebaseFirestore.instance
+          .collection('question_bank')
+          .doc('stage_${widget.stageIndex}')
+          .collection('subjects')
+          .doc(widget.subjectId)
+          .collection('battle_rooms')
+          .doc(_currentRoomId)
+          .delete();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('تحدي 1v1 - ${widget.subjectName}'),
+        backgroundColor: AppColors.primary,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: _isSearching
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'انتظر لينضم زميلك لبدء التحدي...',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 40),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('إلغاء البحث'),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.sports_esports, size: 80, color: Colors.deepOrange),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'أهلاً بك في ساحة التحدي المباشر!',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'تحدى زملاءك في أسئلة عشوائية، من ينهي الأسئلة بدقة أسرع يفوز!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      onPressed: _findOrCreateBattleRoom,
+                      child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 16)),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 6. شاشة تفاعل التحدي الثنائي النشط
+// ==========================================
+
+class ActiveQuizBattleScreen extends StatefulWidget {
+  final String roomId;
+  final bool isPlayer1;
+  final List questions;
+  final String subjectName;
+
+  const ActiveQuizBattleScreen({
+    super.key,
+    required this.roomId,
+    required this.isPlayer1,
+    required this.questions,
+    required this.subjectName,
+  });
+
+  @override
+  State<ActiveQuizBattleScreen> createState() => _ActiveQuizBattleScreenState();
+}
+
+class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
+  int currentIndex = 0;
+  int? selectedOptionIndex;
+  bool answered = false;
+  int myScore = 0;
+  
+  Timer? _battleTimer;
+  int _questionSeconds = 15; // 15 ثانية لكل سؤال في التحدي
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _questionSeconds = 15;
+    _battleTimer?.cancel();
+    _battleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_questionSeconds > 0) {
+        setState(() => _questionSeconds--);
+      } else {
+        timer.cancel();
+        if (!answered) {
+          _answerQuestion(-1);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _battleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _answerQuestion(int index) {
+    if (answered) return;
+    _battleTimer?.cancel();
+    setState(() {
+      selectedOptionIndex = index;
+      answered = true;
+      final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
+      if (index == correct) {
+        myScore++;
+      }
+    });
+  }
+
+  void _nextQuestion() async {
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        selectedOptionIndex = null;
+        answered = false;
+      });
+      _startTimer();
+    } else {
+      _battleTimer?.cancel();
+      // رفع النتيجة لـ Firebase
+      final myScoreField = widget.isPlayer1 ? 'score1' : 'score2';
+      final battlesRef = FirebaseFirestore.instance.collection('question_bank') // يمكن تعديل المسار حسب المرجع الكامل لو احتجت، أو حفظه بنسخة مبسطة
+          ;
+      
+      // إظهار النتيجة النهائية
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('انتهى التحدي!', textAlign: TextAlign.right),
+          content: Text(
+            'أحسنت! نتيجتك في التحدي: $myScore من ${widget.questions.length}',
+            textAlign: TextAlign.right,
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              },
+              child: const Text('خروج'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final questionData = widget.questions[currentIndex];
+    final String questionText = questionData['question'] ?? '';
+    final List options = questionData['options'] ?? [];
+    final int correctIndex = questionData['correctIndex'] ?? 0;
+
+    int total = widget.questions.length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('تحدي: ${widget.subjectName}'),
+        backgroundColor: Colors.deepOrange,
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                '$_questionSeconds ث',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Chip(label: Text('نقاطك: $myScore'), backgroundColor: Colors.amber.shade100),
+                Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  questionText,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  Color btnColor = Colors.white;
+                  if (answered) {
+                    if (index == correctIndex) {
+                      btnColor = Colors.green.shade200;
+                    } else if (index == selectedOptionIndex) {
+                      btnColor = Colors.red.shade200;
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: btnColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        alignment: Alignment.centerRight,
+                      ),
+                      onPressed: () => _answerQuestion(index),
+                      child: Text(
+                        options[index],
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (answered)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
