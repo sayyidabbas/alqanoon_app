@@ -1,11 +1,9 @@
 import 'dart:async' as async_lib;
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:audioplayers/audioplayers.dart';
 import '../constants/app_colors.dart';
 
 class QuestionBankScreen extends StatefulWidget {
@@ -1113,7 +1111,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
   
   async_lib.Timer? _timer;
   int _remainingSeconds = 0;
-  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -1142,30 +1139,16 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _audioPlayer.dispose();
     super.dispose();
   }
 
-  void _answerQuestion(int index) async {
+  void _answerQuestion(int index) {
     if (answered) return;
     _timer?.cancel();
-
-    // تشغيل الاهتزاز والصوت عند الإجابة (تم استخدام AssetSource لتصحيح الخطأ)
-    HapticFeedback.mediumImpact();
-    final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
-    if (index == correct) {
-      try {
-        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
-      } catch (_) {}
-    } else {
-      try {
-        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
-      } catch (_) {}
-    }
-
     setState(() {
       selectedOptionIndex = index;
       answered = true;
+      final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
       if (index == correct) {
         correctAnswersCount++;
       }
@@ -1364,13 +1347,14 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
     String roomId;
     if (waitingRooms.docs.isNotEmpty) {
       roomId = waitingRooms.docs.first.id;
-      // انضمام كـ player2 مع تهيئة بيانات النقاط الخاصة به
+      // انضمام كـ player2 مع تهيئة بياناته وحقول النقاط/الوقت
       await battlesRef.doc(roomId).update({
         'player2': myUid,
         'player2Name': myName,
         'player2Photo': myPhoto,
         'player2Score': 0,
-        'player1Score': 0,
+        'player2Time': 0,
+        'player2Answers': [],
         'status': 'started',
       });
     } else {
@@ -1404,16 +1388,20 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         q['correctIndex'] = newCorrectIndex;
       }
 
-      // إنشاء الغرفة كـ player1
+      // إنشاء الغرفة كـ player1 مع تهيئة حقول النقاط والوقت والإجابات
       final newRoom = await battlesRef.add({
         'player1': myUid,
         'player1Name': myName,
         'player1Photo': myPhoto,
         'player1Score': 0,
+        'player1Time': 0,
+        'player1Answers': [],
         'player2': null,
         'player2Name': '',
         'player2Photo': '',
         'player2Score': 0,
+        'player2Time': 0,
+        'player2Answers': [],
         'status': 'waiting',
         'questions': selectedQuestions,
         'createdAt': FieldValue.serverTimestamp(),
@@ -1436,11 +1424,11 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => ActiveQuizBattleScreen(
-                roomId: roomId,
-                isPlayer1: data['player1'] == myUid,
+              builder: (_) => BattleCountdownScreen(
                 roomData: data,
+                isPlayer1: data['player1'] == myUid,
                 subjectName: widget.subjectName,
+                roomId: roomId,
               ),
             ),
           );
@@ -1707,7 +1695,7 @@ class _BattleCountdownScreenState extends State<BattleCountdownScreen> with Sing
 }
 
 // ==========================================
-// 7. شاشة تفاعل التحدي الثنائي النشط (مع المزامنة الحية)
+// 7. شاشة تفاعل التحدي الثنائي النشط
 // ==========================================
 
 class ActiveQuizBattleScreen extends StatefulWidget {
@@ -1735,13 +1723,24 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   int myScore = 0;
   
   async_lib.Timer? _battleTimer;
+  async_lib.Timer? _stopwatchTimer;
   int _questionSeconds = 15;
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  int _totalElapsedSeconds = 0;
+  final List<Map<String, dynamic>> _myAnswersLog = [];
 
   @override
   void initState() {
     super.initState();
+    _startStopwatch();
     _startTimer();
+  }
+
+  void _startStopwatch() {
+    _stopwatchTimer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _totalElapsedSeconds++;
+      });
+    });
   }
 
   void _startTimer() {
@@ -1762,43 +1761,67 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   @override
   void dispose() {
     _battleTimer?.cancel();
-    _audioPlayer.dispose();
+    _stopwatchTimer?.cancel();
     super.dispose();
   }
 
   void _answerQuestion(int index) async {
     if (answered) return;
     _battleTimer?.cancel();
-
-    HapticFeedback.mediumImpact();
+    
     final questions = widget.roomData['questions'] ?? [];
     final correct = questions[currentIndex]['correctIndex'] ?? 0;
-    
-    if (index == correct) {
-      myScore++;
-      try {
-        await _audioPlayer.play(AssetSource('sounds/correct.mp3'));
-      } catch (_) {}
-    } else {
-      try {
-        await _audioPlayer.play(AssetSource('sounds/wrong.mp3'));
-      } catch (_) {}
-    }
+    bool isCorrect = (index == correct);
 
     setState(() {
       selectedOptionIndex = index;
       answered = true;
+      if (isCorrect) {
+        myScore++;
+      }
+      _myAnswersLog.add({
+        'questionIndex': currentIndex,
+        'question': questions[currentIndex]['question'],
+        'selectedOption': index != -1 ? questions[currentIndex]['options'][index] : 'لم يجيب',
+        'correctOption': questions[currentIndex]['options'][correct],
+        'isCorrect': isCorrect,
+      });
     });
 
-    // تحديث نقاط اللاعب بشكل حي في Firestore لكي يراها الخصم فوراً
+    // مزامنة النقاط والحالة فوراً مع فايرستور
     if (widget.roomId.isNotEmpty) {
       final scoreField = widget.isPlayer1 ? 'player1Score' : 'player2Score';
-      await FirebaseFirestore.instance
-          .collection('question_bank')
-          .doc(widget.roomData['stagePath'] ?? 'stage_1')
-          .collection('battle_rooms')
-          .doc(widget.roomId)
-          .update({scoreField: myScore});
+      final timeField = widget.isPlayer1 ? 'player1Time' : 'player2Time';
+      final answersField = widget.isPlayer1 ? 'player1Answers' : 'player2Answers';
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('question_bank')
+            .doc(widget.roomData['stageDoc'] ?? 'stage_1') // سيتم التعامل مع مسار الغرفة مباشرة عبر الـ doc
+            .collection('battle_rooms') // ملاحظة: المسار يتم تحديثه أدناه بشكل دقيق
+            .doc(widget.roomId)
+            .update({
+          scoreField: myScore,
+          timeField: _totalElapsedSeconds,
+          answersField: _myAnswersLog,
+        });
+      } catch (_) {
+        // تحديث مباشر عبر الاستعلام المباشر للغرفة لو وجد مسار مختلف
+        try {
+          // البحث والتحديث المباشر للغرفة
+          await FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).get().then((snapshot) {
+            if (snapshot.docs.isNotEmpty) {
+              snapshot.docs.first.reference.update({
+                scoreField: myScore,
+                timeField: _totalElapsedSeconds,
+                answersField: _myAnswersLog,
+              });
+            }
+          });
+        } catch (e) {
+          // تجاهل الخطأ البسيط لضمان استمرارية اللعب دون انقطاع
+        }
+      }
     }
   }
 
@@ -1818,8 +1841,9 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
       _startTimer();
     } else {
       _battleTimer?.cancel();
+      _stopwatchTimer?.cancel();
       
-      // الانتقال لشاشة النتائج التفصيلية النهائية
+      // الانتقال إلى شاشة النتائج النهائية التفصيلية
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -1828,8 +1852,10 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
               roomId: widget.roomId,
               isPlayer1: widget.isPlayer1,
               roomData: widget.roomData,
-              myScore: myScore,
-              totalQuestions: questions.length,
+              myFinalScore: myScore,
+              myTotalTime: _totalElapsedSeconds,
+              myAnswersLog: _myAnswersLog,
+              subjectName: widget.subjectName,
             ),
           ),
         );
@@ -1848,21 +1874,22 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     final int correctIndex = questionData['correctIndex'] ?? 0;
     int total = questions.length;
 
+    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
+
+    // استماع حي لتقدم ونتيجة الخصم من فايرستور
     return StreamBuilder<DocumentSnapshot>(
       stream: widget.roomId.isNotEmpty 
-          ? FirebaseFirestore.instance.collection('question_bank').doc(widget.roomData['stagePath'] ?? 'stage_1').collection('battle_rooms').doc(widget.roomId).snapshots()
+          ? FirebaseFirestore.instance.collectionGroup('battle_rooms').where(FieldPath.documentId, isEqualTo: widget.roomId).snapshots().map((snapshot) => snapshot.docs.first)
           : null,
       builder: (context, snapshot) {
-        Map<String, dynamic> liveData = widget.roomData;
-        if (snapshot.hasData && snapshot.data!.exists) {
-          liveData = snapshot.data!.data() as Map<String, dynamic>;
+        int oppScore = 0;
+        if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
         }
-
-        final myName = widget.isPlayer1 ? liveData['player1Name'] : liveData['player2Name'];
-        final oppName = widget.isPlayer1 ? liveData['player2Name'] : liveData['player1Name'];
-        final myPhoto = widget.isPlayer1 ? liveData['player1Photo'] : liveData['player2Photo'];
-        final oppPhoto = widget.isPlayer1 ? liveData['player2Photo'] : liveData['player1Photo'];
-        final oppScore = widget.isPlayer1 ? (liveData['player2Score'] ?? 0) : (liveData['player1Score'] ?? 0);
 
         return Scaffold(
           appBar: AppBar(
@@ -1885,7 +1912,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // شريط عرض النقاط الحية للطرفين
+                // بطاقة عرض الطرفين بأساميهم وصورهم الحقيقية ونتيجة الخصم الحية في الوقت الفعلي
                 Card(
                   elevation: 2,
                   child: Padding(
@@ -1906,7 +1933,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.green)),
+                                Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                               ],
                             ),
                           ],
@@ -1918,7 +1945,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.blue)),
+                                Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             const SizedBox(width: 8),
@@ -2014,115 +2041,298 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 // 8. شاشة النتائج النهائية التفصيلية (Battle Results Screen)
 // ==========================================
 
-class BattleResultsScreen extends StatelessWidget {
+class BattleResultsScreen extends StatefulWidget {
   final String roomId;
   final bool isPlayer1;
   final Map<String, dynamic> roomData;
-  final int myScore;
-  final int totalQuestions;
+  final int myFinalScore;
+  final int myTotalTime;
+  final List<Map<String, dynamic>> myAnswersLog;
+  final String subjectName;
 
   const BattleResultsScreen({
     super.key,
     required this.roomId,
     required this.isPlayer1,
     required this.roomData,
-    required this.myScore,
-    required this.totalQuestions,
+    required this.myFinalScore,
+    required this.myTotalTime,
+    required this.myAnswersLog,
+    required this.subjectName,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final myName = isPlayer1 ? roomData['player1Name'] : roomData['player2Name'];
-    final oppName = isPlayer1 ? roomData['player2Name'] : roomData['player1Name'];
-    final oppScore = isPlayer1 ? (roomData['player2Score'] ?? 0) : (roomData['player1Score'] ?? 0);
+  State<BattleResultsScreen> createState() => _BattleResultsScreenState();
+}
 
-    String resultText = 'تعادل!';
-    Color resultColor = Colors.orange;
-    IconData resultIcon = Icons.balance;
+class _BattleResultsScreenState extends State<BattleResultsScreen> {
+  bool _isLoadingOpponent = true;
+  Map<String, dynamic>? opponentData;
 
-    if (myScore > oppScore) {
-      resultText = 'تهانينا، لقد فزت بالتحدي! 🎉';
-      resultColor = Colors.green;
-      resultIcon = Icons.emoji_events;
-    } else if (myScore < oppScore) {
-      resultText = 'حظاً أوفر، لقد خسرت المعركة 💔';
-      resultColor = Colors.red;
-      resultIcon = Icons.sentiment_dissatisfied;
+  @override
+  void initState() {
+    super.initState();
+    _fetchOpponentResults();
+  }
+
+  void _fetchOpponentResults() async {
+    if (widget.roomId.isEmpty) {
+      setState(() => _isLoadingOpponent = false);
+      return;
     }
 
-    double accuracy = totalQuestions > 0 ? (myScore / totalQuestions) * 100 : 0;
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collectionGroup('battle_rooms')
+          .where(FieldPath.documentId, isEqualTo: widget.roomId)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final data = querySnapshot.docs.first.data();
+        final oppScoreKey = widget.isPlayer1 ? 'player2Score' : 'player1Score';
+        final oppTimeKey = widget.isPlayer1 ? 'player2Time' : 'player1Time';
+        final oppAnswersKey = widget.isPlayer1 ? 'player2Answers' : 'player1Answers';
+        final oppNameKey = widget.isPlayer1 ? 'player2Name' : 'player1Name';
+        final oppPhotoKey = widget.isPlayer1 ? 'player2Photo' : 'player1Photo';
+
+        setState(() {
+          opponentData = {
+            'score': data[oppScoreKey] ?? 0,
+            'time': data[oppTimeKey] ?? 0,
+            'answers': data[oppAnswersKey] ?? [],
+            'name': data[oppNameKey] ?? 'الخصم',
+            'photo': data[oppPhotoKey] ?? '',
+          };
+          _isLoadingOpponent = false;
+        });
+      } else {
+        setState(() => _isLoadingOpponent = false);
+      }
+    } catch (_) {
+      setState(() => _isLoadingOpponent = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalQuestions = (widget.roomData['questions'] as List?)?.length ?? 1;
+    final double myAccuracy = (widget.myFinalScore / totalQuestions) * 100;
+    
+    int oppScore = opponentData?['score'] ?? 0;
+    int oppTime = opponentData?['time'] ?? 0;
+    double oppAccuracy = (oppScore / totalQuestions) * 100;
+    String oppName = opponentData?['name'] ?? 'الخصم';
+
+    // تحديد الفائز بدقة (بناءً على النقاط أولاً، ثم الوقت المستغرق الأقل كمرجح عند تعادل النقاط)
+    String winnerText = '';
+    Color resultColor = Colors.blue;
+    IconData resultIcon = Icons.sports_esports;
+
+    if (_isLoadingOpponent) {
+      winnerText = 'جاري جلب نتائج الخصم...';
+    } else {
+      if (widget.myFinalScore > oppScore) {
+        winnerText = 'تهانينا، لقد فزت بالمباراة! 🎉';
+        resultColor = Colors.green;
+        resultIcon = Icons.emoji_events;
+      } else if (widget.myFinalScore < oppScore) {
+        winnerText = 'هاردلك، لقد فاز الخصم $oppName 😢';
+        resultColor = Colors.red;
+        resultIcon = Icons.sentiment_dissatisfied;
+      } else {
+        // تعادل في النقاط، نحتكم للوقت الأقل
+        if (widget.myTotalTime < oppTime) {
+          winnerText = 'تعادل في النقاط، لكنك فزت لسرعة إنجازك! ⚡';
+          resultColor = Colors.green;
+          resultIcon = Icons.flash_on;
+        } else if (widget.myTotalTime > oppTime) {
+          winnerText = 'تعادل في النقاط، وفاز الخصم لسرعته!';
+          resultColor = Colors.orange;
+          resultIcon = Icons.timer;
+        } else {
+          winnerText = 'تعادل تام بين اللاعبين! 🤝';
+          resultColor = Colors.blue;
+          resultIcon = Icons.handshake;
+        }
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('نتيجة التحدي النهائية'),
-        backgroundColor: AppColors.primary,
+        title: Text('نتائج التحدي - ${widget.subjectName}'),
+        backgroundColor: Colors.deepOrange,
         automaticallyImplyLeading: false,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Icon(resultIcon, size: 80, color: resultColor),
-            const SizedBox(height: 16),
-            Text(
-              resultText,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: resultColor),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    const Text('مقارنة النتائج', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('$myName (أنت)', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('$myScore / $totalQuestions', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                      ],
+      body: _isLoadingOpponent
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // بطاقة الفائز الصريحة
+                  Card(
+                    color: resultColor.shade50,
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        children: [
+                          Icon(resultIcon, size: 60, color: resultColor),
+                          const SizedBox(height: 10),
+                          Text(
+                            winnerText,
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: resultColor.shade900),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('$oppName (الخصم)', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('$oppScore / $totalQuestions', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                      ],
+                  ),
+                  const SizedBox(height: 20),
+                  // مقارنة تفصيلية للإحصائيات (نسبة الدقة والوقت)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              children: [
+                                const Text('أنت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const Divider(),
+                                Text('النقاط: ${widget.myFinalScore}/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 5),
+                                Text('الدقة: ${myAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
+                                const SizedBox(height: 5),
+                                Text('الوقت: ${widget.myTotalTime} ثانية', style: const TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              children: [
+                                Text(oppName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const Divider(),
+                                Text('النقاط: $oppScore/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 5),
+                                Text('الدقة: ${oppAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
+                                const SizedBox(height: 5),
+                                Text('الوقت: $oppTime ثانية', style: const TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 25),
+                  const Text(
+                    'مقارنة الإجابات بالسجل:',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.right,
+                  ),
+                  const SizedBox(height: 10),
+                  // مقارنة إجابات الأسئلة بسجل الخصم
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: widget.myAnswersLog.length,
+                    itemBuilder: (context, index) {
+                      final myAns = widget.myAnswersLog[index];
+                      final oppAnswersList = opponentData?['answers'] as List? ?? [];
+                      Map<String, dynamic>? oppAns;
+                      for (var item in oppAnswersList) {
+                        if (item['questionIndex'] == index) {
+                          oppAns = item;
+                          break;
+                        }
+                      }
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'السؤال ${index + 1}: ${myAns['question']}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                textAlign: TextAlign.right,
+                              ),
+                              const Divider(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'إجابتك: ${myAns['selectedOption']}',
+                                    style: TextStyle(
+                                      color: myAns['isCorrect'] ? Colors.green : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Icon(
+                                    myAns['isCorrect'] ? Icons.check_circle : Icons.cancel,
+                                    color: myAns['isCorrect'] ? Colors.green : Colors.red,
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
+                                    style: TextStyle(
+                                      color: (oppAns != null && oppAns['isCorrect'] == true) ? Colors.green : Colors.grey,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (oppAns != null)
+                                    Icon(
+                                      oppAns['isCorrect'] == true ? Icons.check_circle : Icons.cancel,
+                                      color: oppAns['isCorrect'] == true ? Colors.green : Colors.red,
+                                      size: 18,
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'الإجابة الصحيحة: ${myAns['correctOption']}',
+                                style: const TextStyle(color: Colors.blue, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('نسبة الدقة لديك:'),
-                        Text('${accuracy.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ],
-                ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text('العودة للقائمة الرئيسية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('العودة إلى الرئيسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
- 
