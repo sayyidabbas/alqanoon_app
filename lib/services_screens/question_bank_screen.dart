@@ -1357,7 +1357,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
   bool _isSearching = false;
   String? _currentRoomId;
   async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
-  bool _isPrivateHostDialogVisible = false; // حل لعدم الإغلاق العشوائي
+  bool _isPrivateHostDialogVisible = false;
 
   final User? currentUser = FirebaseAuth.instance.currentUser;
   String get myUid => currentUser?.uid ?? 'guest';
@@ -1410,7 +1410,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         .where('isPrivate', isEqualTo: false)
         .get();
 
-    // البحث عن غرفة غير ممتلئة (اللاعب الثاني null)
     var validRooms = waitingRooms.docs.where((doc) => doc.data()['player2'] == null).toList();
 
     if (validRooms.isNotEmpty) {
@@ -1429,7 +1428,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       });
       
       setState(() => _currentRoomId = roomId);
-      _listenToRoom(roomId, isHost: false); // أنا اللاعب المنضم
+      _listenToRoom(roomId, isHost: false);
     } else {
       List selectedQuestions = await _fetchRandomQuestions();
       if (selectedQuestions.length < 5) {
@@ -1465,7 +1464,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       });
       
       setState(() => _currentRoomId = newRoom.id);
-      _listenToRoom(newRoom.id, isHost: true); // أنا اللاعب المنشئ
+      _listenToRoom(newRoom.id, isHost: true);
     }
   }
 
@@ -1547,7 +1546,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       });
     }
 
-    _listenToRoom(newRoom.id, isHost: true); // المنشئ (اللاعب الأول)
+    _listenToRoom(newRoom.id, isHost: true);
   }
 
   void _joinPrivateRoomDialog() {
@@ -1608,7 +1607,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                 'status': 'started',
               });
 
-              // يبدأ الاستماع كلاعب ثانٍ (ينتظر التوجيه للشاشة)
               _listenToRoom(_currentRoomId!, isHost: false);
             },
             child: const Text('انضمام'),
@@ -1618,7 +1616,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
     );
   }
 
-  // تم تمرير `isHost` لتحديد الدور بوضوح (لاعب 1 أم لاعب 2)
   void _listenToRoom(String roomId, {required bool isHost}) {
     final battlesRef = FirebaseFirestore.instance
         .collection('question_bank')
@@ -1633,9 +1630,8 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       final status = data['status'];
 
       if (status == 'started') {
-        _roomSubscription?.cancel(); // إغلاق المراقب
+        _roomSubscription?.cancel();
         
-        // إغلاق نافذة كود الغرفة الخاصة إن كانت مفتوحة
         if (_isPrivateHostDialogVisible) {
           Navigator.of(context, rootNavigator: true).pop();
           _isPrivateHostDialogVisible = false;
@@ -1647,7 +1643,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
             MaterialPageRoute(
               builder: (_) => BattleCountdownScreen(
                 roomData: data,
-                isPlayer1: isHost, // إعطاء الدور الصحيح دون الاعتماد على UID
+                isPlayer1: isHost,
                 subjectName: widget.subjectName,
                 roomId: roomId,
                 stageDocPath: 'question_bank/stage_${widget.stageIndex}/subjects/${widget.subjectId}/battle_rooms/$roomId',
@@ -1955,7 +1951,7 @@ class _BattleCountdownScreenState extends State<BattleCountdownScreen> with Sing
 }
 
 // ==========================================
-// 7. شاشة تفاعل التحدي الثنائي النشط (شاملة تحديثات شاشة الانتظار والنقاط الحية)
+// 7. شاشة تفاعل التحدي الثنائي النشط 
 // ==========================================
 
 class ActiveQuizBattleScreen extends StatefulWidget {
@@ -1991,54 +1987,17 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   final List<Map<String, dynamic>> _myAnswersLog = [];
 
   bool _isWaitingForOpponent = false;
-  bool _hasNavigatedToResults = false;
-  async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
+  bool _isNavigating = false;
+  
+  // الاستماع الثابت لقاعدة البيانات لتجنب إعادة بناء الـ Stream
+  late Stream<DocumentSnapshot> _roomStream;
 
   @override
   void initState() {
     super.initState();
+    _roomStream = FirebaseFirestore.instance.doc(widget.stageDocPath).snapshots();
     _startStopwatch();
     _startTimer();
-    _listenToRoomStatus();
-  }
-
-  void _listenToRoomStatus() {
-    if (widget.roomId.isEmpty) return;
-    
-    _roomSubscription = FirebaseFirestore.instance
-        .doc(widget.stageDocPath)
-        .snapshots()
-        .listen((snapshot) {
-      if (!snapshot.exists) return;
-      
-      final data = snapshot.data() as Map<String, dynamic>;
-      final bool p1Finished = data['player1Finished'] ?? false;
-      final bool p2Finished = data['player2Finished'] ?? false;
-
-      // الانتقال الفوري للنتائج عند انتهاء كلا اللاعبين (هذا سيمنع اللاعب الأخير من التعليق)
-      if (p1Finished && p2Finished) {
-        _roomSubscription?.cancel();
-        
-        if (mounted && !_hasNavigatedToResults) {
-          _hasNavigatedToResults = true;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => BattleResultsScreen(
-                roomId: widget.roomId,
-                isPlayer1: widget.isPlayer1,
-                roomData: widget.roomData,
-                myFinalScore: myScore,
-                myTotalTime: _totalElapsedSeconds,
-                myAnswersLog: _myAnswersLog,
-                subjectName: widget.subjectName,
-                stageDocPath: widget.stageDocPath,
-              ),
-            ),
-          );
-        }
-      }
-    });
   }
 
   void _startStopwatch() {
@@ -2068,7 +2027,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   void dispose() {
     _battleTimer?.cancel();
     _stopwatchTimer?.cancel();
-    _roomSubscription?.cancel();
     super.dispose();
   }
 
@@ -2144,10 +2102,10 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     }
   }
 
-  // تصميم شاشة الانتظار الممتعة والمتحركة (التي لا تغلق حتى ينتهي الخصم)
+  // شاشة الانتظار كما في الصورة المطلوبة (تعرض لحين الانتهاء)
   Widget _buildWaitingScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF131520), // لون خلفية هادئ (ليلي)
+      backgroundColor: const Color(0xFF171926), // لون خلفية كحلي/أسود
       appBar: AppBar(
         title: Text('تحدي: ${widget.subjectName}'),
         backgroundColor: Colors.deepOrange,
@@ -2159,35 +2117,31 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // أيقونة تتغير وتنبض
-              TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0.8, end: 1.1),
-                duration: const Duration(milliseconds: 800),
-                builder: (context, val, child) {
-                  return Transform.scale(
-                    scale: val,
-                    child: const Icon(Icons.stars_rounded, size: 100, color: Colors.amber),
-                  );
-                },
-                onEnd: () {
-                  // هنا يمكن إضافة حالة لعمل Loop، ولكن نكتفي بالـ CircularProgressIndicator للأسفل
-                },
+              // الدائرة الصفراء بداخلها النجمة
+              Container(
+                width: 120,
+                height: 120,
+                decoration: const BoxDecoration(
+                  color: Colors.amber,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.star_rounded, size: 80, color: Color(0xFF171926)),
               ),
               const SizedBox(height: 30),
               const Text(
-                '🎉 أحسنت! لقد أنهيت التحدي',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                'أحسنت! لقد أنهيت التحدي 🎉',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 15),
               const Text(
                 'أنت رائع! ننتظر الآن الخصم لينهي إجاباته لعرض النتائج...',
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+                style: TextStyle(fontSize: 14, color: Colors.white70),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 50),
-              // لودر متحرك ليوحي بالاستمرارية
-              const CircularProgressIndicator(color: Colors.deepOrange, strokeWidth: 5),
+              // لودر متحرك 
+              const CircularProgressIndicator(color: Colors.deepOrange, strokeWidth: 4),
             ],
           ),
         ),
@@ -2197,52 +2151,89 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isWaitingForOpponent) {
-      return _buildWaitingScreen();
-    }
+    // جعل الـ StreamBuilder يغطي كامل الشاشة ليستمع للتحديثات لحظياً وبثبات
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _roomStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
 
-    final questions = widget.roomData['questions'] ?? [];
-    if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        
+        final bool p1Finished = data['player1Finished'] == true;
+        final bool p2Finished = data['player2Finished'] == true;
 
-    final questionData = questions[currentIndex];
-    final String questionText = questionData['question'] ?? '';
-    final List options = questionData['options'] ?? [];
-    final int correctIndex = questionData['correctIndex'] ?? 0;
-    int total = questions.length;
+        // --- الانتقال الآمن واللحظي لشاشة النتائج ---
+        if (p1Finished && p2Finished && !_isNavigating) {
+          _isNavigating = true;
+          // إيقاف العدادات قبل الانتقال لتجنب الأخطاء
+          _battleTimer?.cancel();
+          _stopwatchTimer?.cancel();
+          
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BattleResultsScreen(
+                    roomId: widget.roomId,
+                    isPlayer1: widget.isPlayer1,
+                    roomData: widget.roomData,
+                    myFinalScore: myScore,
+                    myTotalTime: _totalElapsedSeconds,
+                    myAnswersLog: _myAnswersLog,
+                    subjectName: widget.subjectName,
+                    stageDocPath: widget.stageDocPath,
+                  ),
+                ),
+              );
+            }
+          });
+          // إرجاع شاشة الانتظار لثانية قبل إتمام الانتقال
+          return _buildWaitingScreen(); 
+        }
 
-    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
-    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
-    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
-    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
+        // --- قراءة نقاط الخصم مباشرة من قاعدة البيانات ---
+        int oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('تحدي: ${widget.subjectName}'),
-        backgroundColor: Colors.deepOrange,
-        actions: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                '$_questionSeconds ث',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+        // إذا كان هذا اللاعب قد أنهى التحدي وينتظر
+        if (_isWaitingForOpponent) {
+          return _buildWaitingScreen();
+        }
+
+        // --- بناء شاشة التحدي النشطة ---
+        final questions = widget.roomData['questions'] ?? [];
+        if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
+
+        final questionData = questions[currentIndex];
+        final String questionText = questionData['question'] ?? '';
+        final List options = questionData['options'] ?? [];
+        final int correctIndex = questionData['correctIndex'] ?? 0;
+        int total = questions.length;
+
+        final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+        final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+        final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+        final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('تحدي: ${widget.subjectName}'),
+            backgroundColor: Colors.deepOrange,
+            actions: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    '$_questionSeconds ث',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: widget.roomId.isNotEmpty 
-            ? FirebaseFirestore.instance.doc(widget.stageDocPath).snapshots()
-            : null,
-        builder: (context, snapshot) {
-          int oppScore = 0;
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
-          }
-
-          return Padding(
+          body: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2279,6 +2270,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                // نقاط الخصم تتحدث هنا مباشرة
                                 Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -2364,9 +2356,9 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                   ),
               ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -2666,4 +2658,3 @@ class _BattleResultsScreenState extends State<BattleResultsScreen> {
     );
   }
 }
- 
