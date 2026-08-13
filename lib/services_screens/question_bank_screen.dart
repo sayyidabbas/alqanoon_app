@@ -1327,7 +1327,10 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
   String? _currentRoomId;
   async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
 
-  final String myUid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+  String get myUid => currentUser?.uid ?? 'guest';
+  String get myName => currentUser?.displayName ?? currentUser?.email?.split('@').first ?? 'طالب';
+  String get myPhoto => currentUser?.photoURL ?? '';
 
   void _findOrCreateBattleRoom() async {
     setState(() => _isSearching = true);
@@ -1344,8 +1347,11 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
     String roomId;
     if (waitingRooms.docs.isNotEmpty) {
       roomId = waitingRooms.docs.first.id;
+      // انضمام كـ player2 مع حفظ بياناته
       await battlesRef.doc(roomId).update({
         'player2': myUid,
+        'player2Name': myName,
+        'player2Photo': myPhoto,
         'status': 'started',
       });
     } else {
@@ -1379,9 +1385,14 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         q['correctIndex'] = newCorrectIndex;
       }
 
+      // إنشاء الغرفة كـ player1 مع حفظ بياناته
       final newRoom = await battlesRef.add({
         'player1': myUid,
+        'player1Name': myName,
+        'player1Photo': myPhoto,
         'player2': null,
+        'player2Name': '',
+        'player2Photo': '',
         'status': 'waiting',
         'questions': selectedQuestions,
         'createdAt': FieldValue.serverTimestamp(),
@@ -1407,7 +1418,7 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
               builder: (_) => ActiveQuizBattleScreen(
                 roomId: roomId,
                 isPlayer1: data['player1'] == myUid,
-                questions: data['questions'],
+                roomData: data,
                 subjectName: widget.subjectName,
               ),
             ),
@@ -1447,15 +1458,19 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // واجهة عرض اسماء الطرفين مع VS والمادة تحته
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Column(
-                          children: const [
-                            CircleAvatar(radius: 35, backgroundColor: Colors.amber, child: Icon(Icons.person, size: 40, color: Colors.white)),
-                            SizedBox(height: 8),
-                            Text('أنت', style: TextStyle(fontWeight: FontWeight.bold)),
+                          children: [
+                            CircleAvatar(
+                              radius: 35,
+                              backgroundColor: Colors.amber,
+                              backgroundImage: myPhoto.isNotEmpty ? NetworkImage(myPhoto) : null,
+                              child: myPhoto.isEmpty ? const Icon(Icons.person, size: 40, color: Colors.white) : null,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(myName, style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         ),
                         Padding(
@@ -1531,20 +1546,158 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
 }
 
 // ==========================================
-// 6. شاشة تفاعل التحدي الثنائي النشط
+// 6. شاشة العد التنازلي التمهيدي قبل البدء (3 ثوانٍ متحركة)
+// ==========================================
+
+class BattleCountdownScreen extends StatefulWidget {
+  final Map<String, dynamic> roomData;
+  final bool isPlayer1;
+  final String subjectName;
+
+  const BattleCountdownScreen({
+    super.key,
+    required this.roomData,
+    required this.isPlayer1,
+    required this.subjectName,
+  });
+
+  @override
+  State<BattleCountdownScreen> createState() => _BattleCountdownScreenState();
+}
+
+class _BattleCountdownScreenState extends State<BattleCountdownScreen> with SingleTickerProviderStateMixin {
+  int _counter = 3;
+  late AnimationController _animController;
+  late Animation<double> _scaleAnimation;
+  async_lib.Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.3).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    );
+
+    _animController.forward();
+
+    _timer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_counter > 1) {
+        setState(() {
+          _counter--;
+        });
+        _animController.reset();
+        _animController.forward();
+      } else {
+        timer.cancel();
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ActiveQuizBattleScreen(
+              roomId: '',
+              isPlayer1: widget.isPlayer1,
+              roomData: widget.roomData,
+              subjectName: widget.subjectName,
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
+
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('المعركة على وشك البدء!', style: TextStyle(fontSize: 22, color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 35,
+                        backgroundColor: Colors.amber,
+                        backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
+                        child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 40, color: Colors.white) : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(myName ?? 'أنت', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text('VS', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.amber)),
+                  ),
+                  Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 35,
+                        backgroundColor: Colors.blueGrey,
+                        backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
+                        child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 40, color: Colors.white) : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(oppName ?? 'الخصم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 60),
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Text(
+                  '$_counter',
+                  style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text('استعد للإجابة بسرعة وبدقة!', style: TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 7. شاشة تفاعل التحدي الثنائي النشط
 // ==========================================
 
 class ActiveQuizBattleScreen extends StatefulWidget {
   final String roomId;
   final bool isPlayer1;
-  final List questions;
+  final Map<String, dynamic> roomData;
   final String subjectName;
 
   const ActiveQuizBattleScreen({
     super.key,
     required this.roomId,
     required this.isPlayer1,
-    required this.questions,
+    required this.roomData,
     required this.subjectName,
   });
 
@@ -1594,7 +1747,8 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     setState(() {
       selectedOptionIndex = index;
       answered = true;
-      final correct = widget.questions[currentIndex]['correctIndex'] ?? 0;
+      final questions = widget.roomData['questions'] ?? [];
+      final correct = questions[currentIndex]['correctIndex'] ?? 0;
       if (index == correct) {
         myScore++;
       }
@@ -1607,7 +1761,8 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   }
 
   void _nextQuestion() async {
-    if (currentIndex < widget.questions.length - 1) {
+    final questions = widget.roomData['questions'] ?? [];
+    if (currentIndex < questions.length - 1) {
       setState(() {
         currentIndex++;
         selectedOptionIndex = null;
@@ -1623,7 +1778,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('انتهى التحدي!', textAlign: TextAlign.right),
           content: Text(
-            'أحسنت! نتيجتك في التحدي: $myScore من ${widget.questions.length}',
+            'أحسنت! نتيجتك في التحدي: $myScore من ${questions.length}',
             textAlign: TextAlign.right,
           ),
           actions: [
@@ -1642,12 +1797,19 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final questionData = widget.questions[currentIndex];
+    final questions = widget.roomData['questions'] ?? [];
+    if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
+
+    final questionData = questions[currentIndex];
     final String questionText = questionData['question'] ?? '';
     final List options = questionData['options'] ?? [];
     final int correctIndex = questionData['correctIndex'] ?? 0;
+    int total = questions.length;
 
-    int total = widget.questions.length;
+    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
 
     return Scaffold(
       appBar: AppBar(
@@ -1670,7 +1832,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // بطاقة عرض الطرفين وتقدمهم داخل التحدي
+            // بطاقة عرض الطرفين بأساميهم وصورهم الحقيقية وتقدمهم داخل التحدي
             Card(
               elevation: 2,
               child: Padding(
@@ -1680,13 +1842,18 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                   children: [
                     Row(
                       children: [
-                        const CircleAvatar(radius: 18, backgroundColor: Colors.amber, child: Icon(Icons.person, size: 20, color: Colors.white)),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.amber,
+                          backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
+                          child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
+                        ),
                         const SizedBox(width: 8),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('أنت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            Text('النقاط: $myScore', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
                       ],
@@ -1697,12 +1864,17 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            const Text('الخصم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            Text('التقدم: ${currentIndex + 1}/$total', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('التقدم: ${currentIndex + 1}/$total', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
                         const SizedBox(width: 8),
-                        const CircleAvatar(radius: 18, backgroundColor: Colors.blueGrey, child: Icon(Icons.person, size: 20, color: Colors.white)),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.blueGrey,
+                          backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
+                          child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
+                        ),
                       ],
                     ),
                   ],
