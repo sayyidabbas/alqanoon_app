@@ -1,4 +1,4 @@
-Import 'dart:async';
+import 'dart:async' as async_lib;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -930,11 +930,9 @@ class StudentQuestionSetsScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.pop(ctx);
                 
-                // معالجة العشوائية (بنك الأسئلة العشوائي)
                 List randomizedQuestions = List.from(originalQuestions);
                 randomizedQuestions.shuffle();
 
-                // خلط الخيارات أيضاً لكل سؤال مع تحديث correctIndex
                 for (var q in randomizedQuestions) {
                   List options = List.from(q['options']);
                   String correctOptionText = options[q['correctIndex'] ?? 0];
@@ -990,7 +988,7 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
   bool answered = false;
   int correctAnswersCount = 0;
   
-  Timer? _timer;
+  async_lib.Timer? _timer;
   int _remainingSeconds = 0;
 
   @override
@@ -1003,7 +1001,7 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
     if (widget.timerSeconds <= 0) return;
     _remainingSeconds = widget.timerSeconds;
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds > 0) {
         setState(() {
           _remainingSeconds--;
@@ -1011,7 +1009,7 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
       } else {
         timer.cancel();
         if (!answered) {
-          _answerQuestion(-1); // انتهاء الوقت بدون إجابة
+          _answerQuestion(-1);
         }
       }
     });
@@ -1201,7 +1199,7 @@ class QuizBattleLobbyScreen extends StatefulWidget {
 class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
   bool _isSearching = false;
   String? _currentRoomId;
-  StreamSubscription<DocumentSnapshot>? _roomSubscription;
+  async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
 
   final String myUid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
 
@@ -1215,20 +1213,16 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
         .doc(widget.subjectId)
         .collection('battle_rooms');
 
-    // 1. البحث عن غرفة تنتظر لاعباً
     final waitingRooms = await battlesRef.where('status', isEqualTo: 'waiting').get();
 
     String roomId;
     if (waitingRooms.docs.isNotEmpty) {
-      // الانضمام لغرفة موجودة
       roomId = waitingRooms.docs.first.id;
       await battlesRef.doc(roomId).update({
         'player2': myUid,
         'status': 'started',
       });
     } else {
-      // إنشاء غرفة جديدة
-      // سحب أسئلة عشوائية (5 أسئلة أو أكثر من مجموعات الأسئلة للمادة)
       final setsSnapshot = await battlesRef.parent!.collection('question_sets').get();
       List<dynamic> allPoolQuestions = [];
       for (var doc in setsSnapshot.docs) {
@@ -1247,11 +1241,9 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       }
 
       allPoolQuestions.shuffle();
-      // اختيار عشوائي بحد أدنى 5 أسئلة أو كل الأسئلة لو كانت أكثر
       int takeCount = min(10, allPoolQuestions.length);
       List selectedQuestions = allPoolQuestions.sublist(0, takeCount);
 
-      // خلط الخيارات
       for (var q in selectedQuestions) {
         List options = List.from(q['options']);
         String correctOptionText = options[q['correctIndex'] ?? 0];
@@ -1275,7 +1267,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
       _currentRoomId = roomId;
     });
 
-    // 2. الاستماع لتغيرات حالة الغرفة لبدء المعركة
     _roomSubscription = battlesRef.doc(roomId).snapshots().listen((snapshot) {
       if (!snapshot.exists) return;
       final data = snapshot.data() as Map<String, dynamic>;
@@ -1303,7 +1294,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
   @override
   void dispose() {
     _roomSubscription?.cancel();
-    // إذا خرج الطالب قبل اكتمال الغرفة، نحذف الغرفة المنتظرة
     if (_currentRoomId != null && _isSearching) {
       FirebaseFirestore.instance
           .collection('question_bank')
@@ -1339,7 +1329,6 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 40),
-                    // تم إصلاح الخطأ برفع onPressed إلى الـ ElevatedButton وإزالة الـ SizedBox الخاطئ
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                       onPressed: () => Navigator.pop(context),
@@ -1412,8 +1401,8 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   bool answered = false;
   int myScore = 0;
   
-  Timer? _battleTimer;
-  int _questionSeconds = 15; // 15 ثانية لكل سؤال في التحدي
+  async_lib.Timer? _battleTimer;
+  int _questionSeconds = 15;
 
   @override
   void initState() {
@@ -1424,7 +1413,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   void _startTimer() {
     _questionSeconds = 15;
     _battleTimer?.cancel();
-    _battleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _battleTimer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_questionSeconds > 0) {
         setState(() => _questionSeconds--);
       } else {
@@ -1466,7 +1455,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     } else {
       _battleTimer?.cancel();
       
-      // إظهار النتيجة النهائية
       showDialog(
         context: context,
         barrierDismissible: false,
