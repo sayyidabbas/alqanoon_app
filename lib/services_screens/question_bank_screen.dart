@@ -142,6 +142,40 @@ class _QuestionBankScreenState extends State<QuestionBankScreen> {
 class AdminQbStageSelectionScreen extends StatelessWidget {
   const AdminQbStageSelectionScreen({super.key});
 
+  void _changeAdminPinDialog(BuildContext context) {
+    final pinController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تغيير كلمة سر البوابة الآمنة', textAlign: TextAlign.right),
+        content: TextField(
+          controller: pinController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(hintText: 'أدخل كلمة السر الجديدة'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (pinController.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance.collection('settings').doc('admin').set({
+                  'pin': pinController.text.trim(),
+                }, SetOptions(merge: true));
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تغيير كلمة السر بنجاح')),
+                  );
+                }
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final stages = ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة'];
@@ -150,6 +184,13 @@ class AdminQbStageSelectionScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('إدارة بنك الأسئلة (الأدمن)'),
         backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.lock_reset, color: Colors.white),
+            tooltip: 'تغيير كلمة السر',
+            onPressed: () => _changeAdminPinDialog(context),
+          ),
+        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -269,7 +310,7 @@ class _AdminQbSubjectsScreenState extends State<AdminQbSubjectsScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => AdminManageQuestionsScreen(
+                        builder: (_) => AdminManageQuestionSetsScreen(
                           stageIndex: widget.stageIndex,
                           subjectId: docId,
                           subjectName: data['name'] ?? '',
@@ -288,15 +329,15 @@ class _AdminQbSubjectsScreenState extends State<AdminQbSubjectsScreen> {
 }
 
 // ==========================================
-// 2. إدارة وإضافة الأسئلة (Bulk Import)
+// 2. إدارة مجموعات الأسئلة (Bulk Import & List)
 // ==========================================
 
-class AdminManageQuestionsScreen extends StatefulWidget {
+class AdminManageQuestionSetsScreen extends StatelessWidget {
   final int stageIndex;
   final String subjectId;
   final String subjectName;
 
-  const AdminManageQuestionsScreen({
+  const AdminManageQuestionSetsScreen({
     super.key,
     required this.stageIndex,
     required this.subjectId,
@@ -304,14 +345,120 @@ class AdminManageQuestionsScreen extends StatefulWidget {
   });
 
   @override
-  State<AdminManageQuestionsScreen> createState() => _AdminManageQuestionsScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('اختبارات $subjectName'),
+        backgroundColor: AppColors.primary,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminAddQuestionsScreen(
+                stageIndex: stageIndex,
+                subjectId: subjectId,
+                subjectName: subjectName,
+              ),
+            ),
+          );
+        },
+        label: const Text('إضافة دفعة أسئلة جديدة'),
+        icon: const Icon(Icons.add),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('question_bank')
+            .doc('stage_$stageIndex')
+            .collection('subjects')
+            .doc(subjectId)
+            .collection('question_sets')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) return const Center(child: Text('لا توجد اختبارات مضافة. اضغط على الزر أدناه لإضافة أسئلة.'));
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final List questions = data['questions'] ?? [];
+              final setId = docs[index].id;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ListTile(
+                  title: Text(data['title'] ?? 'مجموعة أسئلة', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('عدد الأسئلة: ${questions.length}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_note, color: Colors.blue),
+                        tooltip: 'تعديل وحذف الأسئلة',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AdminEditQuestionsListScreen(
+                                stageIndex: stageIndex,
+                                subjectId: subjectId,
+                                setId: setId,
+                                questions: List.from(questions),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance
+                              .collection('question_bank')
+                              .doc('stage_$stageIndex')
+                              .collection('subjects')
+                              .doc(subjectId)
+                              .collection('question_sets')
+                              .doc(setId)
+                              .delete();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen> {
+class AdminAddQuestionsScreen extends StatefulWidget {
+  final int stageIndex;
+  final String subjectId;
+  final String subjectName;
+
+  const AdminAddQuestionsScreen({
+    super.key,
+    required this.stageIndex,
+    required this.subjectId,
+    required this.subjectName,
+  });
+
+  @override
+  State<AdminAddQuestionsScreen> createState() => _AdminAddQuestionsScreenState();
+}
+
+class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
   final TextEditingController _bulkController = TextEditingController();
   bool _isSaving = false;
 
-  // دالة ذكية لتحليل النص المنسوخ واستخراج الأسئلة
   void _parseAndSaveQuestions() async {
     final text = _bulkController.text.trim();
     if (text.isEmpty) {
@@ -324,10 +471,7 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
     setState(() => _isSaving = true);
 
     try {
-      // نفترض أن كل سؤال يبدأ بكلمة س أو رقم يتبعه س، أو نقسّم حسب الأسطر الفارغة
-      // نمط مقترح: تقسيم النص بناءً على الأسئلة أو الأسطر
-      final blocks = text.split(RegExp(r'\n\s*\n')); // تقسيم حسب الفراغات بين الأسئلة
-      
+      final blocks = text.split(RegExp(r'\n\s*\n'));
       List<Map<String, dynamic>> questionsList = [];
 
       for (var block in blocks) {
@@ -341,7 +485,7 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
         for (int i = 1; i < lines.length; i++) {
           String optLine = lines[i].trim();
           if (optLine.contains('✅')) {
-            correctIndex = options.length; // تحديد مكان الإجابة الصحيحة
+            correctIndex = options.length;
             optLine = optLine.replaceAll('✅', '').trim();
           }
           options.add(optLine);
@@ -356,12 +500,6 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
         }
       }
 
-      if (questionsList.isEmpty) {
-        // محاولة تحليل بديلة لو كان النص على شكل سطر سطر
-        // سنبسط الأمر بحفظ الحزمة كدفعة واحدة (Batch) في فايرستور
-      }
-
-      // حفظ حزمة الأسئلة الجديدة في مجموعة فرعية (question_sets)
       await FirebaseFirestore.instance
           .collection('question_bank')
           .doc('stage_${widget.stageIndex}')
@@ -374,19 +512,18 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      _bulkController.clear();
       setState(() => _isSaving = false);
-
       if (mounted) {
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إضافة الأسئلة بنجاح وتوليد الاختبار!')),
+          const SnackBar(content: Text('تم إضافة الأسئلة بنجاح!')),
         );
       }
     } catch (e) {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('حدث خطأ في تحليل الأسئلة: $e')),
+          SnackBar(content: Text('حدث خطأ: $e')),
         );
       }
     }
@@ -396,7 +533,7 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('إدارة أسئلة ${widget.subjectName}'),
+        title: Text('إضافة أسئلة لـ ${widget.subjectName}'),
         backgroundColor: AppColors.primary,
       ),
       body: Padding(
@@ -404,7 +541,7 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
         child: Column(
           children: [
             const Text(
-              'الصق الأسئلة هنا دفعة واحدة بالنمط:\nالسؤال\nأ) خيار\nب) خيار ✅\nج) خيار',
+              'الصق الأسئلة هنا بالنمط:\nالسؤال\nأ) خيار\nب) خيار ✅\nج) خيار',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
@@ -428,11 +565,181 @@ class _AdminManageQuestionsScreenState extends State<AdminManageQuestionsScreen>
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 onPressed: _isSaving ? null : _parseAndSaveQuestions,
                 icon: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Icon(Icons.cloud_upload),
-                label: Text(_isSaving ? 'جاري المعالجة والحفظ...' : 'تحليل وحفظ الأسئلة كاختبار جديد'),
+                label: Text(_isSaving ? 'جاري الحفظ...' : 'حفظ الأسئلة'),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// شاشة تعديل وحذف الأسئلة الفردية
+// ==========================================
+
+class AdminEditQuestionsListScreen extends StatefulWidget {
+  final int stageIndex;
+  final String subjectId;
+  final String setId;
+  final List questions;
+
+  const AdminEditQuestionsListScreen({
+    super.key,
+    required this.stageIndex,
+    required this.subjectId,
+    required this.setId,
+    required this.questions,
+  });
+
+  @override
+  State<AdminEditQuestionsListScreen> createState() => _AdminEditQuestionsListScreenState();
+}
+
+class _AdminEditQuestionsListScreenState extends State<AdminEditQuestionsListScreen> {
+  late List questionsList;
+
+  @override
+  void initState() {
+    super.initState();
+    questionsList = List.from(widget.questions);
+  }
+
+  void _saveChanges() async {
+    await FirebaseFirestore.instance
+        .collection('question_bank')
+        .doc('stage_${widget.stageIndex}')
+        .collection('subjects')
+        .doc(widget.subjectId)
+        .collection('question_sets')
+        .doc(widget.setId)
+        .update({'questions': questionsList});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ التعديلات بنجاح')),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  void _editQuestionDialog(int index) {
+    final qData = questionsList[index];
+    final qController = TextEditingController(text: qData['question']);
+    List<TextEditingController> optionControllers = (qData['options'] as List)
+        .map((opt) => TextEditingController(text: opt))
+        .toList();
+    int correctIdx = qData['correctIndex'] ?? 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('تعديل السؤال ${index + 1}', textAlign: TextAlign.right),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: qController,
+                  decoration: const InputDecoration(labelText: 'نص السؤال'),
+                  textAlign: TextAlign.right,
+                ),
+                const SizedBox(height: 10),
+                ...List.generate(optionControllers.length, (optIdx) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        Radio<int>(
+                          value: optIdx,
+                          groupValue: correctIdx,
+                          onChanged: (val) {
+                            setDialogState(() => correctIdx = val!);
+                          },
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: optionControllers[optIdx],
+                            decoration: InputDecoration(labelText: 'الخيار ${optIdx + 1}'),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  questionsList[index] = {
+                    'question': qController.text.trim(),
+                    'options': optionControllers.map((c) => c.text.trim()).toList(),
+                    'correctIndex': correctIdx,
+                  };
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('تحديث'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _deleteSingleQuestion(int index) {
+    setState(() {
+      questionsList.removeAt(index);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('تعديل أسئلة الاختبار'),
+        backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            tooltip: 'حفظ التغييرات',
+            onPressed: _saveChanges,
+          ),
+        ],
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: questionsList.length,
+        itemBuilder: (context, index) {
+          final q = questionsList[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              title: Text('${index + 1}. ${q['question']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('عدد الخيارات: ${(q['options'] as List).length}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    onPressed: () => _editQuestionDialog(index),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deleteSingleQuestion(index),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -611,7 +918,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
         answered = false;
       });
     } else {
-      // نهاية الاختبار
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -642,7 +948,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
     final List options = questionData['options'] ?? [];
     final int correctIndex = questionData['correctIndex'] ?? 0;
 
-    // حساب العدادات
     int total = widget.questions.length;
     int remaining = total - (currentIndex + 1);
     int completed = currentIndex;
@@ -657,7 +962,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // شريط العدادات العلوي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -667,7 +971,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            // نص السؤال
             Card(
               elevation: 3,
               child: Padding(
@@ -680,7 +983,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            // قائمة الخيارات
             Expanded(
               child: ListView.builder(
                 itemCount: options.length,
@@ -688,9 +990,9 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
                   Color btnColor = Colors.white;
                   if (answered) {
                     if (index == correctIndex) {
-                      btnColor = Colors.green.shade200; // الإجابة الصحيحة باللون الأخضر
+                      btnColor = Colors.green.shade200;
                     } else if (index == selectedOptionIndex) {
-                      btnColor = Colors.red.shade200; // اختيار الطالب الخاطئ باللون الأحمر
+                      btnColor = Colors.red.shade200;
                     }
                   }
 
@@ -714,7 +1016,6 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
                 },
               ),
             ),
-            // زر الانتقال للسؤال التالي
             if (answered)
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
@@ -734,3 +1035,4 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
     );
   }
 }
+ 
