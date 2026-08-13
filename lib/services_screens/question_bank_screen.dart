@@ -1979,6 +1979,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   int? selectedOptionIndex;
   bool answered = false;
   int myScore = 0;
+  int oppScore = 0; // متغير مستقل لتحديث نقاط الخصم
   
   async_lib.Timer? _battleTimer;
   async_lib.Timer? _stopwatchTimer;
@@ -1989,22 +1990,70 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   bool _isWaitingForOpponent = false;
   bool _isNavigating = false;
   
-  // الاستماع الثابت لقاعدة البيانات لتجنب إعادة بناء الـ Stream
-  late Stream<DocumentSnapshot> _roomStream;
+  async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
 
   @override
   void initState() {
     super.initState();
-    _roomStream = FirebaseFirestore.instance.doc(widget.stageDocPath).snapshots();
     _startStopwatch();
     _startTimer();
+    _listenToRoomStatus();
+  }
+
+  void _listenToRoomStatus() {
+    if (widget.roomId.isEmpty) return;
+    
+    _roomSubscription = FirebaseFirestore.instance
+        .doc(widget.stageDocPath)
+        .snapshots()
+        .listen((snapshot) {
+      if (!snapshot.exists) return;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      
+      if (mounted) {
+        setState(() {
+          // تحديث نقاط الخصم بشكل حي ومنفصل
+          oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
+          
+          final bool p1Finished = data['player1Finished'] == true;
+          final bool p2Finished = data['player2Finished'] == true;
+
+          // إذا انتهى اللاعبان معاً نقوم بنقلهم فوراً لشاشة النتائج
+          if (p1Finished && p2Finished && !_isNavigating) {
+            _isNavigating = true;
+            _roomSubscription?.cancel();
+            _battleTimer?.cancel();
+            _stopwatchTimer?.cancel();
+            
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BattleResultsScreen(
+                  roomId: widget.roomId,
+                  isPlayer1: widget.isPlayer1,
+                  roomData: data, // تمرير البيانات النهائية كاملة بدون انتظار
+                  myFinalScore: myScore,
+                  myTotalTime: _totalElapsedSeconds,
+                  myAnswersLog: _myAnswersLog,
+                  subjectName: widget.subjectName,
+                  stageDocPath: widget.stageDocPath,
+                ),
+              ),
+            );
+          }
+        });
+      }
+    });
   }
 
   void _startStopwatch() {
     _stopwatchTimer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _totalElapsedSeconds++;
-      });
+      if(mounted) {
+        setState(() {
+          _totalElapsedSeconds++;
+        });
+      }
     });
   }
 
@@ -2012,12 +2061,14 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     _questionSeconds = 15;
     _battleTimer?.cancel();
     _battleTimer = async_lib.Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_questionSeconds > 0) {
-        setState(() => _questionSeconds--);
-      } else {
-        timer.cancel();
-        if (!answered) {
-          _answerQuestion(-1);
+      if (mounted) {
+        if (_questionSeconds > 0) {
+          setState(() => _questionSeconds--);
+        } else {
+          timer.cancel();
+          if (!answered) {
+            _answerQuestion(-1);
+          }
         }
       }
     });
@@ -2027,6 +2078,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   void dispose() {
     _battleTimer?.cancel();
     _stopwatchTimer?.cancel();
+    _roomSubscription?.cancel();
     super.dispose();
   }
 
@@ -2102,10 +2154,9 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     }
   }
 
-  // شاشة الانتظار كما في الصورة المطلوبة (تعرض لحين الانتهاء)
   Widget _buildWaitingScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF171926), // لون خلفية كحلي/أسود
+      backgroundColor: const Color(0xFF171926),
       appBar: AppBar(
         title: Text('تحدي: ${widget.subjectName}'),
         backgroundColor: Colors.deepOrange,
@@ -2117,7 +2168,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // الدائرة الصفراء بداخلها النجمة
               Container(
                 width: 120,
                 height: 120,
@@ -2140,7 +2190,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 50),
-              // لودر متحرك 
               const CircularProgressIndicator(color: Colors.deepOrange, strokeWidth: 4),
             ],
           ),
@@ -2151,223 +2200,172 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // جعل الـ StreamBuilder يغطي كامل الشاشة ليستمع للتحديثات لحظياً وبثبات
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _roomStream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+    if (_isWaitingForOpponent) {
+      return _buildWaitingScreen();
+    }
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        
-        final bool p1Finished = data['player1Finished'] == true;
-        final bool p2Finished = data['player2Finished'] == true;
+    final questions = widget.roomData['questions'] ?? [];
+    if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
 
-        // --- الانتقال الآمن واللحظي لشاشة النتائج ---
-        if (p1Finished && p2Finished && !_isNavigating) {
-          _isNavigating = true;
-          // إيقاف العدادات قبل الانتقال لتجنب الأخطاء
-          _battleTimer?.cancel();
-          _stopwatchTimer?.cancel();
-          
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BattleResultsScreen(
-                    roomId: widget.roomId,
-                    isPlayer1: widget.isPlayer1,
-                    roomData: widget.roomData,
-                    myFinalScore: myScore,
-                    myTotalTime: _totalElapsedSeconds,
-                    myAnswersLog: _myAnswersLog,
-                    subjectName: widget.subjectName,
-                    stageDocPath: widget.stageDocPath,
-                  ),
-                ),
-              );
-            }
-          });
-          // إرجاع شاشة الانتظار لثانية قبل إتمام الانتقال
-          return _buildWaitingScreen(); 
-        }
+    final questionData = questions[currentIndex];
+    final String questionText = questionData['question'] ?? '';
+    final List options = questionData['options'] ?? [];
+    final int correctIndex = questionData['correctIndex'] ?? 0;
+    int total = questions.length;
 
-        // --- قراءة نقاط الخصم مباشرة من قاعدة البيانات ---
-        int oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
+    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
 
-        // إذا كان هذا اللاعب قد أنهى التحدي وينتظر
-        if (_isWaitingForOpponent) {
-          return _buildWaitingScreen();
-        }
-
-        // --- بناء شاشة التحدي النشطة ---
-        final questions = widget.roomData['questions'] ?? [];
-        if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
-
-        final questionData = questions[currentIndex];
-        final String questionText = questionData['question'] ?? '';
-        final List options = questionData['options'] ?? [];
-        final int correctIndex = questionData['correctIndex'] ?? 0;
-        int total = questions.length;
-
-        final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
-        final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
-        final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
-        final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
-
-        return Scaffold(
-          appBar: AppBar(
-            title: Text('تحدي: ${widget.subjectName}'),
-            backgroundColor: Colors.deepOrange,
-            actions: [
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    '$_questionSeconds ث',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('تحدي: ${widget.subjectName}'),
+        backgroundColor: Colors.deepOrange,
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                '$_questionSeconds ث',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
               ),
-            ],
+            ),
           ),
-          body: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.amber,
-                              backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
-                              child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              ],
-                            ),
-                          ],
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.amber,
+                          backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
+                          child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
                         ),
-                        const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
-                        Row(
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                // نقاط الخصم تتحدث هنا مباشرة
-                                Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.blueGrey,
-                              backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
-                              child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
-                            ),
+                            Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Chip(label: Text('نقاطك: $myScore'), backgroundColor: Colors.amber.shade100),
-                    Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
+                    const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                    Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.blueGrey,
+                          backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
+                          child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 15),
-                Card(
-                  elevation: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      questionText,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      Color btnColor = Colors.white;
-                      if (answered) {
-                        if (index == correctIndex) {
-                          btnColor = Colors.green.shade200;
-                        } else if (index == selectedOptionIndex) {
-                          btnColor = Colors.red.shade200;
-                        }
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: btnColor,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            alignment: Alignment.centerRight,
-                          ),
-                          onPressed: () => _answerQuestion(index),
-                          child: Text(
-                            '${_getOptionPrefix(index)} ${options[index]}',
-                            style: const TextStyle(fontSize: 16),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                if (answered)
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepOrange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: _nextQuestion,
-                    child: Text(
-                      currentIndex == total - 1 ? 'إنهاء وانتظار النتيجة' : 'السؤال التالي',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Chip(label: Text('نقاطك: $myScore'), backgroundColor: Colors.amber.shade100),
+                Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
               ],
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 15),
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  questionText,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: ListView.builder(
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  Color btnColor = Colors.white;
+                  if (answered) {
+                    if (index == correctIndex) {
+                      btnColor = Colors.green.shade200;
+                    } else if (index == selectedOptionIndex) {
+                      btnColor = Colors.red.shade200;
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: btnColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        alignment: Alignment.centerRight,
+                      ),
+                      onPressed: () => _answerQuestion(index),
+                      child: Text(
+                        '${_getOptionPrefix(index)} ${options[index]}',
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (answered)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _nextQuestion,
+                child: Text(
+                  currentIndex == total - 1 ? 'إنهاء وانتظار النتيجة' : 'السؤال التالي',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 // ==========================================
-// 8. شاشة النتائج النهائية التفصيلية (Battle Results Screen)
+// 8. شاشة النتائج النهائية التفصيلية (تم تحويلها لـ Stateless لإزالة التحميل كلياً)
 // ==========================================
 
-class BattleResultsScreen extends StatefulWidget {
+class BattleResultsScreen extends StatelessWidget {
   final String roomId;
   final bool isPlayer1;
   final Map<String, dynamic> roomData;
@@ -2390,271 +2388,220 @@ class BattleResultsScreen extends StatefulWidget {
   });
 
   @override
-  State<BattleResultsScreen> createState() => _BattleResultsScreenState();
-}
-
-class _BattleResultsScreenState extends State<BattleResultsScreen> {
-  bool _isLoadingOpponent = true;
-  Map<String, dynamic>? opponentData;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchOpponentResults();
-  }
-
-  void _fetchOpponentResults() async {
-    if (widget.roomId.isEmpty) {
-      setState(() => _isLoadingOpponent = false);
-      return;
-    }
-
-    try {
-      final docSnapshot = await FirebaseFirestore.instance
-          .doc(widget.stageDocPath)
-          .get();
-
-      if (docSnapshot.exists) {
-        final data = docSnapshot.data()!;
-        final oppScoreKey = widget.isPlayer1 ? 'player2Score' : 'player1Score';
-        final oppTimeKey = widget.isPlayer1 ? 'player2Time' : 'player1Time';
-        final oppAnswersKey = widget.isPlayer1 ? 'player2Answers' : 'player1Answers';
-        final oppNameKey = widget.isPlayer1 ? 'player2Name' : 'player1Name';
-        final oppPhotoKey = widget.isPlayer1 ? 'player2Photo' : 'player1Photo';
-
-        setState(() {
-          opponentData = {
-            'score': data[oppScoreKey] ?? 0,
-            'time': data[oppTimeKey] ?? 0,
-            'answers': data[oppAnswersKey] ?? [],
-            'name': data[oppNameKey] ?? 'الخصم',
-            'photo': data[oppPhotoKey] ?? '',
-          };
-          _isLoadingOpponent = false;
-        });
-      } else {
-        setState(() => _isLoadingOpponent = false);
-      }
-    } catch (_) {
-      setState(() => _isLoadingOpponent = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final totalQuestions = (widget.roomData['questions'] as List?)?.length ?? 1;
-    final double myAccuracy = (widget.myFinalScore / totalQuestions) * 100;
+    final totalQuestions = (roomData['questions'] as List?)?.length ?? 1;
+    final double myAccuracy = (myFinalScore / totalQuestions) * 100;
     
-    int oppScore = opponentData?['score'] ?? 0;
-    int oppTime = opponentData?['time'] ?? 0;
+    final oppScoreKey = isPlayer1 ? 'player2Score' : 'player1Score';
+    final oppTimeKey = isPlayer1 ? 'player2Time' : 'player1Time';
+    final oppAnswersKey = isPlayer1 ? 'player2Answers' : 'player1Answers';
+    final oppNameKey = isPlayer1 ? 'player2Name' : 'player1Name';
+
+    int oppScore = roomData[oppScoreKey] ?? 0;
+    int oppTime = roomData[oppTimeKey] ?? 0;
     double oppAccuracy = (oppScore / totalQuestions) * 100;
-    String oppName = opponentData?['name'] ?? 'الخصم';
+    String oppName = roomData[oppNameKey] ?? 'الخصم';
+    List oppAnswersList = roomData[oppAnswersKey] ?? [];
 
     String winnerText = '';
     Color resultColor = Colors.blue;
     IconData resultIcon = Icons.sports_esports;
 
-    if (_isLoadingOpponent) {
-      winnerText = 'جاري جلب نتائج الخصم...';
+    if (myFinalScore > oppScore) {
+      winnerText = 'تهانينا، لقد فزت بالمباراة! 🎉';
+      resultColor = Colors.green;
+      resultIcon = Icons.emoji_events;
+    } else if (myFinalScore < oppScore) {
+      winnerText = 'هاردلك، لقد فاز الخصم $oppName 😢';
+      resultColor = Colors.red;
+      resultIcon = Icons.sentiment_dissatisfied;
     } else {
-      if (widget.myFinalScore > oppScore) {
-        winnerText = 'تهانينا، لقد فزت بالمباراة! 🎉';
+      if (myTotalTime < oppTime) {
+        winnerText = 'تعادل في النقاط، لكنك فزت لسرعة إنجازك! ⚡';
         resultColor = Colors.green;
-        resultIcon = Icons.emoji_events;
-      } else if (widget.myFinalScore < oppScore) {
-        winnerText = 'هاردلك، لقد فاز الخصم $oppName 😢';
-        resultColor = Colors.red;
-        resultIcon = Icons.sentiment_dissatisfied;
+        resultIcon = Icons.flash_on;
+      } else if (myTotalTime > oppTime) {
+        winnerText = 'تعادل في النقاط، وفاز الخصم لسرعته!';
+        resultColor = Colors.orange;
+        resultIcon = Icons.timer;
       } else {
-        if (widget.myTotalTime < oppTime) {
-          winnerText = 'تعادل في النقاط، لكنك فزت لسرعة إنجازك! ⚡';
-          resultColor = Colors.green;
-          resultIcon = Icons.flash_on;
-        } else if (widget.myTotalTime > oppTime) {
-          winnerText = 'تعادل في النقاط، وفاز الخصم لسرعته!';
-          resultColor = Colors.orange;
-          resultIcon = Icons.timer;
-        } else {
-          winnerText = 'تعادل تام بين اللاعبين! 🤝';
-          resultColor = Colors.blue;
-          resultIcon = Icons.handshake;
-        }
+        winnerText = 'تعادل تام بين اللاعبين! 🤝';
+        resultColor = Colors.blue;
+        resultIcon = Icons.handshake;
       }
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('نتائج التحدي - ${widget.subjectName}'),
+        title: Text('نتائج التحدي - $subjectName'),
         backgroundColor: Colors.deepOrange,
         automaticallyImplyLeading: false,
       ),
-      body: _isLoadingOpponent
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    color: resultColor,
-                    elevation: 6,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              color: resultColor,
+              elevation: 6,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    Icon(resultIcon, size: 60, color: Colors.white),
+                    const SizedBox(height: 10),
+                    Text(
+                      winnerText,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: Card(
+                    elevation: 2,
                     child: Padding(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: Column(
                         children: [
-                          Icon(resultIcon, size: 60, color: Colors.white),
-                          const SizedBox(height: 10),
-                          Text(
-                            winnerText,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                            textAlign: TextAlign.center,
-                          ),
+                          const Text('أنت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const Divider(),
+                          Text('النقاط: $myFinalScore/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 5),
+                          Text('الدقة: ${myAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
+                          const SizedBox(height: 5),
+                          Text('الوقت: $myTotalTime ثانية', style: const TextStyle(color: Colors.grey)),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Card(
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              children: [
-                                const Text('أنت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                const Divider(),
-                                Text('النقاط: ${widget.myFinalScore}/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 5),
-                                Text('الدقة: ${myAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
-                                const SizedBox(height: 5),
-                                Text('الوقت: ${widget.myTotalTime} ثانية', style: const TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          ),
-                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        children: [
+                          Text(oppName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const Divider(),
+                          Text('النقاط: $oppScore/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 5),
+                          Text('الدقة: ${oppAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
+                          const SizedBox(height: 5),
+                          Text('الوقت: $oppTime ثانية', style: const TextStyle(color: Colors.grey)),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Card(
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              children: [
-                                Text(oppName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                const Divider(),
-                                Text('النقاط: $oppScore/$totalQuestions', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 5),
-                                Text('الدقة: ${oppAccuracy.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.green)),
-                                const SizedBox(height: 5),
-                                Text('الوقت: $oppTime ثانية', style: const TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-                  const Text(
-                    'مقارنة الإجابات بالسجل:',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.right,
-                  ),
-                  const SizedBox(height: 10),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: widget.myAnswersLog.length,
-                    itemBuilder: (context, index) {
-                      final myAns = widget.myAnswersLog[index];
-                      final oppAnswersList = opponentData?['answers'] as List? ?? [];
-                      Map<String, dynamic>? oppAns;
-                      for (var item in oppAnswersList) {
-                        if (item['questionIndex'] == index) {
-                          oppAns = item;
-                          break;
-                        }
-                      }
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'السؤال ${index + 1}: ${myAns['question']}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                textAlign: TextAlign.right,
-                              ),
-                              const Divider(),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'إجابتك: ${myAns['selectedOption']}',
-                                    style: TextStyle(
-                                      color: myAns['isCorrect'] ? Colors.green : Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Icon(
-                                    myAns['isCorrect'] ? Icons.check_circle : Icons.cancel,
-                                    color: myAns['isCorrect'] ? Colors.green : Colors.red,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
-                                    style: TextStyle(
-                                      color: (oppAns != null && oppAns['isCorrect'] == true) ? Colors.green : Colors.red,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (oppAns != null)
-                                    Icon(
-                                      oppAns['isCorrect'] == true ? Icons.check_circle : Icons.cancel,
-                                      color: oppAns['isCorrect'] == true ? Colors.green : Colors.red,
-                                      size: 18,
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'الإجابة الصحيحة: ${myAns['correctOption']}',
-                                style: const TextStyle(color: Colors.blue, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepOrange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text('العودة للقائمة الرئيسية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+            const SizedBox(height: 25),
+            const Text(
+              'مقارنة الإجابات بالسجل:',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.right,
+            ),
+            const SizedBox(height: 10),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: myAnswersLog.length,
+              itemBuilder: (context, index) {
+                final myAns = myAnswersLog[index];
+                Map<String, dynamic>? oppAns;
+                for (var item in oppAnswersList) {
+                  if (item['questionIndex'] == index) {
+                    oppAns = item;
+                    break;
+                  }
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'السؤال ${index + 1}: ${myAns['question']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          textAlign: TextAlign.right,
+                        ),
+                        const Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'إجابتك: ${myAns['selectedOption']}',
+                              style: TextStyle(
+                                color: myAns['isCorrect'] ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Icon(
+                              myAns['isCorrect'] ? Icons.check_circle : Icons.cancel,
+                              color: myAns['isCorrect'] ? Colors.green : Colors.red,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'إجابة الخصم: ${oppAns != null ? oppAns['selectedOption'] : 'لم يتم تسجيلها'}',
+                              style: TextStyle(
+                                color: (oppAns != null && oppAns['isCorrect'] == true) ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (oppAns != null)
+                              Icon(
+                                oppAns['isCorrect'] == true ? Icons.check_circle : Icons.cancel,
+                                color: oppAns['isCorrect'] == true ? Colors.green : Colors.red,
+                                size: 18,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'الإجابة الصحيحة: ${myAns['correctOption']}',
+                          style: const TextStyle(color: Colors.blue, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('العودة للقائمة الرئيسية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
+ 
