@@ -511,7 +511,6 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
       return;
     }
 
-    // جلب مجموعات الأسئلة الحالية لنفترض إمكانية الدمج معها
     final setsSnapshot = await FirebaseFirestore.instance
         .collection('question_bank')
         .doc('stage_${widget.stageIndex}')
@@ -524,10 +523,8 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
     if (!mounted) return;
 
     if (setsSnapshot.docs.isEmpty) {
-      // إذا لم تكن هناك مجموعات مسبقاً، قم بإنشاء مجموعة جديدة تلقائياً
       _saveAsNewSet(newQuestions);
     } else {
-      // عرض نافذة تخيير المستخدم (مستقل أم دمج مع مجموعة سابقة)
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -625,7 +622,6 @@ class _AdminAddQuestionsScreenState extends State<AdminAddQuestionsScreen> {
   void _executeMerge(String targetSetId, List existingQuestions, List<Map<String, dynamic>> newQuestions) async {
     setState(() => _isSaving = true);
     try {
-      // إضافتها فوق الأسئلة القديمة (في بداية القائمة)
       List updatedQuestions = [...newQuestions, ...existingQuestions];
 
       await FirebaseFirestore.instance
@@ -906,29 +902,29 @@ class StudentQbSubjectsScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: ListTile(
-                  title: Text(data['name'] ?? ''),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.sports_esports, color: Colors.deepOrange),
-                        tooltip: 'تحدي ثنائي 1v1',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => QuizBattleLobbyScreen(
-                                stageIndex: stageIndex,
-                                subjectId: docs[index].id,
-                                subjectName: data['name'] ?? '',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const Icon(Icons.quiz, color: Colors.blue),
-                    ],
+                  title: Text(data['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  trailing: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    icon: const Icon(Icons.sports_esports, size: 20),
+                    label: const Text('تحدي 1v1'),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QuizBattleLobbyScreen(
+                            stageIndex: stageIndex,
+                            subjectId: docs[index].id,
+                            subjectName: data['name'] ?? '',
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   onTap: () {
                     Navigator.push(
@@ -1018,7 +1014,7 @@ class StudentQuestionSetsScreen extends StatelessWidget {
   }
 
   void _showQuizOptionsDialog(BuildContext context, String title, List originalQuestions) {
-    int selectedTimerSeconds = 30; // افتراضي 30 ثانية لكل سؤال
+    int selectedTimerSeconds = 30;
 
     showDialog(
       context: context,
@@ -1088,7 +1084,7 @@ class StudentQuestionSetsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// 4. شاشة التدريب الفردي (مع المؤقت والعشوائي)
+// 4. شاشة التدريب الفردي
 // ==========================================
 
 class QuizPracticeScreen extends StatefulWidget {
@@ -1157,6 +1153,11 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
         correctAnswersCount++;
       }
     });
+  }
+
+  String _getOptionPrefix(int index) {
+    const prefixes = ['أ.', 'ب.', 'ج.', 'د.'];
+    return index < prefixes.length ? prefixes[index] : '${index + 1}.';
   }
 
   void _nextQuestion() {
@@ -1270,7 +1271,7 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
                       ),
                       onPressed: () => _answerQuestion(index),
                       child: Text(
-                        options[index],
+                        '${_getOptionPrefix(index)} ${options[index]}',
                         style: const TextStyle(fontSize: 16),
                         textAlign: TextAlign.right,
                       ),
@@ -1446,11 +1447,42 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    // واجهة عرض اسماء الطرفين مع VS والمادة تحته
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Column(
+                          children: const [
+                            CircleAvatar(radius: 35, backgroundColor: Colors.amber, child: Icon(Icons.person, size: 40, color: Colors.white)),
+                            SizedBox(height: 8),
+                            Text('أنت', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: Column(
+                            children: [
+                              const Text('VS', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                              const SizedBox(height: 4),
+                              Text(widget.subjectName, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          children: const [
+                            CircleAvatar(radius: 35, backgroundColor: Colors.blueGrey, child: Icon(Icons.person_search, size: 40, color: Colors.white)),
+                            SizedBox(height: 8),
+                            Text('جارِ البحث...', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 40),
                     const CircularProgressIndicator(),
                     const SizedBox(height: 24),
                     const Text(
                       'انتظر لينضم زميلك لبدء التحدي...',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 40),
@@ -1472,22 +1504,22 @@ class _QuizBattleLobbyScreenState extends State<QuizBattleLobbyScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      'تحدى زملاءك في أسئلة عشوائية، من ينهي الأسئلة بدقة أسرع يفوز!',
+                    Text(
+                      'المادة: ${widget.subjectName}\nتحدى زملاءك في أسئلة عشوائية، من ينهي الأسئلة بدقة أسرع يفوز!',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      style: const TextStyle(color: Colors.grey),
                     ),
                     const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: Colors.deepOrange,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
                         onPressed: _findOrCreateBattleRoom,
-                        child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 16)),
+                        child: const Text('بحث عن خصم / بدء التحدي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -1569,6 +1601,11 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     });
   }
 
+  String _getOptionPrefix(int index) {
+    const prefixes = ['أ.', 'ب.', 'ج.', 'د.'];
+    return index < prefixes.length ? prefixes[index] : '${index + 1}.';
+  }
+
   void _nextQuestion() async {
     if (currentIndex < widget.questions.length - 1) {
       setState(() {
@@ -1633,6 +1670,46 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // بطاقة عرض الطرفين وتقدمهم داخل التحدي
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(radius: 18, backgroundColor: Colors.amber, child: Icon(Icons.person, size: 20, color: Colors.white)),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('أنت', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('النقاط: $myScore', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                    Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('الخصم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('التقدم: ${currentIndex + 1}/$total', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        const CircleAvatar(radius: 18, backgroundColor: Colors.blueGrey, child: Icon(Icons.person, size: 20, color: Colors.white)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1640,7 +1717,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                 Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 15),
             Card(
               elevation: 3,
               child: Padding(
@@ -1652,7 +1729,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 15),
             Expanded(
               child: ListView.builder(
                 itemCount: options.length,
@@ -1677,7 +1754,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                       ),
                       onPressed: () => _answerQuestion(index),
                       child: Text(
-                        options[index],
+                        '${_getOptionPrefix(index)} ${options[index]}',
                         style: const TextStyle(fontSize: 16),
                         textAlign: TextAlign.right,
                       ),
