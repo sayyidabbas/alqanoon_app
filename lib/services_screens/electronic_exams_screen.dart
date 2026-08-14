@@ -7,15 +7,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // تمت الإضافة لدعم الإشعارات الفعيلة
 import '../constants/app_colors.dart';
 
 // ==========================================
 // دوال مساعدة عامة
 // ==========================================
 
-// دالة إرسال إشعارات داخل التطبيق (مربوطة بالرئيسية)
+// دالة إرسال إشعارات داخل التطبيق (وتهيئة إشعارات الخلفية)
 Future<void> sendInAppNotification(String userId, String title, String body) async {
   if (userId.isEmpty) return;
+  
+  // 1. تسجيل الإشعار في قاعدة البيانات ليظهر داخل التطبيق (والرئيسية)
   await FirebaseFirestore.instance.collection('market_notifications').add({
     'userId': userId,
     'title': title,
@@ -23,6 +26,11 @@ Future<void> sendInAppNotification(String userId, String title, String body) asy
     'isRead': false,
     'createdAt': FieldValue.serverTimestamp(),
   });
+
+  // 2. ملاحظة هامة لدعم إشعارات الهاتف والتطبيق مغلق:
+  // لتفعيل وصول الإشعار المنبثق (Push Notification)، يجب إعداد دالة سحابية (Cloud Function)
+  // في Firebase تتفاعل مع الإضافة أعلاه وتقوم بإرسال حمولة (Payload) عبر خدمة FCM.
+  // كود العميل هنا يعتمد على التهيئة المسبقة لـ FirebaseMessaging.
 }
 
 // دالة مساعدة لعرض غلاف الكتاب
@@ -165,10 +173,11 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('سوق الكتب القانونية', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+        title: const Text('سوق الكتبة القانونية', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         elevation: 0,
         actions: [
+          // تم إزالة جرس الإشعارات من هنا لنقله للرئيسية بناءً على طلبك
           IconButton(
             icon: const Icon(Icons.person_rounded, color: Colors.white),
             tooltip: 'مشترياتي ومبيعاتي',
@@ -197,7 +206,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
               const Icon(Icons.auto_stories_rounded, size: 80, color: Colors.amber),
               const SizedBox(height: 20),
               const Text(
-                'مكتبة الحقوق التفاعلية',
+                'سوق الكتبة القانونية',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
               ),
               const SizedBox(height: 10),
@@ -253,6 +262,72 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
             Text(subtitle, style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.7))),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// شاشة الإشعارات للمستخدم
+// ==========================================
+class NotificationsScreen extends StatelessWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    
+    FirebaseFirestore.instance.collection('market_notifications')
+      .where('userId', isEqualTo: uid)
+      .where('isRead', isEqualTo: false)
+      .get().then((snapshot) {
+        for (var doc in snapshot.docs) {
+          doc.reference.update({'isRead': true});
+        }
+      });
+
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(title: const Text('الإشعارات'), backgroundColor: AppColors.primary),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('market_notifications')
+            .where('userId', isEqualTo: uid)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final notifs = snapshot.data!.docs;
+
+          if (notifs.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.notifications_off_rounded, size: 80, color: Colors.white24),
+                  SizedBox(height: 10),
+                  Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white54, fontSize: 18)),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: notifs.length,
+            padding: const EdgeInsets.all(12),
+            itemBuilder: (context, index) {
+              final data = notifs[index].data() as Map<String, dynamic>;
+              return Card(
+                color: const Color(0xFF1E2235),
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.notifications_active, color: AppColors.primary)),
+                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text(data['body'] ?? '', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70)),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -331,7 +406,6 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
   String? _selectedSubject;
   bool _isFree = false;
   File? _imageFile;
-  bool _isLoading = false;
 
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 30);
@@ -353,7 +427,22 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    final nav = Navigator.of(context, rootNavigator: true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        backgroundColor: Color(0xFF1E2235),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.amber),
+            SizedBox(height: 20),
+            Text('جاري معالجة ورفع كتابك...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest_uid';
@@ -383,6 +472,8 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'imageUrl': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      
+      nav.pop(); // إغلاق التحميل بأمان
 
       if (mounted) {
         Navigator.pop(context); // العودة
@@ -393,16 +484,13 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             backgroundColor: const Color(0xFF1E2235),
             title: const Text('🎉 تم الإرسال بنجاح', textAlign: TextAlign.right, style: TextStyle(color: Colors.amber)),
             content: const Text('تم إرسال كتابك للإدارة للمراجعة.\nسيصلك إشعار فور الموافقة عليه.', textAlign: TextAlign.right, style: TextStyle(color: Colors.white)),
-            actions: [TextButton(onPressed: () {
-              Navigator.pop(context); // اغلاق الديالوج
-            }, child: const Text('حسناً', style: TextStyle(color: Colors.amber)))],
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً', style: TextStyle(color: Colors.amber)))],
           ),
         );
       }
     } catch (e) {
+      nav.pop(); // إغلاق التحميل عند الخطأ
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -424,9 +512,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(title: Text('عرض كتاب - ${widget.stageName}'), backgroundColor: AppColors.primary),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-        : Form(
+      body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -478,10 +564,10 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_${widget.stageIndex}').collection('subjects').snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return const LinearProgressIndicator(color: Colors.amber);
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Text('لا توجد مواد مضافة لهذه المرحلة من قبل الإدارة', style: TextStyle(color: Colors.red), textAlign: TextAlign.right);
-                
+                if (!snapshot.hasData) return const LinearProgressIndicator(color: Colors.amber);
                 final subjects = snapshot.data!.docs.map((e) => e['name'] as String).toList();
+                if (subjects.isEmpty) return const Text('لا توجد مواد مضافة لهذه المرحلة من قبل الإدارة', style: TextStyle(color: Colors.red), textAlign: TextAlign.right);
+                
                 return DropdownButtonFormField<String>(
                   value: _selectedSubject,
                   dropdownColor: const Color(0xFF1E2235),
@@ -580,9 +666,7 @@ class BrowseSubjectsScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.amber));
-          if (snapshot.hasError) return const Center(child: Text('حدث خطأ في الاتصال', style: TextStyle(color: Colors.white)));
-          
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة', style: TextStyle(color: Colors.white54)));
 
@@ -626,8 +710,8 @@ class BooksListScreen extends StatelessWidget {
             .where('status', isEqualTo: 'approved')
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           if (snapshot.hasError) return const Center(child: Text('حدث خطأ في جلب البيانات', style: TextStyle(color: Colors.white)));
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           
           final books = snapshot.data!.docs.toList();
           books.sort((a, b) {
@@ -710,24 +794,17 @@ class BooksListScreen extends StatelessWidget {
   }
 }
 
-class BookDetailsScreen extends StatefulWidget {
+class BookDetailsScreen extends StatelessWidget {
   final String bookId;
   final Map<String, dynamic> bookData;
 
   const BookDetailsScreen({super.key, required this.bookId, required this.bookData});
 
-  @override
-  State<BookDetailsScreen> createState() => _BookDetailsScreenState();
-}
-
-class _BookDetailsScreenState extends State<BookDetailsScreen> {
-  bool _isRequesting = false;
-
   void _showPurchaseDialog(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     
-    if (uid == widget.bookData['sellerUid']) {
+    if (uid == bookData['sellerUid']) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكنك طلب شراء كتابك الخاص!')));
       return;
     }
@@ -785,28 +862,48 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      Navigator.pop(ctx); 
-                      
-                      setState(() { _isRequesting = true; });
+                      // حفظ الـ Navigators قبل فتح الـ dialog وإجراء الـ async
+                      final navRoot = Navigator.of(context, rootNavigator: true);
+                      final navContext = Navigator.of(ctx);
+
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const AlertDialog(
+                          backgroundColor: Color(0xFF1E2235),
+                          content: Row(
+                            children: [
+                              CircularProgressIndicator(color: Colors.amber),
+                              SizedBox(width: 20),
+                              Text('جاري إرسال طلبك للبائع...', style: TextStyle(color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      );
 
                       try {
-                        await sendInAppNotification(widget.bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${widget.bookData['title']}');
+                        // إرسال الإشعار للبائع
+                        await sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}');
 
-                        await FirebaseFirestore.instance.collection('book_market').doc(widget.bookId).update({
+                        await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
                           'status': 'reserved',
                           'buyerUid': uid,
                           'buyerName': nameController.text.trim(),
                           'buyerContact': contactController.text.trim(),
                         });
 
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال بنجاح! سيصل للبائع إشعار للتواصل معك.')));
-                          Navigator.pop(context); // العودة لشاشة الكتب
+                        navRoot.pop(); // إغلاق التحميل
+                        navContext.pop(); // إغلاق الـ BottomSheet
+                        
+                        if (context.mounted) {
+                          Navigator.pop(context); // الرجوع لقائمة الكتب
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                         }
                       } catch (e) {
-                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ أثناء الطلب.')));
-                      } finally {
-                        if (mounted) setState(() { _isRequesting = false; });
+                        navRoot.pop(); // إغلاق التحميل حال الخطأ
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+                        }
                       }
                     }
                   },
@@ -823,15 +920,13 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isFree = widget.bookData['isFree'] ?? false;
-    final imageUrl = widget.bookData['imageUrl'] ?? 'default';
+    final isFree = bookData['isFree'] ?? false;
+    final imageUrl = bookData['imageUrl'] ?? 'default';
 
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(title: const Text('تفاصيل الكتاب'), backgroundColor: AppColors.primary),
-      body: _isRequesting 
-      ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-      : SingleChildScrollView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -845,20 +940,20 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Text(widget.bookData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
+            Text(bookData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
             const SizedBox(height: 10),
-            Text('المؤلف: ${widget.bookData['author']}', style: const TextStyle(fontSize: 18, color: Colors.white70), textAlign: TextAlign.right),
+            Text('المؤلف: ${bookData['author']}', style: const TextStyle(fontSize: 18, color: Colors.white70), textAlign: TextAlign.right),
             const Divider(height: 30, thickness: 1, color: Colors.white24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(isFree ? 'مجاني' : '${widget.bookData['price']} د.ع', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isFree ? Colors.green : Colors.orange)),
+                Text(isFree ? 'مجاني' : '${bookData['price']} د.ع', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isFree ? Colors.green : Colors.orange)),
                 const Text('السعر:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
               ],
             ),
             const SizedBox(height: 20),
             const Text('المادة الدراسية:', style: TextStyle(fontSize: 16, color: Colors.white54), textAlign: TextAlign.right),
-            Text('${widget.bookData['stageName']} - ${widget.bookData['subjectName']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.right),
+            Text('${bookData['stageName']} - ${bookData['subjectName']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.right),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
@@ -877,7 +972,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 }
 
 // ==========================================
-// ملف الطالب (مشترياتي ومبيعاتي)
+// 3. ملف الطالب (مشترياتي ومبيعاتي)
 // ==========================================
 
 class UserMarketProfileScreen extends StatelessWidget {
@@ -917,12 +1012,25 @@ class SellerBooksTab extends StatelessWidget {
   const SellerBooksTab({super.key});
 
   void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري تأكيد البيع...')));
+    final nav = Navigator.of(context, rootNavigator: true);
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const AlertDialog(
+      backgroundColor: Color(0xFF1E2235),
+      content: Row(
+        children: [
+          CircularProgressIndicator(color: Colors.amber),
+          SizedBox(width: 20),
+          Text('جاري التأكيد...', style: TextStyle(color: Colors.white)),
+        ],
+      ),
+    ));
+    
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
       await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle');
     } catch (e) {
-      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+    } finally {
+      nav.pop(); // ضمان إغلاق الدوران المستمر
     }
   }
 
@@ -932,8 +1040,7 @@ class SellerBooksTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.amber));
-        if (snapshot.hasError) return const Center(child: Text('حدث خطأ', style: TextStyle(color: Colors.white)));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
         books.sort((a, b) {
@@ -1020,8 +1127,7 @@ class BuyerRequestsTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('book_market').where('buyerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.amber));
-        if (snapshot.hasError) return const Center(child: Text('حدث خطأ', style: TextStyle(color: Colors.white)));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
         books.sort((a, b) {
@@ -1319,7 +1425,21 @@ class AdminReviewBooksScreen extends StatelessWidget {
   const AdminReviewBooksScreen({super.key, required this.status});
 
   void _changeStatus(BuildContext context, Map<String, dynamic> data, String id, String newStatus) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري التنفيذ...')));
+    final nav = Navigator.of(context, rootNavigator: true);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        backgroundColor: Color(0xFF1E2235),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.amber),
+            SizedBox(width: 20),
+            Text('جاري التنفيذ...', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
     
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(id).update({'status': newStatus});
@@ -1331,9 +1451,10 @@ class AdminReviewBooksScreen extends StatelessWidget {
       } else if (newStatus == 'rejected') {
         await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
       }
-      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم بنجاح')));
     } catch (e) {
-      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+    } finally {
+      nav.pop(); // ضمان إغلاق الدائرة بشكل قطعي
     }
   }
 
@@ -1347,8 +1468,7 @@ class AdminReviewBooksScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('book_market').where('status', isEqualTo: status).snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: Colors.amber));
-          if (snapshot.hasError) return const Center(child: Text('حدث خطأ', style: TextStyle(color: Colors.white)));
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           
           final books = snapshot.data!.docs.toList();
           books.sort((a, b) {
@@ -1442,876 +1562,3 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
-
-
-
-كود الرئيسية
-
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../constants/app_colors.dart';
-import '../models/post_model.dart';
-import '../routes/app_routes.dart';
-import 'admin_panel_screen.dart';
-import 'profile_screen.dart';
-import 'user_profile_view_screen.dart';
-import 'settings_screen.dart';
-
-// ==========================================
-// شاشة الإشعارات المدمجة في الرئيسية
-// ==========================================
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    
-    // بمجرد فتح الشاشة، نجعل كل الإشعارات مقروءة
-    FirebaseFirestore.instance.collection('market_notifications')
-      .where('userId', isEqualTo: uid)
-      .where('isRead', isEqualTo: false)
-      .get().then((snapshot) {
-        for (var doc in snapshot.docs) {
-          doc.reference.update({'isRead': true});
-        }
-      });
-
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: AppBar(title: const Text('الإشعارات'), backgroundColor: AppColors.primary),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('market_notifications')
-            .where('userId', isEqualTo: uid)
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-          final notifs = snapshot.data!.docs;
-
-          if (notifs.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_off_rounded, size: 80, color: Colors.white24),
-                  SizedBox(height: 10),
-                  Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white54, fontSize: 18)),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: notifs.length,
-            padding: const EdgeInsets.all(12),
-            itemBuilder: (context, index) {
-              final data = notifs[index].data() as Map<String, dynamic>;
-              return Card(
-                color: AppColors.cardBg,
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: AppColors.accent, child: Icon(Icons.notifications_active, color: AppColors.primary)),
-                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text(data['body'] ?? '', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70)),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
-  String _adminPin = "1234";
-
-  Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
-  Timer? _countdownTimer;
-
-  late ScrollController _tickerScrollController;
-  Timer? _tickerTimer;
-
-  final TextEditingController _searchController = TextEditingController();
-
-  final List<String> _announcements = [
-    "مرحباً بكم في منصة القانون - النسخة الرسمية!  •  تنويه: سيتم فتح التسجيل في الاختبارات الإلكترونية قريباً.  •  نتمنى لجميع الطلبة الموفقية والنجاح.",
-  ];
-
-  final List<Map<String, dynamic>> _blockedUsers = [];
-
-  final List<PostModel> _officialPosts = [
-    PostModel(
-      id: '1',
-      userId: 'admin_id',
-      author: 'إدارة منصة القانون',
-      username: 'admin',
-      content: 'نرحب بجميع الطلبة في منصة القانون الإلكترونية التعليمية.',
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      likes: [],
-    )
-  ];
-
-  final List<PostModel> _userPosts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _tickerScrollController = ScrollController();
-    _loadPin();
-    _startTimer();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startTickerAnimation();
-    });
-  }
-
-  String _formatTimestamp(dynamic timestamp) {
-    if (timestamp == null) return 'الآن';
-    DateTime date;
-    if (timestamp is Timestamp) {
-      date = timestamp.toDate();
-    } else if (timestamp is DateTime) {
-      date = timestamp;
-    } else {
-      return '';
-    }
-
-    final diff = DateTime.now().difference(date);
-    if (diff.inSeconds < 60) return 'الآن';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
-    if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  ImageProvider? _getProfileImage(String? url) {
-    if (url == null || url.isEmpty) return null;
-    if (url.startsWith('data:image')) {
-      return MemoryImage(base64Decode(url.split(',').last));
-    }
-    return NetworkImage(url);
-  }
-
-  void _startTickerAnimation() {
-    _tickerTimer?.cancel();
-    _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
-      if (_tickerScrollController.hasClients && _tickerScrollController.position.hasContentDimensions) {
-        double maxScroll = _tickerScrollController.position.maxScrollExtent;
-        double currentScroll = _tickerScrollController.offset;
-        if (currentScroll >= maxScroll) {
-          _tickerScrollController.jumpTo(0);
-        } else {
-          _tickerScrollController.jumpTo(currentScroll + 1.2);
-        }
-      }
-    });
-  }
-
-  void _loadPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _adminPin = prefs.getString('admin_pin') ?? "1234";
-      });
-    }
-  }
-
-  void _startTimer() {
-    _countdownTimer?.cancel();
-    if (_targetDuration == null) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_targetDuration != null && _targetDuration!.inSeconds > 0) {
-        if (mounted) {
-          setState(() {
-            _targetDuration = _targetDuration! - const Duration(seconds: 1);
-          });
-        }
-      } else {
-        _countdownTimer?.cancel();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _tickerTimer?.cancel();
-    _tickerScrollController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _openAdminGate() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isAlreadyLoggedIn = prefs.getBool('is_admin_logged_in') ?? false;
-
-    if (isAlreadyLoggedIn) {
-      _navigateToAdminPanel();
-    } else {
-      _showPinDialog();
-    }
-  }
-
-  void _showPinDialog() {
-    final pinController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: const Text('البوابة الآمنة 🔒', style: TextStyle(color: AppColors.accent)),
-        content: TextField(
-          controller: pinController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'أدخل رمز PIN',
-            hintStyle: TextStyle(color: Colors.white38),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () async {
-              if (pinController.text == _adminPin) {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setBool('is_admin_logged_in', true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _navigateToAdminPanel();
-                }
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _navigateToAdminPanel() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AdminPanelScreen(
-          posts: _officialPosts,
-          announcements: _announcements,
-          onAddPost: (content, imageFile) {
-            setState(() {
-              _officialPosts.insert(
-                0,
-                PostModel(
-                  id: DateTime.now().toString(),
-                  userId: 'admin',
-                  author: 'إدارة منصة القانون',
-                  username: 'admin',
-                  content: content,
-                  imageFile: imageFile,
-                  timestamp: DateTime.now(),
-                ),
-              );
-            });
-          },
-          onDeletePost: (index) {
-            setState(() {
-              _officialPosts.removeAt(index);
-            });
-          },
-          onEditPost: (index, newContent) {
-            setState(() {
-              _officialPosts[index].content = newContent;
-            });
-          },
-          onAddBanner: (banner) {
-            setState(() {
-              _announcements.add(banner);
-            });
-          },
-          onDeleteBanner: (index) {
-            setState(() {
-              _announcements.removeAt(index);
-            });
-          },
-          onUpdateTimerDays: (days) {
-            setState(() {
-              _targetDuration = Duration(days: days);
-            });
-            _startTimer();
-          },
-          onDeleteTimer: () {
-            setState(() {
-              _targetDuration = null;
-            });
-            _countdownTimer?.cancel();
-          },
-        ),
-      ),
-    );
-  }
-
-  void _openMyProfile() {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProfileScreen(
-          posts: _userPosts,
-          onAddUserPost: (content, imageUrl) {
-            setState(() {
-              _userPosts.insert(
-                0,
-                PostModel(
-                  id: DateTime.now().toString(),
-                  userId: currentUser?.uid ?? 'my_id',
-                  author: currentUser?.displayName ?? 'طالب قانون',
-                  username: 'my_user',
-                  content: content,
-                  imageFile: null,
-                  timestamp: DateTime.now(),
-                ),
-              );
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  void _openUserProfile(Map<String, dynamic> user) {
-    final uid = user['uid'] ?? user['userId'] ?? '';
-    final username = user['username'] ?? '';
-    final fullName = user['fullName'] ?? user['author'] ?? '';
-    final bio = user['bio'] ?? 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية';
-    final photoUrl = user['photoUrl'];
-
-    if (uid == FirebaseAuth.instance.currentUser?.uid) {
-      _openMyProfile();
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserProfileViewScreen(
-          peerUid: uid,
-          username: username,
-          fullName: fullName,
-          bio: bio,
-          photoUrl: photoUrl,
-          onStartChat: () {},
-        ),
-      ),
-    );
-  }
-
-  void _showUserSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        String query = "";
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppColors.cardBg,
-              title: const Text('البحث عن مستخدم 🔍', style: TextStyle(color: AppColors.accent)),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: 'ادخل الاسم أو اسم المستخدم...',
-                        hintStyle: TextStyle(color: Colors.white38),
-                        prefixIcon: Icon(Icons.search, color: AppColors.accent),
-                      ),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          query = val.trim();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 250,
-                      child: query.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'اكتب اسم البحث للبدء...',
-                                style: TextStyle(color: Colors.white54),
-                              ),
-                            )
-                          : StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance.collection('users').snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(color: AppColors.accent),
-                                  );
-                                }
-
-                                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                                  return const Center(
-                                    child: Text('لا يوجد مستخدمون', style: TextStyle(color: Colors.white54)),
-                                  );
-                                }
-
-                                final results = snapshot.data!.docs.where((doc) {
-                                  final data = doc.data() as Map<String, dynamic>;
-                                  final fullName = (data['fullName'] ?? '').toString().toLowerCase();
-                                  final username = (data['username'] ?? '').toString().toLowerCase();
-                                  final q = query.toLowerCase();
-
-                                  return fullName.contains(q) || username.contains(q);
-                                }).toList();
-
-                                if (results.isEmpty) {
-                                  return const Center(
-                                    child: Text('لا يوجد مستخدم بهذا الاسم', style: TextStyle(color: Colors.white54)),
-                                  );
-                                }
-
-                                return ListView.builder(
-                                  itemCount: results.length,
-                                  itemBuilder: (context, index) {
-                                    final doc = results[index];
-                                    final userData = doc.data() as Map<String, dynamic>;
-                                    final fullName = userData['fullName'] ?? 'مستخدم';
-                                    final username = userData['username'] ?? 'user';
-                                    final bio = userData['bio'] ?? '';
-                                    final photoUrl = userData['photoUrl'];
-
-                                    return ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: AppColors.accent,
-                                        backgroundImage: _getProfileImage(photoUrl),
-                                        child: (photoUrl == null || photoUrl.toString().isEmpty)
-                                            ? Text(
-                                                fullName.isNotEmpty ? fullName[0] : 'ع',
-                                                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                                              )
-                                            : null,
-                                      ),
-                                      title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                      subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        final currentUid = FirebaseAuth.instance.currentUser?.uid;
-                                        if (doc.id == currentUid) {
-                                          _openMyProfile();
-                                        } else {
-                                          _openUserProfile({
-                                            'uid': doc.id,
-                                            'username': username,
-                                            'fullName': fullName,
-                                            'bio': bio,
-                                            'photoUrl': photoUrl,
-                                          });
-                                        }
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: AppBar(
-        title: const Text('منصة القانون'),
-        backgroundColor: AppColors.primary,
-        actions: [
-          // أيقونة الإشعارات التفاعلية الخاصة بطلبات الكتب
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('market_notifications')
-                .where('userId', isEqualTo: uid)
-                .where('isRead', isEqualTo: false)
-                .snapshots(),
-            builder: (context, snapshot) {
-              bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.notifications_rounded, color: hasUnread ? AppColors.accent : Colors.white),
-                    tooltip: 'الإشعارات',
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-                  ),
-                  if (hasUnread)
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.search, color: AppColors.accent),
-            onPressed: _showUserSearchDialog,
-            tooltip: 'البحث عن مستخدم',
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: TextButton.icon(
-              style: TextButton.styleFrom(backgroundColor: AppColors.accent.withOpacity(0.2)),
-              onPressed: _openAdminGate,
-              icon: const Icon(Icons.admin_panel_settings, color: AppColors.accent, size: 20),
-              label: const Text('البوابة الآمنة', style: TextStyle(color: AppColors.accent, fontSize: 12)),
-            ),
-          ),
-        ],
-      ),
-      drawer: _buildDrawer(context),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildMainHomeTab(),
-          _buildServicesTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: AppColors.accent,
-        unselectedItemColor: Colors.white54,
-        backgroundColor: AppColors.primary,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMainHomeTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
-          if (_announcements.isNotEmpty) const SizedBox(height: 16),
-          if (_targetDuration != null) _buildCountdownCard(),
-          if (_targetDuration != null) const SizedBox(height: 20),
-
-          if (_officialPosts.isNotEmpty) ...[
-            const Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.accent)),
-            const SizedBox(height: 12),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _officialPosts.length,
-              itemBuilder: (context, index) => _buildPostCard(_officialPosts[index]),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnnouncementsTicker() {
-    String combinedText = "${_announcements.join("                  ")}                  ";
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.campaign, color: AppColors.accent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _tickerScrollController,
-              scrollDirection: Axis.horizontal,
-              physics: const NeverScrollableScrollPhysics(),
-              child: Text(
-                combinedText,
-                style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCountdownCard() {
-    if (_targetDuration == null) return const SizedBox();
-    String days = _targetDuration!.inDays.toString().padLeft(2, '0');
-    String hours = (_targetDuration!.inHours % 24).toString().padLeft(2, '0');
-    String minutes = (_targetDuration!.inMinutes % 60).toString().padLeft(2, '0');
-    String seconds = (_targetDuration!.inSeconds % 60).toString().padLeft(2, '0');
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        children: [
-          const Text('الوقت المتبقي لحدث منصة القانون القادم ⏳', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _timerUnit(days, 'يوم'),
-              _timerUnit(hours, 'ساعة'),
-              _timerUnit(minutes, 'دقيقة'),
-              _timerUnit(seconds, 'ثانية'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _timerUnit(String value, String label) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: AppColors.cardBg, borderRadius: BorderRadius.circular(8)),
-          child: Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.accent)),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.white60)),
-      ],
-    );
-  }
-
-  Widget _buildPostCard(PostModel post) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final isLiked = post.likes.contains(uid);
-
-    return Card(
-      color: AppColors.cardBg,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.accent,
-                  child: Text(post.author.isNotEmpty ? post.author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(post.author, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text('@${post.username}', style: const TextStyle(fontSize: 11, color: AppColors.accent)),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (post.content.isNotEmpty) Text(post.content, style: const TextStyle(fontSize: 15, color: Colors.white)),
-            if (post.imageFile != null) ...[
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(post.imageFile!, width: double.infinity, fit: BoxFit.cover),
-              ),
-            ],
-            const Divider(color: Colors.white10, height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      if (isLiked) {
-                        post.likes.remove(uid);
-                      } else {
-                        post.likes.add(uid);
-                      }
-                    });
-                  },
-                  icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : Colors.white60),
-                  label: Text('${post.likes.length} إعجاب', style: const TextStyle(color: Colors.white60)),
-                ),
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.comment_outlined, color: Colors.white60),
-                  label: Text('${post.commentsCount} تعليق', style: const TextStyle(color: Colors.white60)),
-                ),
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServicesTab() {
-    List<Map<String, dynamic>> services = [
-      {'icon': Icons.menu_book, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
-      {'icon': Icons.book, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
-      {'icon': Icons.quiz, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
-      {'icon': Icons.storefront, 'title': 'سوق الكتب القانونية', 'route': AppRoutes.electronicExams},
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.3,
-        ),
-        itemCount: services.length,
-        itemBuilder: (context, index) => InkWell(
-          onTap: () {
-            Navigator.pushNamed(context, services[index]['route']);
-          },
-          child: Card(
-            color: AppColors.cardBg,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(services[index]['icon'], size: 40, color: AppColors.accent),
-                const SizedBox(height: 8),
-                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    return Drawer(
-      backgroundColor: AppColors.cardBg,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          StreamBuilder<DocumentSnapshot>(
-            stream: currentUser != null
-                ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
-                : null,
-            builder: (context, snapshot) {
-              String name = currentUser?.displayName ?? "طالب قانون";
-              String email = currentUser?.email ?? "";
-              String? photoUrl;
-
-              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                name = data['fullName'] ?? name;
-                email = data['email'] ?? email;
-                photoUrl = data['photoUrl'];
-              }
-
-              return UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(color: AppColors.primary),
-                accountName: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                currentAccountPicture: CircleAvatar(
-                  backgroundColor: AppColors.accent,
-                  backgroundImage: _getProfileImage(photoUrl),
-                  child: photoUrl == null || photoUrl.isEmpty
-                      ? Text(
-                          name.isNotEmpty ? name[0] : 'ع',
-                          style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold),
-                        )
-                      : null,
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.person, color: AppColors.accent),
-            title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              _openMyProfile();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: AppColors.accent),
-            title: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    blockedUsers: _blockedUsers,
-                    onUnblockUser: (index) {
-                      setState(() {
-                        _blockedUsers.removeAt(index);
-                      });
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.info, color: AppColors.accent),
-            title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
-            onTap: () {},
-          ),
-          const Divider(color: Colors.white24),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.redAccent)),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
- 
