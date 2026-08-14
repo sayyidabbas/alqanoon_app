@@ -1,13 +1,56 @@
 import 'dart:io';
+import 'dart:convert'; // تمت الإضافة لفك وتشفير الصور (Base64)
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../constants/app_colors.dart';
+
+// دالة مساعدة لعرض غلاف الكتاب سواء كان Base64 أو رابط إنترنت
+Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRadius? borderRadius}) {
+  if (imageUrl == 'default' || imageUrl.isEmpty) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: borderRadius ?? BorderRadius.zero,
+      ),
+      child: const Icon(Icons.book, size: 40, color: Colors.grey),
+    );
+  }
+
+  Widget imageContent;
+  if (imageUrl.startsWith('data:image')) {
+    // عرض الصورة المشفرة Base64
+    final base64Str = imageUrl.split(',').last;
+    imageContent = Image.memory(
+      base64Decode(base64Str),
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (ctx, err, stack) => const Icon(Icons.error, color: Colors.red),
+    );
+  } else {
+    // عرض الصورة من رابط
+    imageContent = CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+      errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.red),
+    );
+  }
+
+  return ClipRRect(
+    borderRadius: borderRadius ?? BorderRadius.zero,
+    child: imageContent,
+  );
+}
 
 // ==========================================
 // الشاشة الرئيسية للسوق القانوني
@@ -224,7 +267,7 @@ class SelectStageScreen extends StatelessWidget {
 }
 
 // ==========================================
-// 1. مسار البائع (إضافة كتاب + رفع صورة أونلاين)
+// 1. مسار البائع (إضافة كتاب + رفع صورة Base64)
 // ==========================================
 
 class AddBookFormScreen extends StatefulWidget {
@@ -247,11 +290,14 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
   String? _selectedSubject;
   bool _isFree = false;
   bool _isLoading = false;
-  File? _imageFile; // لتخزين الصورة محلياً قبل الرفع
+  File? _imageFile;
 
-  // دالة اختيار الصورة من المعرض
+  // دالة اختيار الصورة بجودة منخفضة لتقليل حجم النص (Base64)
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
+    final pickedFile = await ImagePicker().pickImage(
+      source: ImageSource.gallery, 
+      imageQuality: 40 // ضغط الصورة لكي لا تتجاوز حدود Firestore
+    );
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
@@ -276,11 +322,11 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest_uid';
       String imageUrl = 'default';
 
-      // رفع الصورة أونلاين إلى Firebase Storage إذا قام الطالب باختيارها
+      // تحويل الصورة إلى نص Base64 (كما في كود البروفايل)
       if (_imageFile != null) {
-        final storageRef = FirebaseStorage.instance.ref().child('book_covers/${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await storageRef.putFile(_imageFile!);
-        imageUrl = await storageRef.getDownloadURL();
+        final bytes = await _imageFile!.readAsBytes();
+        final base64String = base64Encode(bytes);
+        imageUrl = 'data:image/jpeg;base64,$base64String';
       }
       
       await FirebaseFirestore.instance.collection('book_market').add({
@@ -295,8 +341,8 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'telegram': _telegramController.text.trim(),
         'sellerUid': uid,
         'buyerUid': null,
-        'status': 'pending', // يذهب للمراجعة أولاً
-        'imageUrl': imageUrl, // تم ربط رابط الصورة المرفوعة
+        'status': 'pending',
+        'imageUrl': imageUrl, // تم تخزين الصورة كنص مباشرة في قاعدة البيانات
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -330,7 +376,6 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // تصميم زر رفع الصورة
                 Center(
                   child: GestureDetector(
                     onTap: _pickImage,
@@ -376,7 +421,6 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
                 ),
                 const SizedBox(height: 15),
                 
-                // جلب المواد من الإدارة
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_${widget.stageIndex}').collection('subjects').snapshots(),
                   builder: (context, snapshot) {
@@ -505,7 +549,6 @@ class BooksListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text('كتب $subjectName'), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
-        // تم حل مشكلة Index (الشاشة السوداء) بإزالة orderBy وترتيبها محلياً في الأسفل
         stream: FirebaseFirestore.instance
             .collection('book_market')
             .where('stageIndex', isEqualTo: stageIndex)
@@ -516,7 +559,6 @@ class BooksListScreen extends StatelessWidget {
           if (snapshot.hasError) return Center(child: Text('حدث خطأ في جلب البيانات', style: const TextStyle(color: Colors.white)));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           
-          // جلب الكتب وترتيبها محلياً من الأحدث للأقدم لتجنب خطأ الـ Index
           final books = snapshot.data!.docs.toList();
           books.sort((a, b) {
             Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
@@ -543,24 +585,12 @@ class BooksListScreen extends StatelessWidget {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(bookId: bookId, bookData: data))),
                   child: Row(
                     children: [
-                      Container(
+                      // استخدام الدالة المساعدة لعرض الصورة (Base64)
+                      _buildBookCover(
+                        imageUrl,
                         width: 100,
                         height: 130,
-                        decoration: const BoxDecoration(
-                          borderRadius: BorderRadius.only(topLeft: Radius.circular(15), bottomLeft: Radius.circular(15)),
-                        ),
-                        // عرض الصورة المرفوعة أونلاين
-                        child: imageUrl != 'default'
-                            ? ClipRRect(
-                                borderRadius: const BorderRadius.only(topLeft: Radius.circular(15), bottomLeft: Radius.circular(15)),
-                                child: CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                  errorWidget: (context, url, error) => const Icon(Icons.book, size: 50, color: Colors.grey),
-                                ),
-                              )
-                            : Container(color: Colors.grey.shade200, child: const Icon(Icons.book, size: 50, color: Colors.grey)),
+                        borderRadius: const BorderRadius.only(topLeft: Radius.circular(15), bottomLeft: Radius.circular(15)),
                       ),
                       Expanded(
                         child: Padding(
@@ -614,7 +644,6 @@ class BookDetailsScreen extends StatelessWidget {
       return;
     }
 
-    // تغيير حالة الكتاب إلى محجوز (Reserved)
     await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
       'status': 'reserved',
       'buyerUid': uid,
@@ -639,21 +668,12 @@ class BookDetailsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Center(
-              child: Container(
+              // استخدام الدالة المساعدة لعرض الصورة (Base64)
+              child: _buildBookCover(
+                imageUrl,
+                width: 150,
                 height: 220,
-                width: 160,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-                child: imageUrl != 'default'
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                          errorWidget: (context, url, error) => const Icon(Icons.book, size: 80, color: Colors.grey),
-                        ),
-                      )
-                    : const Icon(Icons.book, size: 80, color: Colors.grey),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
             const SizedBox(height: 20),
@@ -733,12 +753,10 @@ class SellerBooksTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
-      // تم إزالة orderBy لعدم طلب فهرسة (Index)
       stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         
-        // ترتيب البيانات محلياً
         final books = snapshot.data!.docs.toList();
         books.sort((a, b) {
           Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
@@ -902,7 +920,6 @@ class AdminMarketDashboard extends StatelessWidget {
   }
 }
 
-// إدارة المواد (بسيطة مشابهة لبنك الأسئلة)
 class AdminManageStagesScreen extends StatelessWidget {
   const AdminManageStagesScreen({super.key});
   final stages = const ['المرحلة الأولى', 'المرحلة الثانية', 'المرحلة الثالثة', 'المرحلة الرابعة'];
@@ -977,9 +994,8 @@ class AdminManageSubjectsScreen extends StatelessWidget {
   }
 }
 
-// مراجعة وقبول الكتب
 class AdminReviewBooksScreen extends StatelessWidget {
-  final String status; // 'pending', 'approved', 'sold'
+  final String status;
   const AdminReviewBooksScreen({super.key, required this.status});
 
   void _changeStatus(String id, String newStatus) async {
@@ -1019,21 +1035,12 @@ class AdminReviewBooksScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
                     children: [
-                      Container(
+                      // استخدام الدالة المساعدة لعرض الصورة (Base64)
+                      _buildBookCover(
+                        imageUrl,
                         width: 80,
                         height: 110,
-                        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                        child: imageUrl != 'default'
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                  errorWidget: (context, url, error) => const Icon(Icons.book, color: Colors.grey),
-                                ),
-                              )
-                            : const Icon(Icons.book, size: 40, color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       const SizedBox(width: 15),
                       Expanded(
