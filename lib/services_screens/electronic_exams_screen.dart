@@ -511,8 +511,8 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         );
       }
     } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+      if (mounted) Navigator.pop(context);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
 
@@ -765,7 +765,7 @@ class BooksListScreen extends StatelessWidget {
               final imageUrl = data['imageUrl'] ?? 'default';
 
               return Card(
-                color: Colors.white, // تم تغيير لون الكارد لتكون النصوص السوداء واضحة
+                color: Colors.white,
                 elevation: 4,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 margin: const EdgeInsets.only(bottom: 15),
@@ -891,11 +891,10 @@ class BookDetailsScreen extends StatelessWidget {
                         barrierDismissible: false,
                         builder: (_) => const AlertDialog(
                           backgroundColor: Color(0xFF1E2235),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
+                          content: Row(
                             children: [
                               CircularProgressIndicator(color: Colors.amber),
-                              SizedBox(height: 20),
+                              SizedBox(width: 20),
                               Text('جاري إرسال طلبك للبائع...', style: TextStyle(color: Colors.white)),
                             ],
                           ),
@@ -913,7 +912,7 @@ class BookDetailsScreen extends StatelessWidget {
                       });
 
                       if (context.mounted) {
-                        Navigator.pop(context); // إغلاق التحميل
+                        Navigator.of(context, rootNavigator: true).pop(); // إغلاق التحميل
                         Navigator.pop(context); // الرجوع لقائمة الكتب
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                       }
@@ -1024,14 +1023,21 @@ class SellerBooksTab extends StatelessWidget {
   const SellerBooksTab({super.key});
 
   void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.amber)));
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const AlertDialog(
+      backgroundColor: Color(0xFF1E2235),
+      content: Row(
+        children: [
+          CircularProgressIndicator(color: Colors.amber),
+          SizedBox(width: 20),
+          Text('جاري التأكيد...', style: TextStyle(color: Colors.white)),
+        ],
+      ),
+    ));
     
     await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
-    
-    // إرسال إشعار للمشتري أن البائع وافق
     await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle');
 
-    if (context.mounted) Navigator.pop(context);
+    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 
   @override
@@ -1200,10 +1206,16 @@ class BuyerRequestsTab extends StatelessWidget {
                 color: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-                  subtitle: const Text('بانتظار موافقة أو تواصل البائع معك... ⏳', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, marginTop: 8)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      const Text('بانتظار موافقة أو تواصل البائع معك... ⏳', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ),
               );
             }
@@ -1226,7 +1238,6 @@ class AdminMarketDashboard extends StatefulWidget {
 }
 
 class _AdminMarketDashboardState extends State<AdminMarketDashboard> {
-  // متغيرات لحفظ حالة آخر زيارة للإدارة لمعرفة متى نخفي العلامة الحمراء
   int savedPendingCount = 0;
   int savedApprovedCount = 0;
   int savedSoldCount = 0;
@@ -1249,7 +1260,7 @@ class _AdminMarketDashboardState extends State<AdminMarketDashboard> {
   void _updateSavedCount(String key, int newCount) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(key, newCount);
-    _loadSavedCounts(); // تحديث الواجهة لإخفاء البادج
+    _loadSavedCounts(); 
   }
 
   @override
@@ -1273,7 +1284,6 @@ class _AdminMarketDashboardState extends State<AdminMarketDashboard> {
             }
           }
 
-          // حساب الإشعارات الجديدة (الفرق بين الحالي وما تم رؤيته سابقاً)
           int newPending = (currentPending - savedPendingCount) > 0 ? (currentPending - savedPendingCount) : 0;
           int newApproved = (currentApproved - savedApprovedCount) > 0 ? (currentApproved - savedApprovedCount) : 0;
           int newSold = (currentSold - savedSoldCount) > 0 ? (currentSold - savedSoldCount) : 0;
@@ -1421,12 +1431,23 @@ class AdminReviewBooksScreen extends StatelessWidget {
   const AdminReviewBooksScreen({super.key, required this.status});
 
   void _changeStatus(BuildContext context, Map<String, dynamic> data, String id, String newStatus) async {
-    // تحديث الحالة بشريط سلس بدل تعليق الشاشة
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري التنفيذ...')));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        backgroundColor: Color(0xFF1E2235),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.amber),
+            SizedBox(width: 20),
+            Text('جاري التنفيذ...', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
     
     await FirebaseFirestore.instance.collection('book_market').doc(id).update({'status': newStatus});
     
-    // إرسال إشعار للبائع بقرار الإدارة
     String sellerUid = data['sellerUid'];
     String bookTitle = data['title'];
     if (newStatus == 'approved') {
@@ -1434,6 +1455,8 @@ class AdminReviewBooksScreen extends StatelessWidget {
     } else if (newStatus == 'rejected') {
       await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
     }
+
+    if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // إغلاق التحميل بأمان
   }
 
   @override
