@@ -9,6 +9,22 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../constants/app_colors.dart';
 
+// ==========================================
+// دوال مساعدة عامة
+// ==========================================
+
+// دالة إرسال إشعارات داخل التطبيق
+Future<void> sendInAppNotification(String userId, String title, String body) async {
+  if (userId.isEmpty) return;
+  await FirebaseFirestore.instance.collection('market_notifications').add({
+    'userId': userId,
+    'title': title,
+    'body': body,
+    'isRead': false,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
 // دالة مساعدة لعرض غلاف الكتاب
 Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRadius? borderRadius}) {
   if (imageUrl == 'default' || imageUrl.isEmpty) {
@@ -16,10 +32,10 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: Colors.grey.shade800,
         borderRadius: borderRadius ?? BorderRadius.zero,
       ),
-      child: const Icon(Icons.book, size: 40, color: Colors.grey),
+      child: const Icon(Icons.menu_book_rounded, size: 40, color: Colors.white54),
     );
   }
 
@@ -31,7 +47,7 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
       width: width,
       height: height,
       fit: BoxFit.cover,
-      errorBuilder: (ctx, err, stack) => const Icon(Icons.error, color: Colors.red),
+      errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.red),
     );
   } else {
     imageContent = CachedNetworkImage(
@@ -39,8 +55,8 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
       width: width,
       height: height,
       fit: BoxFit.cover,
-      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-      errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.red),
+      placeholder: (context, url) => const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.red),
     );
   }
 
@@ -54,11 +70,9 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
 Future<void> _launchContactUrl(BuildContext context, String type, String contactInfo) async {
   String url = '';
   if (type == 'whatsapp') {
-    // تنظيف رقم الهاتف
     String cleanPhone = contactInfo.replaceAll(RegExp(r'[^\d+]'), '');
     url = 'https://wa.me/$cleanPhone';
   } else if (type == 'telegram') {
-    // تنظيف معرف التليجرام من علامة @
     String cleanTg = contactInfo.replaceAll('@', '').trim();
     url = 'https://t.me/$cleanTg';
   }
@@ -106,17 +120,20 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('البوابة الآمنة - الإدارة', textAlign: TextAlign.right),
+        backgroundColor: const Color(0xFF1E2235),
+        title: const Text('البوابة الآمنة للإدارة', textAlign: TextAlign.right, style: TextStyle(color: Colors.amber)),
         content: TextField(
           controller: passwordController,
           obscureText: true,
           keyboardType: TextInputType.number,
           textAlign: TextAlign.right,
-          decoration: const InputDecoration(hintText: 'أدخل كلمة السر'),
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(hintText: 'أدخل كلمة السر', hintStyle: TextStyle(color: Colors.white54)),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
             onPressed: () async {
               final doc = await FirebaseFirestore.instance.collection('settings').doc('admin_market').get();
               String currentPin = '1234';
@@ -136,7 +153,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
                 }
               }
             },
-            child: const Text('دخول'),
+            child: const Text('دخول', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -145,6 +162,8 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
@@ -152,13 +171,43 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
         backgroundColor: AppColors.primary,
         elevation: 0,
         actions: [
+          // أيقونة الإشعارات التفاعلية
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('market_notifications')
+                .where('userId', isEqualTo: uid)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_rounded, color: Colors.white),
+                    tooltip: 'الإشعارات',
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                  ),
+                  if (hasUnread)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
-            icon: const Icon(Icons.person, color: Colors.white),
+            icon: const Icon(Icons.person_rounded, color: Colors.white),
             tooltip: 'مشترياتي ومبيعاتي',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserMarketProfileScreen())),
           ),
           IconButton(
-            icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
+            icon: const Icon(Icons.admin_panel_settings_rounded, color: Colors.amber),
             tooltip: 'البوابة الآمنة',
             onPressed: () => _handleAdminAccess(context),
           ),
@@ -177,7 +226,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.account_balance, size: 80, color: Colors.amber),
+              const Icon(Icons.auto_stories_rounded, size: 80, color: Colors.amber),
               const SizedBox(height: 20),
               const Text(
                 'السوق القانوني للكتب',
@@ -218,6 +267,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(15),
+      splashColor: Colors.grey.withOpacity(0.3),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
@@ -225,7 +275,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
           color: color,
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
-            BoxShadow(color: color.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
+            BoxShadow(color: color.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
           ],
         ),
         child: Column(
@@ -235,6 +285,73 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
             Text(subtitle, style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.7))),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// شاشة الإشعارات للمستخدم
+// ==========================================
+class NotificationsScreen extends StatelessWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    
+    // بمجرد فتح الشاشة، نجعل كل الإشعارات مقروءة
+    FirebaseFirestore.instance.collection('market_notifications')
+      .where('userId', isEqualTo: uid)
+      .where('isRead', isEqualTo: false)
+      .get().then((snapshot) {
+        for (var doc in snapshot.docs) {
+          doc.reference.update({'isRead': true});
+        }
+      });
+
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(title: const Text('الإشعارات'), backgroundColor: AppColors.primary),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('market_notifications')
+            .where('userId', isEqualTo: uid)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final notifs = snapshot.data!.docs;
+
+          if (notifs.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.notifications_off_rounded, size: 80, color: Colors.white24),
+                  SizedBox(height: 10),
+                  Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white54, fontSize: 18)),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: notifs.length,
+            padding: const EdgeInsets.all(12),
+            itemBuilder: (context, index) {
+              final data = notifs[index].data() as Map<String, dynamic>;
+              return Card(
+                color: const Color(0xFF1E2235),
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.notifications_active, color: AppColors.primary)),
+                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text(data['body'] ?? '', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70)),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -253,6 +370,7 @@ class SelectStageScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: Text(isAddingBook ? 'اختر مرحلة الكتاب' : 'تصفح حسب المرحلة'),
         backgroundColor: AppColors.primary,
@@ -262,6 +380,7 @@ class SelectStageScreen extends StatelessWidget {
         itemCount: stages.length,
         itemBuilder: (context, index) {
           return Card(
+            color: const Color(0xFF1E2235),
             elevation: 3,
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
@@ -270,8 +389,8 @@ class SelectStageScreen extends StatelessWidget {
                 backgroundColor: Colors.amber.shade100,
                 child: Text('${index + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
               ),
-              title: Text(stages[index], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), textAlign: TextAlign.right),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              title: Text(stages[index], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white), textAlign: TextAlign.right),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
               onTap: () {
                 if (isAddingBook) {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => AddBookFormScreen(stageIndex: index + 1, stageName: stages[index])));
@@ -313,7 +432,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
   File? _imageFile;
 
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 40);
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 30);
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
@@ -332,17 +451,17 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       return;
     }
 
-    // إظهار واجهة التحميل التفاعلية
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => const AlertDialog(
+        backgroundColor: Color(0xFF1E2235),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(color: Colors.amber),
             SizedBox(height: 20),
-            Text('انتظر قليلاً، جاري معالجة ورفع كتابك...', textAlign: TextAlign.center),
+            Text('جاري معالجة ورفع كتابك...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -384,21 +503,36 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
-            title: const Text('🎉 تم الإرسال بنجاح', textAlign: TextAlign.right),
-            content: const Text('تم إرسال كتابك للإدارة للمراجعة.\nسيصلك إشعار (سيظهر في ملفك) فور الموافقة عليه.', textAlign: TextAlign.right),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
+            backgroundColor: const Color(0xFF1E2235),
+            title: const Text('🎉 تم الإرسال بنجاح', textAlign: TextAlign.right, style: TextStyle(color: Colors.amber)),
+            content: const Text('تم إرسال كتابك للإدارة للمراجعة.\nسيصلك إشعار فور الموافقة عليه.', textAlign: TextAlign.right, style: TextStyle(color: Colors.white)),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً', style: TextStyle(color: Colors.amber)))],
           ),
         );
       }
     } catch (e) {
-      Navigator.pop(context); // إغلاق التحميل
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
+  }
+
+  InputDecoration _customInputDeco(String label, {IconData? icon, Color? iconColor, String? prefixText}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white54),
+      prefixIcon: icon != null ? Icon(icon, color: iconColor) : null,
+      prefixText: prefixText,
+      prefixStyle: const TextStyle(color: Colors.white70),
+      filled: true,
+      fillColor: const Color(0xFF1E2235),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: Text('عرض كتاب - ${widget.stageName}'), backgroundColor: AppColors.primary),
       body: Form(
         key: _formKey,
@@ -412,37 +546,39 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
                   height: 160,
                   width: 120,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: const Color(0xFF1E2235),
                     borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.amber, width: 2, style: BorderStyle.solid),
+                    border: Border.all(color: Colors.amber.withOpacity(0.5), width: 2, style: BorderStyle.solid),
                   ),
                   child: _imageFile != null
                       ? ClipRRect(borderRadius: BorderRadius.circular(13), child: Image.file(_imageFile!, fit: BoxFit.cover))
                       : const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_a_photo, color: AppColors.primary, size: 40),
+                            Icon(Icons.add_a_photo, color: Colors.amber, size: 40),
                             SizedBox(height: 8),
-                            Text('أضف الغلاف', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                            Text('أضف الغلاف', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
                           ],
                         ),
                 ),
               ),
             ),
             const SizedBox(height: 25),
-            const Text('المعلومات الأساسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            const Text('المعلومات الأساسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
             const SizedBox(height: 10),
             TextFormField(
               controller: _titleController,
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(labelText: 'اسم الكتاب', border: OutlineInputBorder()),
+              style: const TextStyle(color: Colors.white),
+              decoration: _customInputDeco('اسم الكتاب'),
               validator: (v) => v!.isEmpty ? 'مطلوب' : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _authorController,
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(labelText: 'اسم المؤلف', border: OutlineInputBorder()),
+              style: const TextStyle(color: Colors.white),
+              decoration: _customInputDeco('اسم المؤلف'),
               validator: (v) => v!.isEmpty ? 'مطلوب' : null,
             ),
             const SizedBox(height: 15),
@@ -450,13 +586,15 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_${widget.stageIndex}').collection('subjects').snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const LinearProgressIndicator();
+                if (!snapshot.hasData) return const LinearProgressIndicator(color: Colors.amber);
                 final subjects = snapshot.data!.docs.map((e) => e['name'] as String).toList();
                 if (subjects.isEmpty) return const Text('لا توجد مواد مضافة لهذه المرحلة من قبل الإدارة', style: TextStyle(color: Colors.red), textAlign: TextAlign.right);
                 
                 return DropdownButtonFormField<String>(
                   value: _selectedSubject,
-                  decoration: const InputDecoration(labelText: 'اختر المادة الدراسية', border: OutlineInputBorder()),
+                  dropdownColor: const Color(0xFF1E2235),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _customInputDeco('اختر المادة الدراسية'),
                   items: subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, textAlign: TextAlign.right))).toList(),
                   onChanged: (v) => setState(() => _selectedSubject = v),
                 );
@@ -464,26 +602,31 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             ),
             
             const SizedBox(height: 20),
-            const Text('نوع العرض', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
-            Row(
-              children: [
-                Expanded(
-                  child: RadioListTile<bool>(
-                    title: const Text('بمبلغ مالي', textAlign: TextAlign.right),
-                    value: false,
-                    groupValue: _isFree,
-                    onChanged: (v) => setState(() => _isFree = v!),
+            const Text('نوع العرض', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
+            Theme(
+              data: Theme.of(context).copyWith(unselectedWidgetColor: Colors.white54),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile<bool>(
+                      activeColor: Colors.amber,
+                      title: const Text('بمبلغ مالي', textAlign: TextAlign.right, style: TextStyle(color: Colors.white)),
+                      value: false,
+                      groupValue: _isFree,
+                      onChanged: (v) => setState(() => _isFree = v!),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: RadioListTile<bool>(
-                    title: const Text('مجاني (خيري)', textAlign: TextAlign.right),
-                    value: true,
-                    groupValue: _isFree,
-                    onChanged: (v) => setState(() => _isFree = v!),
+                  Expanded(
+                    child: RadioListTile<bool>(
+                      activeColor: Colors.amber,
+                      title: const Text('مجاني (خيري)', textAlign: TextAlign.right, style: TextStyle(color: Colors.white)),
+                      value: true,
+                      groupValue: _isFree,
+                      onChanged: (v) => setState(() => _isFree = v!),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (!_isFree) ...[
               const SizedBox(height: 10),
@@ -491,30 +634,33 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
                 controller: _priceController,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
-                decoration: const InputDecoration(labelText: 'السعر (بالدينار العراقي)', border: OutlineInputBorder(), prefixText: 'د.ع '),
+                style: const TextStyle(color: Colors.white),
+                decoration: _customInputDeco('السعر (بالدينار العراقي)', prefixText: 'د.ع '),
                 validator: (v) => v!.isEmpty ? 'يرجى إدخال السعر' : null,
               ),
             ],
 
             const SizedBox(height: 20),
-            const Text('معلومات التواصل (أدخل واحدة على الأقل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            const Text('معلومات التواصل (أدخل واحدة على الأقل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
             const SizedBox(height: 10),
             TextFormField(
               controller: _whatsappController,
               keyboardType: TextInputType.phone,
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(labelText: 'رقم الواتساب', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone, color: Colors.green)),
+              style: const TextStyle(color: Colors.white),
+              decoration: _customInputDeco('رقم الواتساب', icon: Icons.phone, iconColor: Colors.green),
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _telegramController,
               textAlign: TextAlign.right,
-              decoration: const InputDecoration(labelText: 'معرف التليجرام (بدون @)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.send, color: Colors.blue)),
+              style: const TextStyle(color: Colors.white),
+              decoration: _customInputDeco('معرف التليجرام (بدون @)', icon: Icons.send, iconColor: Colors.blue),
             ),
 
             const SizedBox(height: 30),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 16)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: _submitBook,
               child: const Text('عرض الكتاب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
             ),
@@ -537,22 +683,25 @@ class BrowseSubjectsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: Text('مواد $stageName'), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           final docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة'));
+          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة', style: TextStyle(color: Colors.white54)));
 
           return ListView.builder(
             itemCount: docs.length,
+            padding: const EdgeInsets.all(12),
             itemBuilder: (context, index) {
               final subjectName = docs[index]['name'];
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                color: const Color(0xFF1E2235),
+                margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
-                  title: Text(subjectName, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title: Text(subjectName, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
                   leading: const Icon(Icons.menu_book, color: Colors.amber),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BooksListScreen(stageIndex: stageIndex, subjectName: subjectName))),
                 ),
@@ -573,6 +722,7 @@ class BooksListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: Text('كتب $subjectName'), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -583,7 +733,7 @@ class BooksListScreen extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) return const Center(child: Text('حدث خطأ في جلب البيانات', style: TextStyle(color: Colors.white)));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           
           final books = snapshot.data!.docs.toList();
           books.sort((a, b) {
@@ -592,7 +742,18 @@ class BooksListScreen extends StatelessWidget {
             return t2.compareTo(t1); 
           });
 
-          if (books.isEmpty) return const Center(child: Text('لا توجد كتب معروضة لهذه المادة حالياً', style: TextStyle(fontSize: 16, color: Colors.white70)));
+          if (books.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.library_books_rounded, size: 80, color: Colors.white24),
+                  SizedBox(height: 10),
+                  Text('لا توجد كتب معروضة لهذه المادة حالياً', style: TextStyle(fontSize: 16, color: Colors.white54)),
+                ],
+              ),
+            );
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -604,6 +765,7 @@ class BooksListScreen extends StatelessWidget {
               final imageUrl = data['imageUrl'] ?? 'default';
 
               return Card(
+                color: Colors.white, // تم تغيير لون الكارد لتكون النصوص السوداء واضحة
                 elevation: 4,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 margin: const EdgeInsets.only(bottom: 15),
@@ -623,9 +785,9 @@ class BooksListScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
+                              Text(data['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
                               const SizedBox(height: 5),
-                              Text('المؤلف: ${data['author']}', style: const TextStyle(color: Colors.grey), textAlign: TextAlign.right),
+                              Text('المؤلف: ${data['author']}', style: const TextStyle(color: Colors.black54), textAlign: TextAlign.right),
                               const SizedBox(height: 10),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -660,7 +822,6 @@ class BookDetailsScreen extends StatelessWidget {
 
   const BookDetailsScreen({super.key, required this.bookId, required this.bookData});
 
-  // نافذة طلب الشراء التفاعلية التي تطلب بيانات المشتري
   void _showPurchaseDialog(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -677,7 +838,7 @@ class BookDetailsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.primary,
+      backgroundColor: const Color(0xFF1E2235),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 20, left: 20, right: 20),
@@ -695,11 +856,11 @@ class BookDetailsScreen extends StatelessWidget {
                 controller: nameController,
                 textAlign: TextAlign.right,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'الاسم الكريم',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  filled: true, fillColor: Colors.white10,
-                  border: OutlineInputBorder(),
+                  labelStyle: const TextStyle(color: Colors.white54),
+                  filled: true, fillColor: AppColors.primary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => v!.isEmpty ? 'مطلوب' : null,
               ),
@@ -708,11 +869,11 @@ class BookDetailsScreen extends StatelessWidget {
                 controller: contactController,
                 textAlign: TextAlign.right,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'رقم الهاتف أو يوزر التليجرام',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  filled: true, fillColor: Colors.white10,
-                  border: OutlineInputBorder(),
+                  labelStyle: const TextStyle(color: Colors.white54),
+                  filled: true, fillColor: AppColors.primary,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => v!.isEmpty ? 'مطلوب للتواصل' : null,
               ),
@@ -720,28 +881,30 @@ class BookDetailsScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      Navigator.pop(ctx); // إغلاق النافذة
+                      Navigator.pop(ctx); 
                       
-                      // نافذة الانتظار
                       showDialog(
                         context: context,
                         barrierDismissible: false,
                         builder: (_) => const AlertDialog(
+                          backgroundColor: Color(0xFF1E2235),
                           content: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              CircularProgressIndicator(color: AppColors.primary),
+                              CircularProgressIndicator(color: Colors.amber),
                               SizedBox(height: 20),
-                              Text('جاري إرسال طلبك للبائع...'),
+                              Text('جاري إرسال طلبك للبائع...', style: TextStyle(color: Colors.white)),
                             ],
                           ),
                         ),
                       );
 
-                      // إرسال الطلب وحفظ معلومات المشتري للبائع
+                      // إرسال الإشعار للبائع
+                      await sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}');
+
                       await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
                         'status': 'reserved',
                         'buyerUid': uid,
@@ -750,8 +913,8 @@ class BookDetailsScreen extends StatelessWidget {
                       });
 
                       if (context.mounted) {
-                        Navigator.pop(context); // إغلاق نافذة التحميل
-                        Navigator.pop(context); // العودة للشاشة السابقة
+                        Navigator.pop(context); // إغلاق التحميل
+                        Navigator.pop(context); // الرجوع لقائمة الكتب
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                       }
                     }
@@ -773,6 +936,7 @@ class BookDetailsScreen extends StatelessWidget {
     final imageUrl = bookData['imageUrl'] ?? 'default';
 
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: const Text('تفاصيل الكتاب'), backgroundColor: AppColors.primary),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -788,27 +952,27 @@ class BookDetailsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Text(bookData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            Text(bookData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.amber), textAlign: TextAlign.right),
             const SizedBox(height: 10),
-            Text('المؤلف: ${bookData['author']}', style: const TextStyle(fontSize: 18, color: Colors.grey), textAlign: TextAlign.right),
-            const Divider(height: 30, thickness: 2),
+            Text('المؤلف: ${bookData['author']}', style: const TextStyle(fontSize: 18, color: Colors.white70), textAlign: TextAlign.right),
+            const Divider(height: 30, thickness: 1, color: Colors.white24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(isFree ? 'مجاني' : '${bookData['price']} د.ع', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isFree ? Colors.green : Colors.orange)),
-                const Text('السعر:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text('السعر:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
               ],
             ),
             const SizedBox(height: 20),
-            const Text('المادة الدراسية:', style: TextStyle(fontSize: 16, color: Colors.grey), textAlign: TextAlign.right),
-            Text('${bookData['stageName']} - ${bookData['subjectName']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+            const Text('المادة الدراسية:', style: TextStyle(fontSize: 16, color: Colors.white54), textAlign: TextAlign.right),
+            Text('${bookData['stageName']} - ${bookData['subjectName']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.right),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 15)),
-                icon: const Icon(Icons.shopping_cart, color: Colors.amber),
-                label: Text(isFree ? 'طلب الحصول على الكتاب مجاناً' : 'طلب شراء الكتاب', style: const TextStyle(fontSize: 18, color: Colors.amber)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                icon: const Icon(Icons.shopping_cart, color: AppColors.primary),
+                label: Text(isFree ? 'طلب الحصول على الكتاب مجاناً' : 'طلب شراء الكتاب', style: const TextStyle(fontSize: 18, color: AppColors.primary, fontWeight: FontWeight.bold)),
                 onPressed: () => _showPurchaseDialog(context),
               ),
             ),
@@ -831,11 +995,14 @@ class UserMarketProfileScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        backgroundColor: AppColors.primary,
         appBar: AppBar(
           title: const Text('ملفي في السوق'),
           backgroundColor: AppColors.primary,
           bottom: const TabBar(
             indicatorColor: Colors.amber,
+            labelColor: Colors.amber,
+            unselectedLabelColor: Colors.white54,
             tabs: [
               Tab(text: 'طلبات الشراء (مشترياتي)'),
               Tab(text: 'كتبي المعروضة (مبيعاتي)'),
@@ -856,8 +1023,15 @@ class UserMarketProfileScreen extends StatelessWidget {
 class SellerBooksTab extends StatelessWidget {
   const SellerBooksTab({super.key});
 
-  void _acceptRequest(String bookId) async {
+  void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.amber)));
+    
     await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
+    
+    // إرسال إشعار للمشتري أن البائع وافق
+    await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle');
+
+    if (context.mounted) Navigator.pop(context);
   }
 
   @override
@@ -866,7 +1040,7 @@ class SellerBooksTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
         books.sort((a, b) {
@@ -875,10 +1049,21 @@ class SellerBooksTab extends StatelessWidget {
           return t2.compareTo(t1); 
         });
 
-        if (books.isEmpty) return const Center(child: Text('لم تقم بعرض أي كتب.'));
+        if (books.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.storefront_rounded, size: 80, color: Colors.white24),
+                SizedBox(height: 10),
+                Text('لم تقم بعرض أي كتب.', style: TextStyle(color: Colors.white54, fontSize: 16)),
+              ],
+            ),
+          );
+        }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           itemCount: books.length,
           itemBuilder: (context, index) {
             final data = books[index].data() as Map<String, dynamic>;
@@ -893,30 +1078,32 @@ class SellerBooksTab extends StatelessWidget {
             else if (status == 'rejected') { statusText = 'تم رفض الكتاب ❌'; statusColor = Colors.black; }
 
             return Card(
-              elevation: 3,
+              color: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               margin: const EdgeInsets.only(bottom: 12),
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87)),
                     const SizedBox(height: 5),
                     Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 15)),
                     
-                    // إذا كان هناك مشتري (Reserved) نظهر معلوماته للبائع
                     if (status == 'reserved') ...[
-                      const Divider(),
-                      const Text('معلومات المشتري:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                      Text('الاسم: ${data['buyerName'] ?? 'غير معروف'}', style: const TextStyle(fontSize: 15)),
-                      Text('حسابه / رقمه: ${data['buyerContact'] ?? 'غير متوفر'}', style: const TextStyle(fontSize: 15, color: Colors.blue)),
-                      const SizedBox(height: 10),
+                      const Divider(color: Colors.black12, thickness: 1, height: 20),
+                      const Text('معلومات المشتري (تواصل معه للاتفاق):', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 5),
+                      Text('الاسم: ${data['buyerName'] ?? 'غير معروف'}', style: const TextStyle(fontSize: 15, color: Colors.black87)),
+                      Text('الحساب / الرقم: ${data['buyerContact'] ?? 'غير متوفر'}', style: const TextStyle(fontSize: 15, color: Colors.blue, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 15),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                          onPressed: () => _acceptRequest(books[index].id),
-                          child: const Text('تأكيد إتمام البيع 🤝', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                          onPressed: () => _acceptRequest(context, books[index].id, data['buyerUid'], data['title']),
+                          child: const Text('تأكيد إتمام البيع 🤝', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
                       )
                     ]
@@ -940,7 +1127,7 @@ class BuyerRequestsTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('book_market').where('buyerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
         books.sort((a, b) {
@@ -949,20 +1136,31 @@ class BuyerRequestsTab extends StatelessWidget {
           return t2.compareTo(t1); 
         });
 
-        if (books.isEmpty) return const Center(child: Text('ليس لديك طلبات شراء حالياً.'));
+        if (books.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.shopping_bag_rounded, size: 80, color: Colors.white24),
+                SizedBox(height: 10),
+                Text('ليس لديك طلبات شراء حالياً.', style: TextStyle(color: Colors.white54, fontSize: 16)),
+              ],
+            ),
+          );
+        }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           itemCount: books.length,
           itemBuilder: (context, index) {
             final data = books[index].data() as Map<String, dynamic>;
             final status = data['status'];
             
             if (status == 'sold') {
-              // البائع وافق، تم تعديل الألوان لتكون واضحة
               return Card(
                 color: Colors.green.shade50,
-                elevation: 3,
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -998,11 +1196,14 @@ class BuyerRequestsTab extends StatelessWidget {
               );
             } else {
               return Card(
-                elevation: 3,
+                elevation: 4,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
-                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('بانتظار موافقة أو تواصل البائع معك... ⏳', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                  contentPadding: const EdgeInsets.all(16),
+                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                  subtitle: const Text('بانتظار موافقة أو تواصل البائع معك... ⏳', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, marginTop: 8)),
                 ),
               );
             }
@@ -1014,40 +1215,85 @@ class BuyerRequestsTab extends StatelessWidget {
 }
 
 // ==========================================
-// 4. البوابة الأمنية (لوحة تحكم الإدارة الديناميكية)
+// 4. البوابة الأمنية (لوحة تحكم الإدارة الديناميكية الذكية)
 // ==========================================
 
-class AdminMarketDashboard extends StatelessWidget {
+class AdminMarketDashboard extends StatefulWidget {
   const AdminMarketDashboard({super.key});
+
+  @override
+  State<AdminMarketDashboard> createState() => _AdminMarketDashboardState();
+}
+
+class _AdminMarketDashboardState extends State<AdminMarketDashboard> {
+  // متغيرات لحفظ حالة آخر زيارة للإدارة لمعرفة متى نخفي العلامة الحمراء
+  int savedPendingCount = 0;
+  int savedApprovedCount = 0;
+  int savedSoldCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCounts();
+  }
+
+  void _loadSavedCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      savedPendingCount = prefs.getInt('admin_pending_count') ?? 0;
+      savedApprovedCount = prefs.getInt('admin_approved_count') ?? 0;
+      savedSoldCount = prefs.getInt('admin_sold_count') ?? 0;
+    });
+  }
+
+  void _updateSavedCount(String key, int newCount) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, newCount);
+    _loadSavedCounts(); // تحديث الواجهة لإخفاء البادج
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('إدارة السوق القانوني'), backgroundColor: AppColors.primary),
-      // StreamBuilder لمعرفة أعداد الطلبات بشكل مباشر
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(title: const Text('إدارة السوق القانوني', style: TextStyle(color: Colors.amber)), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('book_market').snapshots(),
         builder: (context, snapshot) {
-          int pendingCount = 0;
-          int approvedCount = 0;
-          int soldCount = 0;
+          int currentPending = 0;
+          int currentApproved = 0;
+          int currentSold = 0;
 
           if (snapshot.hasData) {
             for (var doc in snapshot.data!.docs) {
               final status = doc['status'];
-              if (status == 'pending') pendingCount++;
-              if (status == 'approved') approvedCount++;
-              if (status == 'sold') soldCount++;
+              if (status == 'pending') currentPending++;
+              if (status == 'approved') currentApproved++;
+              if (status == 'sold') currentSold++;
             }
           }
+
+          // حساب الإشعارات الجديدة (الفرق بين الحالي وما تم رؤيته سابقاً)
+          int newPending = (currentPending - savedPendingCount) > 0 ? (currentPending - savedPendingCount) : 0;
+          int newApproved = (currentApproved - savedApprovedCount) > 0 ? (currentApproved - savedApprovedCount) : 0;
+          int newSold = (currentSold - savedSoldCount) > 0 ? (currentSold - savedSoldCount) : 0;
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _buildAdminCard(context, 'إدارة المواد الدراسية', null, Icons.library_books, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminManageStagesScreen()))),
-              _buildAdminCard(context, 'الكتب قيد المراجعة', pendingCount, Icons.pending_actions, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'pending')))),
-              _buildAdminCard(context, 'الكتب المقبولة (في السوق)', approvedCount, Icons.check_circle, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'approved')))),
-              _buildAdminCard(context, 'سجل الكتب المباعة', soldCount, Icons.monetization_on, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'sold')))),
+              _buildAdminCard(context, 'إدارة المواد الدراسية', 0, Icons.library_books, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminManageStagesScreen()))),
+              _buildAdminCard(context, 'الكتب قيد المراجعة', newPending, Icons.pending_actions, () {
+                _updateSavedCount('admin_pending_count', currentPending);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'pending')));
+              }),
+              _buildAdminCard(context, 'الكتب المقبولة (في السوق)', newApproved, Icons.check_circle, () {
+                _updateSavedCount('admin_approved_count', currentApproved);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'approved')));
+              }),
+              _buildAdminCard(context, 'سجل الكتب المباعة', newSold, Icons.monetization_on, () {
+                _updateSavedCount('admin_sold_count', currentSold);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'sold')));
+              }),
             ],
           );
         },
@@ -1055,20 +1301,23 @@ class AdminMarketDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildAdminCard(BuildContext context, String title, int? count, IconData icon, VoidCallback onTap) {
+  Widget _buildAdminCard(BuildContext context, String title, int newItemsCount, IconData icon, VoidCallback onTap) {
     return Card(
-      elevation: 3,
+      color: const Color(0xFF1E2235),
+      elevation: 4,
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: Icon(icon, color: AppColors.primary, size: 30),
-        title: Text(title, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        trailing: count != null && count > 0
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        leading: Icon(icon, color: Colors.amber, size: 30),
+        title: Text(title, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+        trailing: newItemsCount > 0
             ? Container(
                 padding: const EdgeInsets.all(8),
                 decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                child: Text('$count', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text('$newItemsCount', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               )
-            : const Icon(Icons.arrow_back_ios, size: 16),
+            : const Icon(Icons.arrow_back_ios, size: 16, color: Colors.white54),
         onTap: onTap,
       ),
     );
@@ -1082,14 +1331,16 @@ class AdminManageStagesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('إدارة مواد المراحل'), backgroundColor: AppColors.primary),
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(title: const Text('إدارة مواد المراحل', style: TextStyle(color: Colors.amber)), backgroundColor: AppColors.primary),
       body: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: stages.length,
         itemBuilder: (context, index) => Card(
+          color: const Color(0xFF1E2235),
           child: ListTile(
-            title: Text(stages[index], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
-            trailing: const Icon(Icons.arrow_back_ios, size: 16),
+            title: Text(stages[index], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            trailing: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.white54),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminManageSubjectsScreen(stageIndex: index + 1, stageName: stages[index]))),
           ),
         ),
@@ -1108,17 +1359,19 @@ class AdminManageSubjectsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('إضافة مادة للسوق', textAlign: TextAlign.right),
-        content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'اسم المادة'), textAlign: TextAlign.right),
+        backgroundColor: const Color(0xFF1E2235),
+        title: const Text('إضافة مادة للسوق', textAlign: TextAlign.right, style: TextStyle(color: Colors.amber)),
+        content: TextField(controller: controller, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'اسم المادة', hintStyle: TextStyle(color: Colors.white54)), textAlign: TextAlign.right),
         actions: [
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
             onPressed: () async {
               if (controller.text.isNotEmpty) {
                 await FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').add({'name': controller.text.trim()});
                 if (context.mounted) Navigator.pop(ctx);
               }
             },
-            child: const Text('حفظ'),
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
           )
         ],
       ),
@@ -1128,6 +1381,7 @@ class AdminManageSubjectsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       appBar: AppBar(title: Text('مواد $stageName'), backgroundColor: AppColors.primary),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.amber,
@@ -1138,18 +1392,19 @@ class AdminManageSubjectsScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           final docs = snapshot.data!.docs;
-          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة'));
+          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة', style: TextStyle(color: Colors.white54)));
           
           return ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: docs.length,
             itemBuilder: (context, index) => Card(
+              color: const Color(0xFF1E2235),
               child: ListTile(
-                title: Text(docs[index]['name'], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(docs[index]['name'], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: const Icon(Icons.delete, color: Colors.redAccent),
                   onPressed: () => FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').doc(docs[index].id).delete(),
                 ),
               ),
@@ -1165,11 +1420,20 @@ class AdminReviewBooksScreen extends StatelessWidget {
   final String status;
   const AdminReviewBooksScreen({super.key, required this.status});
 
-  void _changeStatus(BuildContext context, String id, String newStatus) async {
-    // إظهار تحميل
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+  void _changeStatus(BuildContext context, Map<String, dynamic> data, String id, String newStatus) async {
+    // تحديث الحالة بشريط سلس بدل تعليق الشاشة
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('جاري التنفيذ...')));
+    
     await FirebaseFirestore.instance.collection('book_market').doc(id).update({'status': newStatus});
-    if (context.mounted) Navigator.pop(context); // إغلاق التحميل
+    
+    // إرسال إشعار للبائع بقرار الإدارة
+    String sellerUid = data['sellerUid'];
+    String bookTitle = data['title'];
+    if (newStatus == 'approved') {
+      await sendInAppNotification(sellerUid, 'تمت الموافقة! 🎉', 'وافقت الإدارة على عرض كتابك: $bookTitle');
+    } else if (newStatus == 'rejected') {
+      await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
+    }
   }
 
   @override
@@ -1177,11 +1441,12 @@ class AdminReviewBooksScreen extends StatelessWidget {
     String title = status == 'pending' ? 'طلبات قيد المراجعة' : (status == 'approved' ? 'الكتب المعروضة' : 'الكتب المباعة');
     
     return Scaffold(
-      appBar: AppBar(title: Text(title), backgroundColor: AppColors.primary),
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(title: Text(title, style: const TextStyle(color: Colors.amber)), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('book_market').where('status', isEqualTo: status).snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
           
           final books = snapshot.data!.docs.toList();
           books.sort((a, b) {
@@ -1190,7 +1455,18 @@ class AdminReviewBooksScreen extends StatelessWidget {
             return t2.compareTo(t1); 
           });
 
-          if (books.isEmpty) return const Center(child: Text('لا توجد بيانات.', style: TextStyle(fontSize: 16)));
+          if (books.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.folder_open_rounded, size: 80, color: Colors.white24),
+                  SizedBox(height: 10),
+                  Text('القائمة فارغة، لا توجد بيانات.', style: TextStyle(fontSize: 16, color: Colors.white54)),
+                ],
+              ),
+            );
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.all(8),
@@ -1201,8 +1477,10 @@ class AdminReviewBooksScreen extends StatelessWidget {
               final imageUrl = data['imageUrl'] ?? 'default';
               
               return Card(
+                color: Colors.white,
                 elevation: 4,
                 margin: const EdgeInsets.only(bottom: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
@@ -1218,7 +1496,7 @@ class AdminReviewBooksScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
                             Text('المرحلة: ${data['stageName']} | المادة: ${data['subjectName']}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
                             Text('السعر: ${data['isFree'] == true ? 'مجاني' : data['price']}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             Text('واتس: ${data['whatsapp']} | تليجرام: ${data['telegram']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
@@ -1229,12 +1507,12 @@ class AdminReviewBooksScreen extends StatelessWidget {
                                 children: [
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                    onPressed: () => _changeStatus(context, id, 'rejected'),
+                                    onPressed: () => _changeStatus(context, data, id, 'rejected'),
                                     child: const Text('رفض', style: TextStyle(color: Colors.white)),
                                   ),
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                    onPressed: () => _changeStatus(context, id, 'approved'),
+                                    onPressed: () => _changeStatus(context, data, id, 'approved'),
                                     child: const Text('قبول ونشر', style: TextStyle(color: Colors.white)),
                                   ),
                                 ],
@@ -1244,7 +1522,7 @@ class AdminReviewBooksScreen extends StatelessWidget {
                               const Divider(),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                onPressed: () => _changeStatus(context, id, 'rejected'),
+                                onPressed: () => _changeStatus(context, data, id, 'rejected'),
                                 child: const Text('إزالة من السوق', style: TextStyle(color: Colors.white)),
                               )
                             ]
@@ -1262,3 +1540,4 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
+ 
