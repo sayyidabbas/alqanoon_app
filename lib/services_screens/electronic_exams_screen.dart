@@ -98,7 +98,8 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
       ),
       body: Container(
         decoration: const BoxDecoration(
-          gradient: LinearError(
+          // تم التصحيح هنا: استبدال LinearError بـ LinearGradient
+          gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [AppColors.primary, Color(0xFF0A0E21)],
@@ -957,3 +958,4 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
+ 
