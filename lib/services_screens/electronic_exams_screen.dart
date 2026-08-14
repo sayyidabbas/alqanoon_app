@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../constants/app_colors.dart';
 
 // ==========================================
@@ -98,7 +102,6 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
       ),
       body: Container(
         decoration: const BoxDecoration(
-          // تم التصحيح هنا: استبدال LinearError بـ LinearGradient
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -221,7 +224,7 @@ class SelectStageScreen extends StatelessWidget {
 }
 
 // ==========================================
-// 1. مسار البائع (إضافة كتاب)
+// 1. مسار البائع (إضافة كتاب + رفع صورة أونلاين)
 // ==========================================
 
 class AddBookFormScreen extends StatefulWidget {
@@ -244,6 +247,17 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
   String? _selectedSubject;
   bool _isFree = false;
   bool _isLoading = false;
+  File? _imageFile; // لتخزين الصورة محلياً قبل الرفع
+
+  // دالة اختيار الصورة من المعرض
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
 
   void _submitBook() async {
     if (!_formKey.currentState!.validate()) return;
@@ -260,6 +274,14 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest_uid';
+      String imageUrl = 'default';
+
+      // رفع الصورة أونلاين إلى Firebase Storage إذا قام الطالب باختيارها
+      if (_imageFile != null) {
+        final storageRef = FirebaseStorage.instance.ref().child('book_covers/${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await storageRef.putFile(_imageFile!);
+        imageUrl = await storageRef.getDownloadURL();
+      }
       
       await FirebaseFirestore.instance.collection('book_market').add({
         'title': _titleController.text.trim(),
@@ -274,7 +296,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'sellerUid': uid,
         'buyerUid': null,
         'status': 'pending', // يذهب للمراجعة أولاً
-        'imageUrl': 'default', // هنا يتم ربط رفع الصورة لاحقاً
+        'imageUrl': imageUrl, // تم ربط رابط الصورة المرفوعة
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -308,6 +330,35 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // تصميم زر رفع الصورة
+                Center(
+                  child: GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      height: 160,
+                      width: 120,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.amber, width: 2, style: BorderStyle.solid),
+                      ),
+                      child: _imageFile != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(13),
+                              child: Image.file(_imageFile!, fit: BoxFit.cover),
+                            )
+                          : const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo, color: AppColors.primary, size: 40),
+                                SizedBox(height: 8),
+                                Text('أضف الغلاف', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 25),
                 const Text('المعلومات الأساسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -454,19 +505,26 @@ class BooksListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text('كتب $subjectName'), backgroundColor: AppColors.primary),
       body: StreamBuilder<QuerySnapshot>(
-        // نجلب فقط الكتب المقبولة (Approved)
+        // تم حل مشكلة Index (الشاشة السوداء) بإزالة orderBy وترتيبها محلياً في الأسفل
         stream: FirebaseFirestore.instance
             .collection('book_market')
             .where('stageIndex', isEqualTo: stageIndex)
             .where('subjectName', isEqualTo: subjectName)
             .where('status', isEqualTo: 'approved')
-            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
+          if (snapshot.hasError) return Center(child: Text('حدث خطأ في جلب البيانات', style: const TextStyle(color: Colors.white)));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final books = snapshot.data!.docs;
-          if (books.isEmpty) return const Center(child: Text('لا توجد كتب معروضة لهذه المادة حالياً', style: TextStyle(fontSize: 16)));
+          
+          // جلب الكتب وترتيبها محلياً من الأحدث للأقدم لتجنب خطأ الـ Index
+          final books = snapshot.data!.docs.toList();
+          books.sort((a, b) {
+            Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
+            Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
+            return t2.compareTo(t1); 
+          });
+
+          if (books.isEmpty) return const Center(child: Text('لا توجد كتب معروضة لهذه المادة حالياً', style: TextStyle(fontSize: 16, color: Colors.white70)));
 
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -475,6 +533,7 @@ class BooksListScreen extends StatelessWidget {
               final data = books[index].data() as Map<String, dynamic>;
               final bookId = books[index].id;
               final isFree = data['isFree'] ?? false;
+              final imageUrl = data['imageUrl'] ?? 'default';
 
               return Card(
                 elevation: 4,
@@ -487,11 +546,21 @@ class BooksListScreen extends StatelessWidget {
                       Container(
                         width: 100,
                         height: 130,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: const BorderRadius.only(topRight: Radius.circular(15), bottomRight: Radius.circular(15)),
+                        decoration: const BoxDecoration(
+                          borderRadius: BorderRadius.only(topLeft: Radius.circular(15), bottomLeft: Radius.circular(15)),
                         ),
-                        child: const Icon(Icons.book, size: 50, color: Colors.grey), // مؤقت لصورة الغلاف
+                        // عرض الصورة المرفوعة أونلاين
+                        child: imageUrl != 'default'
+                            ? ClipRRect(
+                                borderRadius: const BorderRadius.only(topLeft: Radius.circular(15), bottomLeft: Radius.circular(15)),
+                                child: CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                  errorWidget: (context, url, error) => const Icon(Icons.book, size: 50, color: Colors.grey),
+                                ),
+                              )
+                            : Container(color: Colors.grey.shade200, child: const Icon(Icons.book, size: 50, color: Colors.grey)),
                       ),
                       Expanded(
                         child: Padding(
@@ -560,6 +629,7 @@ class BookDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFree = bookData['isFree'] ?? false;
+    final imageUrl = bookData['imageUrl'] ?? 'default';
 
     return Scaffold(
       appBar: AppBar(title: const Text('تفاصيل الكتاب'), backgroundColor: AppColors.primary),
@@ -570,10 +640,20 @@ class BookDetailsScreen extends StatelessWidget {
           children: [
             Center(
               child: Container(
-                height: 200,
-                width: 150,
+                height: 220,
+                width: 160,
                 decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.book, size: 80, color: Colors.grey),
+                child: imageUrl != 'default'
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                          errorWidget: (context, url, error) => const Icon(Icons.book, size: 80, color: Colors.grey),
+                        ),
+                      )
+                    : const Icon(Icons.book, size: 80, color: Colors.grey),
               ),
             ),
             const SizedBox(height: 20),
@@ -653,10 +733,19 @@ class SellerBooksTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).orderBy('createdAt', descending: true).snapshots(),
+      // تم إزالة orderBy لعدم طلب فهرسة (Index)
+      stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final books = snapshot.data!.docs;
+        
+        // ترتيب البيانات محلياً
+        final books = snapshot.data!.docs.toList();
+        books.sort((a, b) {
+          Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
+          Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
+          return t2.compareTo(t1); 
+        });
+
         if (books.isEmpty) return const Center(child: Text('لم تقم بعرض أي كتب.'));
 
         return ListView.builder(
@@ -710,7 +799,14 @@ class BuyerRequestsTab extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('book_market').where('buyerUid', isEqualTo: uid).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final books = snapshot.data!.docs;
+        
+        final books = snapshot.data!.docs.toList();
+        books.sort((a, b) {
+          Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
+          Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
+          return t2.compareTo(t1); 
+        });
+
         if (books.isEmpty) return const Center(child: Text('ليس لديك طلبات شراء حالياً.'));
 
         return ListView.builder(
@@ -720,7 +816,6 @@ class BuyerRequestsTab extends StatelessWidget {
             final status = data['status'];
             
             if (status == 'sold') {
-              // البائع وافق، نعرض معلومات التواصل
               return Card(
                 color: Colors.green.shade50,
                 margin: const EdgeInsets.all(8),
@@ -901,7 +996,14 @@ class AdminReviewBooksScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance.collection('book_market').where('status', isEqualTo: status).snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final books = snapshot.data!.docs;
+          
+          final books = snapshot.data!.docs.toList();
+          books.sort((a, b) {
+            Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
+            Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
+            return t2.compareTo(t1); 
+          });
+
           if (books.isEmpty) return const Center(child: Text('لا توجد بيانات.'));
 
           return ListView.builder(
@@ -909,44 +1011,68 @@ class AdminReviewBooksScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final data = books[index].data() as Map<String, dynamic>;
               final id = books[index].id;
+              final imageUrl = data['imageUrl'] ?? 'default';
               
               return Card(
                 margin: const EdgeInsets.all(8),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  child: Row(
                     children: [
-                      Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text('المرحلة: ${data['stageName']} | المادة: ${data['subjectName']}'),
-                      Text('السعر: ${data['isFree'] == true ? 'مجاني' : data['price']}'),
-                      Text('واتس: ${data['whatsapp']} | تليجرام: ${data['telegram']}'),
-                      if (status == 'pending') ...[
-                        const Divider(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      Container(
+                        width: 80,
+                        height: 110,
+                        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+                        child: imageUrl != 'default'
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                                  errorWidget: (context, url, error) => const Icon(Icons.book, color: Colors.grey),
+                                ),
+                              )
+                            : const Icon(Icons.book, size: 40, color: Colors.grey),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                              onPressed: () => _changeStatus(id, 'rejected'),
-                              child: const Text('رفض'),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                              onPressed: () => _changeStatus(id, 'approved'),
-                              child: const Text('قبول ونشر'),
-                            ),
+                            Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('المرحلة: ${data['stageName']} | المادة: ${data['subjectName']}'),
+                            Text('السعر: ${data['isFree'] == true ? 'مجاني' : data['price']}'),
+                            Text('واتس: ${data['whatsapp']} | تليجرام: ${data['telegram']}'),
+                            if (status == 'pending') ...[
+                              const Divider(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                    onPressed: () => _changeStatus(id, 'rejected'),
+                                    child: const Text('رفض'),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                    onPressed: () => _changeStatus(id, 'approved'),
+                                    child: const Text('قبول ونشر'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (status == 'approved') ...[
+                              const Divider(),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                onPressed: () => _changeStatus(id, 'rejected'),
+                                child: const Text('إزالة من السوق'),
+                              )
+                            ]
                           ],
                         ),
-                      ],
-                      if (status == 'approved') ...[
-                        const Divider(),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                          onPressed: () => _changeStatus(id, 'rejected'), // سحبه من السوق
-                          child: const Text('إزالة من السوق'),
-                        )
-                      ]
+                      ),
                     ],
                   ),
                 ),
