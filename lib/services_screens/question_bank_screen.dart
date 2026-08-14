@@ -1979,6 +1979,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   int? selectedOptionIndex;
   bool answered = false;
   int myScore = 0;
+  int oppScore = 0;
   
   async_lib.Timer? _battleTimer;
   async_lib.Timer? _stopwatchTimer;
@@ -1989,15 +1990,64 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   bool _isWaitingForOpponent = false;
   bool _isNavigating = false;
   
-  // الاستماع الثابت لقاعدة البيانات لتجنب إعادة بناء الـ Stream
-  late Stream<DocumentSnapshot> _roomStream;
+  async_lib.StreamSubscription<DocumentSnapshot>? _roomSubscription;
 
   @override
   void initState() {
     super.initState();
-    _roomStream = FirebaseFirestore.instance.doc(widget.stageDocPath).snapshots();
+    // 1. تعريف مستمع خلفي صلب لا يتأثر بإعادة البناء
+    _listenToRoomStatus();
     _startStopwatch();
     _startTimer();
+  }
+
+  void _listenToRoomStatus() {
+    if (widget.roomId.isEmpty) return;
+    
+    _roomSubscription = FirebaseFirestore.instance
+        .doc(widget.stageDocPath)
+        .snapshots()
+        .listen((snapshot) {
+      if (!snapshot.exists || !mounted) return;
+      
+      final data = snapshot.data() as Map<String, dynamic>;
+      
+      setState(() {
+        // تحديث نقاط الخصم فورا وبشكل حي
+        oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
+        
+        final bool p1Finished = data['player1Finished'] == true;
+        final bool p2Finished = data['player2Finished'] == true;
+
+        // الانتقال الفوري والمباشر لشاشة النتائج عند الانتهاء معاً
+        if (p1Finished && p2Finished && !_isNavigating) {
+          _isNavigating = true;
+          _navigateToResults(data);
+        }
+      });
+    });
+  }
+
+  void _navigateToResults(Map<String, dynamic> finalData) {
+    _battleTimer?.cancel();
+    _stopwatchTimer?.cancel();
+    _roomSubscription?.cancel();
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BattleResultsScreen(
+          roomId: widget.roomId,
+          isPlayer1: widget.isPlayer1,
+          roomData: finalData,
+          myFinalScore: myScore,
+          myTotalTime: _totalElapsedSeconds,
+          myAnswersLog: _myAnswersLog,
+          subjectName: widget.subjectName,
+          stageDocPath: widget.stageDocPath,
+        ),
+      ),
+    );
   }
 
   void _startStopwatch() {
@@ -2031,6 +2081,7 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
   void dispose() {
     _battleTimer?.cancel();
     _stopwatchTimer?.cancel();
+    _roomSubscription?.cancel();
     super.dispose();
   }
 
@@ -2106,10 +2157,9 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
     }
   }
 
-  // شاشة الانتظار كما في الصورة المطلوبة (تعرض لحين الانتهاء)
   Widget _buildWaitingScreen() {
     return Scaffold(
-      backgroundColor: const Color(0xFF171926), // لون خلفية كحلي/أسود
+      backgroundColor: const Color(0xFF171926),
       appBar: AppBar(
         title: Text('تحدي: ${widget.subjectName}'),
         backgroundColor: Colors.deepOrange,
@@ -2121,7 +2171,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // الدائرة الصفراء بداخلها النجمة
               Container(
                 width: 120,
                 height: 120,
@@ -2144,7 +2193,6 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 50),
-              // لودر متحرك 
               const CircularProgressIndicator(color: Colors.deepOrange, strokeWidth: 4),
             ],
           ),
@@ -2155,220 +2203,169 @@ class _ActiveQuizBattleScreenState extends State<ActiveQuizBattleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // جعل الـ StreamBuilder يغطي كامل الشاشة ليستمع للتحديثات لحظياً وبثبات
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _roomStream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+    if (_isWaitingForOpponent) {
+      return _buildWaitingScreen();
+    }
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        
-        final bool p1Finished = data['player1Finished'] == true;
-        final bool p2Finished = data['player2Finished'] == true;
+    final questions = widget.roomData['questions'] ?? [];
+    if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
 
-        // --- الانتقال الآمن واللحظي لشاشة النتائج ---
-        if (p1Finished && p2Finished && !_isNavigating) {
-          _isNavigating = true;
-          // إيقاف العدادات قبل الانتقال لتجنب الأخطاء
-          _battleTimer?.cancel();
-          _stopwatchTimer?.cancel();
-          
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BattleResultsScreen(
-                    roomId: widget.roomId,
-                    isPlayer1: widget.isPlayer1,
-                    roomData: data,
-                    myFinalScore: myScore,
-                    myTotalTime: _totalElapsedSeconds,
-                    myAnswersLog: _myAnswersLog,
-                    subjectName: widget.subjectName,
-                    stageDocPath: widget.stageDocPath,
-                  ),
-                ),
-              );
-            }
-          });
-          // إرجاع شاشة الانتظار لثانية قبل إتمام الانتقال
-          return _buildWaitingScreen(); 
-        }
+    final questionData = questions[currentIndex];
+    final String questionText = questionData['question'] ?? '';
+    final List options = questionData['options'] ?? [];
+    final int correctIndex = questionData['correctIndex'] ?? 0;
+    int total = questions.length;
 
-        // --- قراءة نقاط الخصم مباشرة من قاعدة البيانات ---
-        int oppScore = widget.isPlayer1 ? (data['player2Score'] ?? 0) : (data['player1Score'] ?? 0);
+    final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
+    final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
+    final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
+    final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
 
-        // إذا كان هذا اللاعب قد أنهى التحدي وينتظر
-        if (_isWaitingForOpponent) {
-          return _buildWaitingScreen();
-        }
-
-        // --- بناء شاشة التحدي النشطة ---
-        final questions = widget.roomData['questions'] ?? [];
-        if (questions.isEmpty) return const Scaffold(body: Center(child: Text('لا توجد أسئلة')));
-
-        final questionData = questions[currentIndex];
-        final String questionText = questionData['question'] ?? '';
-        final List options = questionData['options'] ?? [];
-        final int correctIndex = questionData['correctIndex'] ?? 0;
-        int total = questions.length;
-
-        final myName = widget.isPlayer1 ? widget.roomData['player1Name'] : widget.roomData['player2Name'];
-        final oppName = widget.isPlayer1 ? widget.roomData['player2Name'] : widget.roomData['player1Name'];
-        final myPhoto = widget.isPlayer1 ? widget.roomData['player1Photo'] : widget.roomData['player2Photo'];
-        final oppPhoto = widget.isPlayer1 ? widget.roomData['player2Photo'] : widget.roomData['player1Photo'];
-
-        return Scaffold(
-          appBar: AppBar(
-            title: Text('تحدي: ${widget.subjectName}'),
-            backgroundColor: Colors.deepOrange,
-            actions: [
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    '$_questionSeconds ث',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('تحدي: ${widget.subjectName}'),
+        backgroundColor: Colors.deepOrange,
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                '$_questionSeconds ث',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
               ),
-            ],
+            ),
           ),
-          body: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.amber,
-                              backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
-                              child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              ],
-                            ),
-                          ],
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.amber,
+                          backgroundImage: (myPhoto != null && myPhoto.isNotEmpty) ? NetworkImage(myPhoto) : null,
+                          child: (myPhoto == null || myPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
                         ),
-                        const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
-                        Row(
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                // نقاط الخصم تتحدث هنا مباشرة
-                                Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Colors.blueGrey,
-                              backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
-                              child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
-                            ),
+                            Text(myName ?? 'أنت', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('نقاطك: $myScore', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Chip(label: Text('نقاطك: $myScore'), backgroundColor: Colors.amber.shade100),
-                    Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
+                    const Text('VS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                    Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(oppName ?? 'الخصم', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('نقاط الخصم: $oppScore', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.blueGrey,
+                          backgroundImage: (oppPhoto != null && oppPhoto.isNotEmpty) ? NetworkImage(oppPhoto) : null,
+                          child: (oppPhoto == null || oppPhoto.isEmpty) ? const Icon(Icons.person, size: 20, color: Colors.white) : null,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 15),
-                Card(
-                  elevation: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      questionText,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      Color btnColor = Colors.white;
-                      if (answered) {
-                        if (index == correctIndex) {
-                          btnColor = Colors.green.shade200;
-                        } else if (index == selectedOptionIndex) {
-                          btnColor = Colors.red.shade200;
-                        }
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: btnColor,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            alignment: Alignment.centerRight,
-                          ),
-                          onPressed: () => _answerQuestion(index),
-                          child: Text(
-                            '${_getOptionPrefix(index)} ${options[index]}',
-                            style: const TextStyle(fontSize: 16),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                if (answered)
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepOrange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: _nextQuestion,
-                    child: Text(
-                      currentIndex == total - 1 ? 'إنهاء وانتظار النتيجة' : 'السؤال التالي',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Chip(label: Text('نقاطك: $myScore'), backgroundColor: Colors.amber.shade100),
+                Chip(label: Text('السؤال ${currentIndex + 1}/$total'), backgroundColor: Colors.green.shade100),
               ],
             ),
-          );
-        },
+            const SizedBox(height: 15),
+            Card(
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  questionText,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: ListView.builder(
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  Color btnColor = Colors.white;
+                  if (answered) {
+                    if (index == correctIndex) {
+                      btnColor = Colors.green.shade200;
+                    } else if (index == selectedOptionIndex) {
+                      btnColor = Colors.red.shade200;
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: btnColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        alignment: Alignment.centerRight,
+                      ),
+                      onPressed: () => _answerQuestion(index),
+                      child: Text(
+                        '${_getOptionPrefix(index)} ${options[index]}',
+                        style: const TextStyle(fontSize: 16),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (answered)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _nextQuestion,
+                child: Text(
+                  currentIndex == total - 1 ? 'إنهاء وانتظار النتيجة' : 'السؤال التالي',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ==========================================
-// 8. شاشة النتائج النهائية التفصيلية (تم تحويلها لـ Stateless لإزالة التحميل كلياً)
+// 8. شاشة النتائج النهائية التفصيلية 
 // ==========================================
 
 class BattleResultsScreen extends StatelessWidget {
@@ -2610,4 +2607,3 @@ class BattleResultsScreen extends StatelessWidget {
     );
   }
 }
- 
