@@ -11,6 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
+import 'electronic_exams_screen.dart'; // تأكد من أن هذا هو اسم ملف سوق الكتب الفعلي للوصول إلى NotificationsScreen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -428,12 +429,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('منصة القانون'),
         backgroundColor: AppColors.primary,
         actions: [
+          // إضافة جرس الإشعارات الموحد الخاص بالمنصة وسوق الكتب
+          StreamBuilder<QuerySnapshot>(
+            stream: uid.isNotEmpty
+                ? FirebaseFirestore.instance
+                    .collection('market_notifications')
+                    .where('userId', isEqualTo: uid)
+                    .where('isRead', isEqualTo: false)
+                    .snapshots()
+                : const Stream.empty(),
+            builder: (context, snapshot) {
+              bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
+                    tooltip: 'الإشعارات والأحداث',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                    },
+                  ),
+                  if (hasUnread)
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search, color: AppColors.accent),
             onPressed: _showUserSearchDialog,
