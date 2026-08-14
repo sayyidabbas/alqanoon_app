@@ -455,7 +455,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
                     tooltip: 'الإشعارات والأحداث',
                     onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationsScreen()));
                     },
                   ),
                   if (hasUnread)
