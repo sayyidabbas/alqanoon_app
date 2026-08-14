@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:convert'; // تمت الإضافة لفك وتشفير الصور (Base64)
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../constants/app_colors.dart';
 
-// دالة مساعدة لعرض غلاف الكتاب سواء كان Base64 أو رابط إنترنت
+// دالة مساعدة لعرض غلاف الكتاب
 Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRadius? borderRadius}) {
   if (imageUrl == 'default' || imageUrl.isEmpty) {
     return Container(
@@ -25,7 +25,6 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
 
   Widget imageContent;
   if (imageUrl.startsWith('data:image')) {
-    // عرض الصورة المشفرة Base64
     final base64Str = imageUrl.split(',').last;
     imageContent = Image.memory(
       base64Decode(base64Str),
@@ -35,7 +34,6 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
       errorBuilder: (ctx, err, stack) => const Icon(Icons.error, color: Colors.red),
     );
   } else {
-    // عرض الصورة من رابط
     imageContent = CachedNetworkImage(
       imageUrl: imageUrl,
       width: width,
@@ -50,6 +48,29 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
     borderRadius: borderRadius ?? BorderRadius.zero,
     child: imageContent,
   );
+}
+
+// دالة ذكية لفتح الروابط (واتساب / تليجرام)
+Future<void> _launchContactUrl(BuildContext context, String type, String contactInfo) async {
+  String url = '';
+  if (type == 'whatsapp') {
+    // تنظيف رقم الهاتف
+    String cleanPhone = contactInfo.replaceAll(RegExp(r'[^\d+]'), '');
+    url = 'https://wa.me/$cleanPhone';
+  } else if (type == 'telegram') {
+    // تنظيف معرف التليجرام من علامة @
+    String cleanTg = contactInfo.replaceAll('@', '').trim();
+    url = 'https://t.me/$cleanTg';
+  }
+
+  final Uri uri = Uri.parse(url);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } else {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر فتح التطبيق، تأكد من صحة البيانات.')));
+    }
+  }
 }
 
 // ==========================================
@@ -220,7 +241,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
 }
 
 // ==========================================
-// اختيار المرحلة الدراسية (للإضافة أو التصفح)
+// اختيار المرحلة الدراسية 
 // ==========================================
 
 class SelectStageScreen extends StatelessWidget {
@@ -267,7 +288,7 @@ class SelectStageScreen extends StatelessWidget {
 }
 
 // ==========================================
-// 1. مسار البائع (إضافة كتاب + رفع صورة Base64)
+// 1. مسار البائع (إضافة كتاب)
 // ==========================================
 
 class AddBookFormScreen extends StatefulWidget {
@@ -289,15 +310,10 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
 
   String? _selectedSubject;
   bool _isFree = false;
-  bool _isLoading = false;
   File? _imageFile;
 
-  // دالة اختيار الصورة بجودة منخفضة لتقليل حجم النص (Base64)
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(
-      source: ImageSource.gallery, 
-      imageQuality: 40 // ضغط الصورة لكي لا تتجاوز حدود Firestore
-    );
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 40);
     if (pickedFile != null) {
       setState(() {
         _imageFile = File(pickedFile.path);
@@ -316,13 +332,26 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    // إظهار واجهة التحميل التفاعلية
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.amber),
+            SizedBox(height: 20),
+            Text('انتظر قليلاً، جاري معالجة ورفع كتابك...', textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest_uid';
       String imageUrl = 'default';
 
-      // تحويل الصورة إلى نص Base64 (كما في كود البروفايل)
       if (_imageFile != null) {
         final bytes = await _imageFile!.readAsBytes();
         final base64String = base64Encode(bytes);
@@ -341,27 +370,29 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'telegram': _telegramController.text.trim(),
         'sellerUid': uid,
         'buyerUid': null,
+        'buyerName': null,
+        'buyerContact': null,
         'status': 'pending',
-        'imageUrl': imageUrl, // تم تخزين الصورة كنص مباشرة في قاعدة البيانات
+        'imageUrl': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
+        Navigator.pop(context); // إغلاق التحميل
         Navigator.pop(context); // العودة
         Navigator.pop(context); // العودة للرئيسية
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
-            title: const Text('تم الإرسال بنجاح', textAlign: TextAlign.right),
-            content: const Text('تم إرسال كتابك للإدارة للمراجعة. سيظهر في السوق فور الموافقة عليه.', textAlign: TextAlign.right),
+            title: const Text('🎉 تم الإرسال بنجاح', textAlign: TextAlign.right),
+            content: const Text('تم إرسال كتابك للإدارة للمراجعة.\nسيصلك إشعار (سيظهر في ملفك) فور الموافقة عليه.', textAlign: TextAlign.right),
             actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('حسناً'))],
           ),
         );
       }
     } catch (e) {
+      Navigator.pop(context); // إغلاق التحميل
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -369,138 +400,133 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('عرض كتاب - ${widget.stageName}'), backgroundColor: AppColors.primary),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Center(
+              child: GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  height: 160,
+                  width: 120,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.amber, width: 2, style: BorderStyle.solid),
+                  ),
+                  child: _imageFile != null
+                      ? ClipRRect(borderRadius: BorderRadius.circular(13), child: Image.file(_imageFile!, fit: BoxFit.cover))
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_a_photo, color: AppColors.primary, size: 40),
+                            SizedBox(height: 8),
+                            Text('أضف الغلاف', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
+            const Text('المعلومات الأساسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _titleController,
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(labelText: 'اسم الكتاب', border: OutlineInputBorder()),
+              validator: (v) => v!.isEmpty ? 'مطلوب' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _authorController,
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(labelText: 'اسم المؤلف', border: OutlineInputBorder()),
+              validator: (v) => v!.isEmpty ? 'مطلوب' : null,
+            ),
+            const SizedBox(height: 15),
+            
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_${widget.stageIndex}').collection('subjects').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const LinearProgressIndicator();
+                final subjects = snapshot.data!.docs.map((e) => e['name'] as String).toList();
+                if (subjects.isEmpty) return const Text('لا توجد مواد مضافة لهذه المرحلة من قبل الإدارة', style: TextStyle(color: Colors.red), textAlign: TextAlign.right);
+                
+                return DropdownButtonFormField<String>(
+                  value: _selectedSubject,
+                  decoration: const InputDecoration(labelText: 'اختر المادة الدراسية', border: OutlineInputBorder()),
+                  items: subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, textAlign: TextAlign.right))).toList(),
+                  onChanged: (v) => setState(() => _selectedSubject = v),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 20),
+            const Text('نوع العرض', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            Row(
               children: [
-                Center(
-                  child: GestureDetector(
-                    onTap: _pickImage,
-                    child: Container(
-                      height: 160,
-                      width: 120,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.amber, width: 2, style: BorderStyle.solid),
-                      ),
-                      child: _imageFile != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(13),
-                              child: Image.file(_imageFile!, fit: BoxFit.cover),
-                            )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, color: AppColors.primary, size: 40),
-                                SizedBox(height: 8),
-                                Text('أضف الغلاف', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                    ),
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('بمبلغ مالي', textAlign: TextAlign.right),
+                    value: false,
+                    groupValue: _isFree,
+                    onChanged: (v) => setState(() => _isFree = v!),
                   ),
                 ),
-                const SizedBox(height: 25),
-                const Text('المعلومات الأساسية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _titleController,
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(labelText: 'اسم الكتاب', border: OutlineInputBorder()),
-                  validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _authorController,
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(labelText: 'اسم المؤلف', border: OutlineInputBorder()),
-                  validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                ),
-                const SizedBox(height: 15),
-                
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_${widget.stageIndex}').collection('subjects').snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const LinearProgressIndicator();
-                    final subjects = snapshot.data!.docs.map((e) => e['name'] as String).toList();
-                    if (subjects.isEmpty) return const Text('لا توجد مواد مضافة لهذه المرحلة من قبل الإدارة', style: TextStyle(color: Colors.red));
-                    
-                    return DropdownButtonFormField<String>(
-                      value: _selectedSubject,
-                      decoration: const InputDecoration(labelText: 'اختر المادة الدراسية', border: OutlineInputBorder()),
-                      items: subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, textAlign: TextAlign.right))).toList(),
-                      onChanged: (v) => setState(() => _selectedSubject = v),
-                    );
-                  },
-                ),
-                
-                const SizedBox(height: 20),
-                const Text('نوع العرض', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('بمبلغ مالي', textAlign: TextAlign.right),
-                        value: false,
-                        groupValue: _isFree,
-                        onChanged: (v) => setState(() => _isFree = v!),
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('مجاني (خيري)', textAlign: TextAlign.right),
-                        value: true,
-                        groupValue: _isFree,
-                        onChanged: (v) => setState(() => _isFree = v!),
-                      ),
-                    ),
-                  ],
-                ),
-                if (!_isFree) ...[
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _priceController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.right,
-                    decoration: const InputDecoration(labelText: 'السعر (بالدينار العراقي)', border: OutlineInputBorder(), prefixText: 'د.ع '),
-                    validator: (v) => v!.isEmpty ? 'يرجى إدخال السعر' : null,
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('مجاني (خيري)', textAlign: TextAlign.right),
+                    value: true,
+                    groupValue: _isFree,
+                    onChanged: (v) => setState(() => _isFree = v!),
                   ),
-                ],
-
-                const SizedBox(height: 20),
-                const Text('معلومات التواصل (أدخل واحدة على الأقل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _whatsappController,
-                  keyboardType: TextInputType.phone,
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(labelText: 'رقم الواتساب', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone, color: Colors.green)),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _telegramController,
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(labelText: 'معرف التليجرام (بدون @)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.send, color: Colors.blue)),
-                ),
-
-                const SizedBox(height: 30),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: _submitBook,
-                  child: const Text('عرض الكتاب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
               ],
             ),
-          ),
+            if (!_isFree) ...[
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _priceController,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(labelText: 'السعر (بالدينار العراقي)', border: OutlineInputBorder(), prefixText: 'د.ع '),
+                validator: (v) => v!.isEmpty ? 'يرجى إدخال السعر' : null,
+              ),
+            ],
+
+            const SizedBox(height: 20),
+            const Text('معلومات التواصل (أدخل واحدة على الأقل)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary), textAlign: TextAlign.right),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _whatsappController,
+              keyboardType: TextInputType.phone,
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(labelText: 'رقم الواتساب', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone, color: Colors.green)),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _telegramController,
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(labelText: 'معرف التليجرام (بدون @)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.send, color: Colors.blue)),
+            ),
+
+            const SizedBox(height: 30),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 16)),
+              onPressed: _submitBook,
+              child: const Text('عرض الكتاب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 // ==========================================
-// 2. مسار المشتري (تصفح الكتب)
+// 2. مسار المشتري (تصفح الكتب والتفاصيل)
 // ==========================================
 
 class BrowseSubjectsScreen extends StatelessWidget {
@@ -556,7 +582,7 @@ class BooksListScreen extends StatelessWidget {
             .where('status', isEqualTo: 'approved')
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('حدث خطأ في جلب البيانات', style: const TextStyle(color: Colors.white)));
+          if (snapshot.hasError) return const Center(child: Text('حدث خطأ في جلب البيانات', style: TextStyle(color: Colors.white)));
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           
           final books = snapshot.data!.docs.toList();
@@ -585,7 +611,6 @@ class BooksListScreen extends StatelessWidget {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(bookId: bookId, bookData: data))),
                   child: Row(
                     children: [
-                      // استخدام الدالة المساعدة لعرض الصورة (Base64)
                       _buildBookCover(
                         imageUrl,
                         width: 100,
@@ -635,24 +660,111 @@ class BookDetailsScreen extends StatelessWidget {
 
   const BookDetailsScreen({super.key, required this.bookId, required this.bookData});
 
-  void _requestBook(BuildContext context) async {
+  // نافذة طلب الشراء التفاعلية التي تطلب بيانات المشتري
+  void _showPurchaseDialog(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     
     if (uid == bookData['sellerUid']) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكنك طلب كتابك الخاص!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكنك طلب شراء كتابك الخاص!')));
       return;
     }
 
-    await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
-      'status': 'reserved',
-      'buyerUid': uid,
-    });
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final contactController = TextEditingController();
 
-    if (context.mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال طلب الشراء للبائع. تابعه من ملفك الشخصي.')));
-    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.primary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 20, left: 20, right: 20),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text('إتمام طلب الكتاب', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.amber)),
+              const SizedBox(height: 10),
+              const Text('يرجى كتابة اسمك ووسيلة تواصل ليتمكن البائع من مراسلتك.', style: TextStyle(color: Colors.white70), textAlign: TextAlign.right),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: nameController,
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'الاسم الكريم',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  filled: true, fillColor: Colors.white10,
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v!.isEmpty ? 'مطلوب' : null,
+              ),
+              const SizedBox(height: 15),
+              TextFormField(
+                controller: contactController,
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'رقم الهاتف أو يوزر التليجرام',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  filled: true, fillColor: Colors.white10,
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => v!.isEmpty ? 'مطلوب للتواصل' : null,
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      Navigator.pop(ctx); // إغلاق النافذة
+                      
+                      // نافذة الانتظار
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const AlertDialog(
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(color: AppColors.primary),
+                              SizedBox(height: 20),
+                              Text('جاري إرسال طلبك للبائع...'),
+                            ],
+                          ),
+                        ),
+                      );
+
+                      // إرسال الطلب وحفظ معلومات المشتري للبائع
+                      await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
+                        'status': 'reserved',
+                        'buyerUid': uid,
+                        'buyerName': nameController.text.trim(),
+                        'buyerContact': contactController.text.trim(),
+                      });
+
+                      if (context.mounted) {
+                        Navigator.pop(context); // إغلاق نافذة التحميل
+                        Navigator.pop(context); // العودة للشاشة السابقة
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
+                      }
+                    }
+                  },
+                  child: const Text('تأكيد وإرسال الطلب', style: TextStyle(fontSize: 18, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -668,7 +780,6 @@ class BookDetailsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Center(
-              // استخدام الدالة المساعدة لعرض الصورة (Base64)
               child: _buildBookCover(
                 imageUrl,
                 width: 150,
@@ -698,7 +809,7 @@ class BookDetailsScreen extends StatelessWidget {
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 15)),
                 icon: const Icon(Icons.shopping_cart, color: Colors.amber),
                 label: Text(isFree ? 'طلب الحصول على الكتاب مجاناً' : 'طلب شراء الكتاب', style: const TextStyle(fontSize: 18, color: Colors.amber)),
-                onPressed: () => _requestBook(context),
+                onPressed: () => _showPurchaseDialog(context),
               ),
             ),
           ],
@@ -767,6 +878,7 @@ class SellerBooksTab extends StatelessWidget {
         if (books.isEmpty) return const Center(child: Text('لم تقم بعرض أي كتب.'));
 
         return ListView.builder(
+          padding: const EdgeInsets.all(8),
           itemCount: books.length,
           itemBuilder: (context, index) {
             final data = books[index].data() as Map<String, dynamic>;
@@ -774,24 +886,42 @@ class SellerBooksTab extends StatelessWidget {
             String statusText = '';
             Color statusColor = Colors.grey;
 
-            if (status == 'pending') { statusText = 'قيد المراجعة'; statusColor = Colors.orange; }
-            else if (status == 'approved') { statusText = 'معروض في السوق'; statusColor = Colors.blue; }
-            else if (status == 'reserved') { statusText = 'مطلوب للشراء!'; statusColor = Colors.red; }
-            else if (status == 'sold') { statusText = 'تم البيع'; statusColor = Colors.green; }
-            else if (status == 'rejected') { statusText = 'مرفوض'; statusColor = Colors.black; }
+            if (status == 'pending') { statusText = 'قيد المراجعة لدى الإدارة ⏳'; statusColor = Colors.orange; }
+            else if (status == 'approved') { statusText = 'معروض في السوق ✅'; statusColor = Colors.blue; }
+            else if (status == 'reserved') { statusText = '🎉 يوجد مشتري مهتم!'; statusColor = Colors.red; }
+            else if (status == 'sold') { statusText = 'تم البيع بنجاح 🤝'; statusColor = Colors.green; }
+            else if (status == 'rejected') { statusText = 'تم رفض الكتاب ❌'; statusColor = Colors.black; }
 
             return Card(
-              margin: const EdgeInsets.all(8),
-              child: ListTile(
-                title: Text(data['title'] ?? ''),
-                subtitle: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
-                trailing: status == 'reserved' 
-                    ? ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                        onPressed: () => _acceptRequest(books[index].id),
-                        child: const Text('تأكيد البيع'),
+              elevation: 3,
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 5),
+                    Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 15)),
+                    
+                    // إذا كان هناك مشتري (Reserved) نظهر معلوماته للبائع
+                    if (status == 'reserved') ...[
+                      const Divider(),
+                      const Text('معلومات المشتري:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      Text('الاسم: ${data['buyerName'] ?? 'غير معروف'}', style: const TextStyle(fontSize: 15)),
+                      Text('حسابه / رقمه: ${data['buyerContact'] ?? 'غير متوفر'}', style: const TextStyle(fontSize: 15, color: Colors.blue)),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                          onPressed: () => _acceptRequest(books[index].id),
+                          child: const Text('تأكيد إتمام البيع 🤝', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
                       )
-                    : null,
+                    ]
+                  ],
+                ),
               ),
             );
           },
@@ -803,12 +933,6 @@ class SellerBooksTab extends StatelessWidget {
 
 class BuyerRequestsTab extends StatelessWidget {
   const BuyerRequestsTab({super.key});
-
-  void _launchURL(String url) async {
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -828,40 +952,43 @@ class BuyerRequestsTab extends StatelessWidget {
         if (books.isEmpty) return const Center(child: Text('ليس لديك طلبات شراء حالياً.'));
 
         return ListView.builder(
+          padding: const EdgeInsets.all(8),
           itemCount: books.length,
           itemBuilder: (context, index) {
             final data = books[index].data() as Map<String, dynamic>;
             final status = data['status'];
             
             if (status == 'sold') {
+              // البائع وافق، تم تعديل الألوان لتكون واضحة
               return Card(
                 color: Colors.green.shade50,
-                margin: const EdgeInsets.all(8),
+                elevation: 3,
+                margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('تمت الموافقة على شراء: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('✅ تمت الموافقة على طلبك: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
                       const SizedBox(height: 10),
-                      const Text('تواصل مع البائع لإتمام الاستلام:', style: TextStyle(color: Colors.green)),
+                      const Text('تواصل مع البائع لإتمام الاستلام:', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           if ((data['whatsapp'] ?? '').isNotEmpty)
                             ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                              icon: const Icon(Icons.phone),
-                              label: const Text('واتساب'),
-                              onPressed: () => _launchURL('https://wa.me/${data['whatsapp']}'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade600),
+                              icon: const Icon(Icons.phone, color: Colors.white),
+                              label: const Text('واتساب', style: TextStyle(color: Colors.white)),
+                              onPressed: () => _launchContactUrl(context, 'whatsapp', data['whatsapp']),
                             ),
                           if ((data['telegram'] ?? '').isNotEmpty)
                             ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                              icon: const Icon(Icons.send),
-                              label: const Text('تليجرام'),
-                              onPressed: () => _launchURL('https://t.me/${data['telegram']}'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade600),
+                              icon: const Icon(Icons.send, color: Colors.white),
+                              label: const Text('تليجرام', style: TextStyle(color: Colors.white)),
+                              onPressed: () => _launchContactUrl(context, 'telegram', data['telegram']),
                             ),
                         ],
                       ),
@@ -871,10 +998,11 @@ class BuyerRequestsTab extends StatelessWidget {
               );
             } else {
               return Card(
-                margin: const EdgeInsets.all(8),
+                elevation: 3,
+                margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
-                  title: Text(data['title'] ?? ''),
-                  subtitle: const Text('بانتظار موافقة البائع...', style: TextStyle(color: Colors.orange)),
+                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('بانتظار موافقة أو تواصل البائع معك... ⏳', textAlign: TextAlign.right, style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                 ),
               );
             }
@@ -886,7 +1014,7 @@ class BuyerRequestsTab extends StatelessWidget {
 }
 
 // ==========================================
-// 4. البوابة الأمنية (لوحة تحكم الإدارة)
+// 4. البوابة الأمنية (لوحة تحكم الإدارة الديناميكية)
 // ==========================================
 
 class AdminMarketDashboard extends StatelessWidget {
@@ -896,24 +1024,51 @@ class AdminMarketDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('إدارة السوق القانوني'), backgroundColor: AppColors.primary),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildAdminCard(context, 'إدارة المواد الدراسية', Icons.library_books, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminManageStagesScreen()))),
-          _buildAdminCard(context, 'الكتب قيد المراجعة', Icons.pending_actions, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'pending')))),
-          _buildAdminCard(context, 'الكتب المقبولة (في السوق)', Icons.check_circle, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'approved')))),
-          _buildAdminCard(context, 'سجل الكتب المباعة', Icons.monetization_on, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'sold')))),
-        ],
+      // StreamBuilder لمعرفة أعداد الطلبات بشكل مباشر
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('book_market').snapshots(),
+        builder: (context, snapshot) {
+          int pendingCount = 0;
+          int approvedCount = 0;
+          int soldCount = 0;
+
+          if (snapshot.hasData) {
+            for (var doc in snapshot.data!.docs) {
+              final status = doc['status'];
+              if (status == 'pending') pendingCount++;
+              if (status == 'approved') approvedCount++;
+              if (status == 'sold') soldCount++;
+            }
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildAdminCard(context, 'إدارة المواد الدراسية', null, Icons.library_books, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminManageStagesScreen()))),
+              _buildAdminCard(context, 'الكتب قيد المراجعة', pendingCount, Icons.pending_actions, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'pending')))),
+              _buildAdminCard(context, 'الكتب المقبولة (في السوق)', approvedCount, Icons.check_circle, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'approved')))),
+              _buildAdminCard(context, 'سجل الكتب المباعة', soldCount, Icons.monetization_on, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewBooksScreen(status: 'sold')))),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildAdminCard(BuildContext context, String title, IconData icon, VoidCallback onTap) {
+  Widget _buildAdminCard(BuildContext context, String title, int? count, IconData icon, VoidCallback onTap) {
     return Card(
+      elevation: 3,
+      margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: Icon(icon, color: AppColors.primary),
-        title: Text(title, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
-        trailing: const Icon(Icons.arrow_back_ios, size: 16),
+        leading: Icon(icon, color: AppColors.primary, size: 30),
+        title: Text(title, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        trailing: count != null && count > 0
+            ? Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                child: Text('$count', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
+            : const Icon(Icons.arrow_back_ios, size: 16),
         onTap: onTap,
       ),
     );
@@ -929,10 +1084,12 @@ class AdminManageStagesScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('إدارة مواد المراحل'), backgroundColor: AppColors.primary),
       body: ListView.builder(
+        padding: const EdgeInsets.all(12),
         itemCount: stages.length,
         itemBuilder: (context, index) => Card(
           child: ListTile(
-            title: Text(stages[index], textAlign: TextAlign.right),
+            title: Text(stages[index], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+            trailing: const Icon(Icons.arrow_back_ios, size: 16),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminManageSubjectsScreen(stageIndex: index + 1, stageName: stages[index]))),
           ),
         ),
@@ -951,8 +1108,8 @@ class AdminManageSubjectsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('إضافة مادة للسوق'),
-        content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'اسم المادة')),
+        title: const Text('إضافة مادة للسوق', textAlign: TextAlign.right),
+        content: TextField(controller: controller, decoration: const InputDecoration(hintText: 'اسم المادة'), textAlign: TextAlign.right),
         actions: [
           ElevatedButton(
             onPressed: () async {
@@ -972,19 +1129,29 @@ class AdminManageSubjectsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('مواد $stageName'), backgroundColor: AppColors.primary),
-      floatingActionButton: FloatingActionButton(onPressed: () => _addSubject(context), child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.amber,
+        onPressed: () => _addSubject(context), 
+        icon: const Icon(Icons.add, color: AppColors.primary),
+        label: const Text('إضافة مادة', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final docs = snapshot.data!.docs;
+          if (docs.isEmpty) return const Center(child: Text('لا توجد مواد مضافة'));
+          
           return ListView.builder(
+            padding: const EdgeInsets.all(12),
             itemCount: docs.length,
-            itemBuilder: (context, index) => ListTile(
-              title: Text(docs[index]['name'], textAlign: TextAlign.right),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').doc(docs[index].id).delete(),
+            itemBuilder: (context, index) => Card(
+              child: ListTile(
+                title: Text(docs[index]['name'], textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => FirebaseFirestore.instance.collection('market_settings').doc('stage_$stageIndex').collection('subjects').doc(docs[index].id).delete(),
+                ),
               ),
             ),
           );
@@ -998,8 +1165,11 @@ class AdminReviewBooksScreen extends StatelessWidget {
   final String status;
   const AdminReviewBooksScreen({super.key, required this.status});
 
-  void _changeStatus(String id, String newStatus) async {
+  void _changeStatus(BuildContext context, String id, String newStatus) async {
+    // إظهار تحميل
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
     await FirebaseFirestore.instance.collection('book_market').doc(id).update({'status': newStatus});
+    if (context.mounted) Navigator.pop(context); // إغلاق التحميل
   }
 
   @override
@@ -1020,9 +1190,10 @@ class AdminReviewBooksScreen extends StatelessWidget {
             return t2.compareTo(t1); 
           });
 
-          if (books.isEmpty) return const Center(child: Text('لا توجد بيانات.'));
+          if (books.isEmpty) return const Center(child: Text('لا توجد بيانات.', style: TextStyle(fontSize: 16)));
 
           return ListView.builder(
+            padding: const EdgeInsets.all(8),
             itemCount: books.length,
             itemBuilder: (context, index) {
               final data = books[index].data() as Map<String, dynamic>;
@@ -1030,12 +1201,12 @@ class AdminReviewBooksScreen extends StatelessWidget {
               final imageUrl = data['imageUrl'] ?? 'default';
               
               return Card(
-                margin: const EdgeInsets.all(8),
+                elevation: 4,
+                margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
                     children: [
-                      // استخدام الدالة المساعدة لعرض الصورة (Base64)
                       _buildBookCover(
                         imageUrl,
                         width: 80,
@@ -1048,9 +1219,9 @@ class AdminReviewBooksScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text('الكتاب: ${data['title']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            Text('المرحلة: ${data['stageName']} | المادة: ${data['subjectName']}'),
-                            Text('السعر: ${data['isFree'] == true ? 'مجاني' : data['price']}'),
-                            Text('واتس: ${data['whatsapp']} | تليجرام: ${data['telegram']}'),
+                            Text('المرحلة: ${data['stageName']} | المادة: ${data['subjectName']}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                            Text('السعر: ${data['isFree'] == true ? 'مجاني' : data['price']}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                            Text('واتس: ${data['whatsapp']} | تليجرام: ${data['telegram']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
                             if (status == 'pending') ...[
                               const Divider(),
                               Row(
@@ -1058,13 +1229,13 @@ class AdminReviewBooksScreen extends StatelessWidget {
                                 children: [
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                    onPressed: () => _changeStatus(id, 'rejected'),
-                                    child: const Text('رفض'),
+                                    onPressed: () => _changeStatus(context, id, 'rejected'),
+                                    child: const Text('رفض', style: TextStyle(color: Colors.white)),
                                   ),
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                    onPressed: () => _changeStatus(id, 'approved'),
-                                    child: const Text('قبول ونشر'),
+                                    onPressed: () => _changeStatus(context, id, 'approved'),
+                                    child: const Text('قبول ونشر', style: TextStyle(color: Colors.white)),
                                   ),
                                 ],
                               ),
@@ -1073,8 +1244,8 @@ class AdminReviewBooksScreen extends StatelessWidget {
                               const Divider(),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                onPressed: () => _changeStatus(id, 'rejected'),
-                                child: const Text('إزالة من السوق'),
+                                onPressed: () => _changeStatus(context, id, 'rejected'),
+                                child: const Text('إزالة من السوق', style: TextStyle(color: Colors.white)),
                               )
                             ]
                           ],
@@ -1091,4 +1262,3 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
- 
