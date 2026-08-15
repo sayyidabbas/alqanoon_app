@@ -13,7 +13,7 @@ import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/notification_bell.dart'; 
-import 'secure_admin_dashboard_screen.dart'; // استدعاء لوحة التحكم الجديدة
+import 'secure_admin_dashboard_screen.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -641,19 +641,19 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          // ----- الإضافة الجديدة هنا: زر غرفة العمليات (الإدارة الحصينة) -----
           ListTile(
             leading: const Icon(Icons.security, color: Colors.amber),
             title: const Text('لوحة الإدارة الحصينة', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
             onTap: () {
-              Navigator.pop(context); // إغلاق القائمة
+              Navigator.pop(context); 
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => SecureAdminDashboardScreen(
                     officialPosts: _officialPosts,
                     announcements: _announcements,
-                    onAddPost: (content, imageFile) {
+                    // التعديل هنا: تحديد النوع بوضوح String و File?
+                    onAddPost: (String content, File? imageFile) {
                       setState(() {
                         _officialPosts.insert(
                           0,
@@ -706,7 +706,6 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          // -----------------------------------------------------------------
           ListTile(
             leading: const Icon(Icons.info, color: AppColors.accent),
             title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
