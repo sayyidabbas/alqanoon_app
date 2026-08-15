@@ -11,7 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
-import '../services_screens/electronic_exams_screen.dart'; // تأكد من أن NotificationsScreen موجودة هنا بالفعل
+import '../services_screens/electronic_exams_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -346,6 +346,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           : StreamBuilder<QuerySnapshot>(
                               stream: FirebaseFirestore.instance.collection('users').snapshots(),
                               builder: (context, snapshot) {
+                                // حماية إضافية للبحث
+                                if (snapshot.hasError) {
+                                  return const Center(
+                                    child: Text('خطأ في الاتصال بالخادم', style: TextStyle(color: Colors.redAccent)),
+                                  );
+                                }
                                 if (snapshot.connectionState == ConnectionState.waiting) {
                                   return const Center(
                                     child: CircularProgressIndicator(color: AppColors.accent),
@@ -446,6 +452,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     .snapshots()
                 : const Stream.empty(),
             builder: (context, snapshot) {
+              // إضافة معالجة الأخطاء هنا لضمان عدم تعطل الجرس
+              if (snapshot.hasError) {
+                return IconButton(
+                  icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                  },
+                );
+              }
+
               bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
               return Stack(
                 alignment: Alignment.center,
@@ -725,6 +741,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
                 : null,
             builder: (context, snapshot) {
+              // حماية معلومات المستخدم في القائمة الجانبية
+              if (snapshot.hasError) {
+                return UserAccountsDrawerHeader(
+                   decoration: const BoxDecoration(color: AppColors.primary),
+                   accountName: const Text("خطأ في التحميل", style: TextStyle(color: Colors.red)),
+                   accountEmail: const Text(""),
+                );
+              }
+
               String name = currentUser?.displayName ?? "طالب قانون";
               String email = currentUser?.email ?? "";
               String? photoUrl;
