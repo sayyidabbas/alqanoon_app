@@ -2,8 +2,6 @@ import 'dart:async' as async_lib;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
 
 class QuestionBankScreen extends StatefulWidget {
@@ -21,79 +19,6 @@ class _QuestionBankScreenState extends State<QuestionBankScreen> {
     'المرحلة الرابعة',
   ];
 
-  String get _userAdminKey {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
-    return 'is_admin_unlocked_qb_$uid';
-  }
-
-  Future<String> _getAdminPin() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('admin').get();
-    if (doc.exists && doc.data()!.containsKey('pin')) {
-      return doc.data()!['pin'].toString();
-    }
-    return '1234';
-  }
-
-  Future<void> _handleAdminAccess(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool isAdminUnlocked = prefs.getBool(_userAdminKey) ?? false;
-
-    if (isAdminUnlocked) {
-      _navigateToAdminDashboard();
-    } else {
-      _showPasswordDialog(prefs);
-    }
-  }
-
-  void _showPasswordDialog(SharedPreferences prefs) {
-    final TextEditingController passwordController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('البوابة الآمنة - بنك الأسئلة', textAlign: TextAlign.right),
-        content: TextField(
-          controller: passwordController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.right,
-          decoration: const InputDecoration(hintText: 'أدخل كلمة السر'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final currentPin = await _getAdminPin();
-              if (passwordController.text.trim() == currentPin) {
-                await prefs.setBool(_userAdminKey, true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _navigateToAdminDashboard();
-                }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('كلمة السر غير صحيحة!')),
-                  );
-                }
-              }
-            },
-            child: const Text('دخول'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _navigateToAdminDashboard() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AdminQbStageSelectionScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,13 +26,7 @@ class _QuestionBankScreenState extends State<QuestionBankScreen> {
       appBar: AppBar(
         title: const Text('بنك الأسئلة'),
         backgroundColor: AppColors.primary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings, color: Colors.amber),
-            tooltip: 'البوابة الآمنة',
-            onPressed: () => _handleAdminAccess(context),
-          ),
-        ],
+        // تمت إزالة زر البوابة الآمنة من هنا
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -138,45 +57,11 @@ class _QuestionBankScreenState extends State<QuestionBankScreen> {
 }
 
 // ==========================================
-// 1. لوحة تحكم الأدمن لبنك الأسئلة
+// 1. لوحة تحكم الأدمن لبنك الأسئلة (سيتم فتحها من اللوحة الحصينة المركزية)
 // ==========================================
 
 class AdminQbStageSelectionScreen extends StatelessWidget {
   const AdminQbStageSelectionScreen({super.key});
-
-  void _changeAdminPinDialog(BuildContext context) {
-    final pinController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تغيير كلمة سر البوابة الآمنة', textAlign: TextAlign.right),
-        content: TextField(
-          controller: pinController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'أدخل كلمة السر الجديدة'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              if (pinController.text.trim().isNotEmpty) {
-                await FirebaseFirestore.instance.collection('settings').doc('admin').set({
-                  'pin': pinController.text.trim(),
-                }, SetOptions(merge: true));
-                if (context.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم تغيير كلمة السر بنجاح')),
-                  );
-                }
-              }
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,13 +71,7 @@ class AdminQbStageSelectionScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('إدارة بنك الأسئلة (الأدمن)'),
         backgroundColor: AppColors.primary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.lock_reset, color: Colors.white),
-            tooltip: 'تغيير كلمة السر',
-            onPressed: () => _changeAdminPinDialog(context),
-          ),
-        ],
+        // تمت إزالة زر تغيير كلمة المرور الفرعي من هنا
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -1304,4 +1183,4 @@ class _QuizPracticeScreenState extends State<QuizPracticeScreen> {
   }
 
   int get _remaining => _remainingSeconds;
-}
+} 
