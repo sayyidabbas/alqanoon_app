@@ -11,7 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
-import 'notification_bell.dart'; // <--- تم استيراد جرس الإشعارات المستقل هنا
+import '../widgets/notification_bell.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -440,7 +440,6 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('منصة القانون'),
         backgroundColor: AppColors.primary,
         actions: [
-          // هنا تم وضع ملف الإشعارات المستقل ليكون الكود نظيفاً!
           const NotificationBell(),
           
           IconButton(
