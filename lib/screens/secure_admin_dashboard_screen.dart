@@ -1,3 +1,4 @@
+import 'dart:io'; // تم إضافة هذه المكتبة لحل مشكلة الـ File
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,11 +7,11 @@ import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 import 'admin_panel_screen.dart';
 import '../services_screens/electronic_exams_screen.dart';
-import '../services_screens/question_bank_screen.dart';
-import '../services_screens/study_materials_screen.dart';
+// تم إعطاء ألقاب للملفات لحل مشكلة تعارض الأسماء
+import '../services_screens/question_bank_screen.dart' as qb; 
+import '../services_screens/study_materials_screen.dart' as sm;
 
 class SecureAdminDashboardScreen extends StatefulWidget {
-  // تمرير بيانات الواجهة الرئيسية للتحكم بها من هنا
   final List<PostModel> officialPosts;
   final List<String> announcements;
   final Function(String, File?) onAddPost;
@@ -44,7 +45,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
 
   Future<void> _verifyPin() async {
     final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-    String correctPin = '1234'; // الرمز الافتراضي
+    String correctPin = '1234'; 
     if (doc.exists && doc.data()!.containsKey('pin')) {
       correctPin = doc.data()!['pin'].toString();
     }
@@ -74,12 +75,10 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
       return;
     }
 
-    // توليد كود OTP من 6 أرقام
     String otpCode = (Random().nextInt(900000) + 100000).toString();
     
-    // حفظ الكود في فايربيس (في تطبيق حقيقي يتم إرساله للإيميل عبر سيرفر)
     await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set({'current_otp': otpCode}, SetOptions(merge: true));
-    debugPrint('كود الاسترداد المرسل للإيميل: $otpCode'); // للاختبار
+    debugPrint('كود الاسترداد المرسل للإيميل: $otpCode'); 
 
     if (mounted) {
       final otpController = TextEditingController();
@@ -108,7 +107,6 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
               onPressed: () async {
                 final checkDoc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
                 if (checkDoc.data()!['current_otp'] == otpController.text.trim()) {
-                  // تصفير الرمز وإلغاء الـ OTP
                   await FirebaseFirestore.instance.collection('settings').doc('secure_admin').update({'pin': '1234', 'current_otp': FieldValue.delete()});
                   if (ctx.mounted) {
                     Navigator.pop(ctx);
@@ -196,7 +194,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
         children: [
           _buildControlCard(
             title: 'تحكم الواجهة الرئيسية',
-            icon: Icons.home_repair_schema,
+            icon: Icons.build, // تم تعديل اسم الأيقونة هنا
             color: Colors.blue,
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen(
@@ -225,7 +223,8 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
             icon: Icons.quiz,
             color: Colors.green,
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminQbStageSelectionScreen()));
+              // تم تعديل الاستدعاء وحذف كلمة const المسببة للخطأ
+              Navigator.push(context, MaterialPageRoute(builder: (_) => qb.AdminQbStageSelectionScreen()));
             },
           ),
           _buildControlCard(
@@ -233,7 +232,8 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
             icon: Icons.library_books,
             color: Colors.purple,
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminStageSelectionScreen()));
+              // تم التعديل لمنع تعارض الأسماء
+              Navigator.push(context, MaterialPageRoute(builder: (_) => sm.AdminStageSelectionScreen()));
             },
           ),
         ],
@@ -261,7 +261,6 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
   }
 }
 
-// شاشة إعدادات الأمان (تغيير الرمز وربط الإيميل)
 class SecureSettingsScreen extends StatefulWidget {
   const SecureSettingsScreen({super.key});
   @override
@@ -328,4 +327,4 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
       ),
     );
   }
-}
+} 
