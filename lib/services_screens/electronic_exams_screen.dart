@@ -19,7 +19,6 @@ import '../constants/app_colors.dart';
 Future<void> sendInAppNotification(String userId, String title, String body, {String? type}) async {
   if (userId.isEmpty) return;
   
-  // 1. الحفظ في قاعدة البيانات (الإشعار الداخلي)
   await FirebaseFirestore.instance.collection('market_notifications').add({
     'userId': userId,
     'title': title,
@@ -29,7 +28,6 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // 2. إرسال الإشعار الخارجي (Push Notification) عبر النظام الحديث FCM v1
   try {
     DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
     if (userDoc.exists && userDoc.data() != null) {
@@ -37,7 +35,6 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
       String? fcmToken = userData['fcmToken'];
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
-        
         final serviceAccountJson = {
           "type": "service_account",
           "project_id": "law-platform-55632",
@@ -62,7 +59,6 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
         final String projectId = serviceAccountJson['project_id']!;
         final String endpoint = 'https://fcm.googleapis.com/v1/projects/$projectId/messages:send';
 
-        // الإرسال مع الأولوية العالية (التعديل الجديد هنا)
         final response = await client.post(
           Uri.parse(endpoint),
           headers: <String, String>{
@@ -76,14 +72,12 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
                   'title': title,
                   'body': body,
                 },
-                // إجبار هواتف أندرويد على إظهار الإشعار حتى لو كان التطبيق مغلقاً
                 'android': <String, dynamic>{
                   'priority': 'high',
                   'notification': <String, dynamic>{
                     'sound': 'default',
                   },
                 },
-                // توافقية إضافية للأجهزة الأخرى
                 'apns': <String, dynamic>{
                   'payload': <String, dynamic>{
                     'aps': <String, dynamic>{
@@ -191,67 +185,6 @@ class BookMarketScreen extends StatefulWidget {
 }
 
 class _BookMarketScreenState extends State<BookMarketScreen> {
-  String get _userAdminKey {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
-    return 'is_admin_unlocked_market_$uid';
-  }
-
-  Future<void> _handleAdminAccess(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool isAdminUnlocked = prefs.getBool(_userAdminKey) ?? false;
-
-    if (isAdminUnlocked) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMarketDashboard()));
-    } else {
-      _showPasswordDialog(prefs);
-    }
-  }
-
-  void _showPasswordDialog(SharedPreferences prefs) {
-    final TextEditingController passwordController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E2235),
-        title: const Text('البوابة الآمنة للإدارة', textAlign: TextAlign.right, style: TextStyle(color: Colors.amber)),
-        content: TextField(
-          controller: passwordController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.right,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(hintText: 'أدخل كلمة السر', hintStyle: TextStyle(color: Colors.white54)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-            onPressed: () async {
-              final doc = await FirebaseFirestore.instance.collection('settings').doc('admin_market').get();
-              String currentPin = '1234';
-              if (doc.exists && doc.data()!.containsKey('pin')) {
-                currentPin = doc.data()!['pin'].toString();
-              }
-              
-              if (passwordController.text.trim() == currentPin) {
-                await prefs.setBool(_userAdminKey, true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMarketDashboard()));
-                }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة السر غير صحيحة!')));
-                }
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -266,11 +199,7 @@ class _BookMarketScreenState extends State<BookMarketScreen> {
             tooltip: 'مشترياتي ومبيعاتي',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserMarketProfileScreen())),
           ),
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings_rounded, color: Colors.amber),
-            tooltip: 'البوابة الآمنة',
-            onPressed: () => _handleAdminAccess(context),
-          ),
+          // تمت إزالة زر البوابة الآمنة من هنا
         ],
       ),
       body: Container(
@@ -1296,6 +1225,7 @@ class BuyerRequestsTab extends StatelessWidget {
   }
 }
 
+// لوحة التحكم (سيتم فتحها من المركزية)
 class AdminMarketDashboard extends StatefulWidget {
   const AdminMarketDashboard({super.key});
 
@@ -1633,5 +1563,4 @@ class AdminReviewBooksScreen extends StatelessWidget {
       ),
     );
   }
-}
- 
+} 
