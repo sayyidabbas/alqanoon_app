@@ -11,7 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
-import '../services_screens/electronic_exams_screen.dart';
+import 'notification_bell.dart'; // <--- تم استيراد جرس الإشعارات المستقل هنا
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -346,7 +346,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           : StreamBuilder<QuerySnapshot>(
                               stream: FirebaseFirestore.instance.collection('users').snapshots(),
                               builder: (context, snapshot) {
-                                // حماية إضافية للبحث
                                 if (snapshot.hasError) {
                                   return const Center(
                                     child: Text('خطأ في الاتصال بالخادم', style: TextStyle(color: Colors.redAccent)),
@@ -435,57 +434,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('منصة القانون'),
         backgroundColor: AppColors.primary,
         actions: [
-          StreamBuilder<QuerySnapshot>(
-            stream: uid.isNotEmpty
-                ? FirebaseFirestore.instance
-                    .collection('market_notifications')
-                    .where('userId', isEqualTo: uid)
-                    .where('isRead', isEqualTo: false)
-                    .snapshots()
-                : const Stream.empty(),
-            builder: (context, snapshot) {
-              // إضافة معالجة الأخطاء هنا لضمان عدم تعطل الجرس
-              if (snapshot.hasError) {
-                return IconButton(
-                  icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
-                  },
-                );
-              }
-
-              bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
-                    tooltip: 'الإشعارات والأحداث',
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
-                    },
-                  ),
-                  if (hasUnread)
-                    Positioned(
-                      top: 12,
-                      right: 12,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+          // هنا تم وضع ملف الإشعارات المستقل ليكون الكود نظيفاً!
+          const NotificationBell(),
+          
           IconButton(
             icon: const Icon(Icons.search, color: AppColors.accent),
             onPressed: _showUserSearchDialog,
@@ -741,12 +698,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
                 : null,
             builder: (context, snapshot) {
-              // حماية معلومات المستخدم في القائمة الجانبية
               if (snapshot.hasError) {
-                return UserAccountsDrawerHeader(
-                   decoration: const BoxDecoration(color: AppColors.primary),
-                   accountName: const Text("خطأ في التحميل", style: TextStyle(color: Colors.red)),
-                   accountEmail: const Text(""),
+                return const UserAccountsDrawerHeader(
+                   decoration: BoxDecoration(color: AppColors.primary),
+                   accountName: Text("خطأ في التحميل", style: TextStyle(color: Colors.red)),
+                   accountEmail: Text(""),
                 );
               }
 
