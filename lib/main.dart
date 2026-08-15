@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 1. إضافة مكتبة الإشعارات
+import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-// 2. دالة الخلفية: هذه الدالة تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
+// دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // يجب تهيئة فايربيس داخل دالة الخلفية لضمان عملها بشكل مستقل
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -62,7 +61,7 @@ void main() async {
     }
   }
 
-  // 3. إعدادات الإشعارات الخارجية (Push Notifications)
+  // إعدادات الإشعارات الخارجية (Push Notifications)
   try {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
     
@@ -73,8 +72,14 @@ void main() async {
       sound: true,
     );
 
-    // تسجيل دالة الخلفية لتعمل عندما يكون التطبيق مغلقاً
+    // 1. تسجيل دالة الخلفية (التطبيق مغلق)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // 2. الاستماع للإشعارات والتطبيق مفتوح (Foreground) - (هذا هو الإضافة الجديدة!)
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
+      // ملاحظة: يمكنك لاحقاً استخدام مكتبة flutter_local_notifications لإظهار نافذة منبثقة هنا إذا أردت
+    });
     
   } catch (e) {
     debugPrint('Firebase Messaging Error: $e');
