@@ -7,18 +7,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // تمت الإضافة لدعم الإشعارات الفعيلة
+import 'package:firebase_messaging/firebase_messaging.dart'; 
 import '../constants/app_colors.dart';
 
 // ==========================================
 // دوال مساعدة عامة
 // ==========================================
 
-// دالة إرسال إشعارات داخل التطبيق (وتهيئة إشعارات الخلفية)
 Future<void> sendInAppNotification(String userId, String title, String body) async {
   if (userId.isEmpty) return;
   
-  // 1. تسجيل الإشعار في قاعدة البيانات ليظهر داخل التطبيق (والرئيسية)
   await FirebaseFirestore.instance.collection('market_notifications').add({
     'userId': userId,
     'title': title,
@@ -26,14 +24,8 @@ Future<void> sendInAppNotification(String userId, String title, String body) asy
     'isRead': false,
     'createdAt': FieldValue.serverTimestamp(),
   });
-
-  // 2. ملاحظة هامة لدعم إشعارات الهاتف والتطبيق مغلق:
-  // لتفعيل وصول الإشعار المنبثق (Push Notification)، يجب إعداد دالة سحابية (Cloud Function)
-  // في Firebase تتفاعل مع الإضافة أعلاه وتقوم بإرسال حمولة (Payload) عبر خدمة FCM.
-  // كود العميل هنا يعتمد على التهيئة المسبقة لـ FirebaseMessaging.
 }
 
-// دالة مساعدة لعرض غلاف الكتاب
 Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRadius? borderRadius}) {
   if (imageUrl == 'default' || imageUrl.isEmpty) {
     return Container(
@@ -74,11 +66,15 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
   );
 }
 
-// دالة ذكية لفتح الروابط (واتساب / تليجرام)
+// تم حل مشكلة تعذر الفتح هنا جذرياً
 Future<void> _launchContactUrl(BuildContext context, String type, String contactInfo) async {
   String url = '';
   if (type == 'whatsapp') {
     String cleanPhone = contactInfo.replaceAll(RegExp(r'[^\d+]'), '');
+    // إضافة مفتاح العراق تلقائياً إذا كان الرقم يبدأ بـ 0
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '964${cleanPhone.substring(1)}';
+    }
     url = 'https://wa.me/$cleanPhone';
   } else if (type == 'telegram') {
     String cleanTg = contactInfo.replaceAll('@', '').trim();
@@ -86,27 +82,30 @@ Future<void> _launchContactUrl(BuildContext context, String type, String contact
   }
 
   final Uri uri = Uri.parse(url);
-  if (await canLaunchUrl(uri)) {
+  try {
+    // تم إلغاء canLaunchUrl لأنه يسبب مشاكل في حماية أندرويد 11+
     await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } else {
+  } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر فتح التطبيق، تأكد من صحة البيانات.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح التطبيق، تأكد من تثبيته على هاتفك.')),
+      );
     }
   }
 }
 
 // ==========================================
-// الشاشة الرئيسية للسوق القانوني
+// الشاشة الرئيسية للسوق القانوني (تم تغيير الاسم)
 // ==========================================
 
-class ElectronicExamsScreen extends StatefulWidget {
-  const ElectronicExamsScreen({super.key});
+class BookMarketScreen extends StatefulWidget {
+  const BookMarketScreen({super.key});
 
   @override
-  State<ElectronicExamsScreen> createState() => _ElectronicExamsScreenState();
+  State<BookMarketScreen> createState() => _BookMarketScreenState();
 }
 
-class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
+class _BookMarketScreenState extends State<BookMarketScreen> {
   String get _userAdminKey {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
     return 'is_admin_unlocked_market_$uid';
@@ -173,11 +172,10 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('سوق الكتبة القانونية', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+        title: const Text('سوق الكتب القانونية', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         elevation: 0,
         actions: [
-          // تم إزالة جرس الإشعارات من هنا لنقله للرئيسية بناءً على طلبك
           IconButton(
             icon: const Icon(Icons.person_rounded, color: Colors.white),
             tooltip: 'مشترياتي ومبيعاتي',
@@ -206,7 +204,7 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
               const Icon(Icons.auto_stories_rounded, size: 80, color: Colors.amber),
               const SizedBox(height: 20),
               const Text(
-                'سوق الكتبة القانونية',
+                'سوق الكتب القانونية',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
               ),
               const SizedBox(height: 10),
@@ -262,72 +260,6 @@ class _ElectronicExamsScreenState extends State<ElectronicExamsScreen> {
             Text(subtitle, style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.7))),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ==========================================
-// شاشة الإشعارات للمستخدم
-// ==========================================
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    
-    FirebaseFirestore.instance.collection('market_notifications')
-      .where('userId', isEqualTo: uid)
-      .where('isRead', isEqualTo: false)
-      .get().then((snapshot) {
-        for (var doc in snapshot.docs) {
-          doc.reference.update({'isRead': true});
-        }
-      });
-
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: AppBar(title: const Text('الإشعارات'), backgroundColor: AppColors.primary),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('market_notifications')
-            .where('userId', isEqualTo: uid)
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final notifs = snapshot.data!.docs;
-
-          if (notifs.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_off_rounded, size: 80, color: Colors.white24),
-                  SizedBox(height: 10),
-                  Text('لا توجد إشعارات حالياً', style: TextStyle(color: Colors.white54, fontSize: 18)),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: notifs.length,
-            padding: const EdgeInsets.all(12),
-            itemBuilder: (context, index) {
-              final data = notifs[index].data() as Map<String, dynamic>;
-              return Card(
-                color: const Color(0xFF1E2235),
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.notifications_active, color: AppColors.primary)),
-                  title: Text(data['title'] ?? '', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text(data['body'] ?? '', textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70)),
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
@@ -473,11 +405,11 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
       
-      nav.pop(); // إغلاق التحميل بأمان
+      nav.pop();
 
       if (mounted) {
-        Navigator.pop(context); // العودة
-        Navigator.pop(context); // العودة للرئيسية
+        Navigator.pop(context); 
+        Navigator.pop(context); 
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
@@ -489,7 +421,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         );
       }
     } catch (e) {
-      nav.pop(); // إغلاق التحميل عند الخطأ
+      nav.pop(); 
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
@@ -862,7 +794,6 @@ class BookDetailsScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      // حفظ الـ Navigators قبل فتح الـ dialog وإجراء الـ async
                       final navRoot = Navigator.of(context, rootNavigator: true);
                       final navContext = Navigator.of(ctx);
 
@@ -882,8 +813,7 @@ class BookDetailsScreen extends StatelessWidget {
                       );
 
                       try {
-                        // إرسال الإشعار للبائع
-                        await sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}');
+                        await sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}', type: 'new_purchase_request');
 
                         await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
                           'status': 'reserved',
@@ -892,15 +822,15 @@ class BookDetailsScreen extends StatelessWidget {
                           'buyerContact': contactController.text.trim(),
                         });
 
-                        navRoot.pop(); // إغلاق التحميل
-                        navContext.pop(); // إغلاق الـ BottomSheet
+                        navRoot.pop(); 
+                        navContext.pop(); 
                         
                         if (context.mounted) {
-                          Navigator.pop(context); // الرجوع لقائمة الكتب
+                          Navigator.pop(context); 
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                         }
                       } catch (e) {
-                        navRoot.pop(); // إغلاق التحميل حال الخطأ
+                        navRoot.pop(); 
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
                         }
@@ -972,14 +902,49 @@ class BookDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// 3. ملف الطالب (مشترياتي ومبيعاتي)
+// 3. ملف الطالب (مشترياتي ومبيعاتي) مع نظام الإشعارات والأرقام
 // ==========================================
 
-class UserMarketProfileScreen extends StatelessWidget {
+class UserMarketProfileScreen extends StatefulWidget {
   const UserMarketProfileScreen({super.key});
 
   @override
+  State<UserMarketProfileScreen> createState() => _UserMarketProfileScreenState();
+}
+
+class _UserMarketProfileScreenState extends State<UserMarketProfileScreen> {
+  int storedBuyerCount = 0;
+  int storedSellerCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredCounts();
+  }
+
+  Future<void> _loadStoredCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        storedBuyerCount = prefs.getInt('buyer_seen_cnt') ?? 0;
+        storedSellerCount = prefs.getInt('seller_seen_cnt') ?? 0;
+      });
+    }
+  }
+
+  Future<void> _updateStoredCount(String key, int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    int current = prefs.getInt(key) ?? 0;
+    if (current != count) {
+      await prefs.setInt(key, count);
+      _loadStoredCounts(); // تحديث الواجهة لإخفاء الرقم
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -987,20 +952,52 @@ class UserMarketProfileScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('ملفي في السوق'),
           backgroundColor: AppColors.primary,
-          bottom: const TabBar(
+          bottom: TabBar(
             indicatorColor: Colors.amber,
             labelColor: Colors.amber,
             unselectedLabelColor: Colors.white54,
             tabs: [
-              Tab(text: 'طلبات الشراء (مشترياتي)'),
-              Tab(text: 'كتبي المعروضة (مبيعاتي)'),
+              Tab(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('book_market').where('buyerUid', isEqualTo: uid).where('status', isEqualTo: 'sold').snapshots(),
+                  builder: (context, snapshot) {
+                    int currentCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                    int badgeCount = currentCount - storedBuyerCount;
+                    if (badgeCount < 0) badgeCount = 0;
+
+                    return Badge(
+                      isLabelVisible: badgeCount > 0,
+                      label: Text('$badgeCount'),
+                      backgroundColor: Colors.red,
+                      child: const Text('طلبات الشراء', overflow: TextOverflow.ellipsis),
+                    );
+                  }
+                ),
+              ),
+              Tab(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('book_market').where('sellerUid', isEqualTo: uid).where('status', isEqualTo: 'reserved').snapshots(),
+                  builder: (context, snapshot) {
+                    int currentCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                    int badgeCount = currentCount - storedSellerCount;
+                    if (badgeCount < 0) badgeCount = 0;
+
+                    return Badge(
+                      isLabelVisible: badgeCount > 0,
+                      label: Text('$badgeCount'),
+                      backgroundColor: Colors.red,
+                      child: const Text('كتبي المعروضة', overflow: TextOverflow.ellipsis),
+                    );
+                  }
+                ),
+              ),
             ],
           ),
         ),
-        body: const TabBarView(
+        body: TabBarView(
           children: [
-            BuyerRequestsTab(),
-            SellerBooksTab(),
+            BuyerRequestsTab(onViewed: (count) => _updateStoredCount('buyer_seen_cnt', count)),
+            SellerBooksTab(onViewed: (count) => _updateStoredCount('seller_seen_cnt', count)),
           ],
         ),
       ),
@@ -1009,7 +1006,8 @@ class UserMarketProfileScreen extends StatelessWidget {
 }
 
 class SellerBooksTab extends StatelessWidget {
-  const SellerBooksTab({super.key});
+  final Function(int) onViewed;
+  const SellerBooksTab({super.key, required this.onViewed});
 
   void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
     final nav = Navigator.of(context, rootNavigator: true);
@@ -1026,11 +1024,11 @@ class SellerBooksTab extends StatelessWidget {
     
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
-      await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle');
+      await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle', type: 'seller_approved');
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     } finally {
-      nav.pop(); // ضمان إغلاق الدوران المستمر
+      nav.pop(); 
     }
   }
 
@@ -1043,6 +1041,11 @@ class SellerBooksTab extends StatelessWidget {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
+        
+        // إبلاغ الواجهة الأم بالعدد الفعلي للطلبات التي تحتاج إجراء
+        int actionableCount = books.where((b) => (b.data() as Map<String, dynamic>)['status'] == 'reserved').length;
+        WidgetsBinding.instance.addPostFrameCallback((_) => onViewed(actionableCount));
+
         books.sort((a, b) {
           Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
           Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
@@ -1119,7 +1122,8 @@ class SellerBooksTab extends StatelessWidget {
 }
 
 class BuyerRequestsTab extends StatelessWidget {
-  const BuyerRequestsTab({super.key});
+  final Function(int) onViewed;
+  const BuyerRequestsTab({super.key, required this.onViewed});
 
   @override
   Widget build(BuildContext context) {
@@ -1130,6 +1134,11 @@ class BuyerRequestsTab extends StatelessWidget {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Colors.amber));
         
         final books = snapshot.data!.docs.toList();
+        
+        // إبلاغ الواجهة الأم بالعدد الفعلي للطلبات التي تحتاج إجراء
+        int actionableCount = books.where((b) => (b.data() as Map<String, dynamic>)['status'] == 'sold').length;
+        WidgetsBinding.instance.addPostFrameCallback((_) => onViewed(actionableCount));
+
         books.sort((a, b) {
           Timestamp t1 = a['createdAt'] as Timestamp? ?? Timestamp.now();
           Timestamp t2 = b['createdAt'] as Timestamp? ?? Timestamp.now();
@@ -1447,14 +1456,14 @@ class AdminReviewBooksScreen extends StatelessWidget {
       String sellerUid = data['sellerUid'];
       String bookTitle = data['title'];
       if (newStatus == 'approved') {
-        await sendInAppNotification(sellerUid, 'تمت الموافقة! 🎉', 'وافقت الإدارة على عرض كتابك: $bookTitle');
+        await sendInAppNotification(sellerUid, 'تمت الموافقة! 🎉', 'وافقت الإدارة على عرض كتابك: $bookTitle', type: 'admin_approved_book');
       } else if (newStatus == 'rejected') {
         await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
       }
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     } finally {
-      nav.pop(); // ضمان إغلاق الدائرة بشكل قطعي
+      nav.pop();
     }
   }
 
