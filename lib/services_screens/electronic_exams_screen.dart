@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'package:http/http.dart' as http; 
+import 'package:googleapis_auth/auth_io.dart' as auth; // مكتبة المصادقة للنظام الحديث V1
 import '../constants/app_colors.dart';
 
 // ==========================================
@@ -28,7 +29,7 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
     'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // 2. إرسال الإشعار الخارجي (Push Notification)
+  // 2. إرسال الإشعار الخارجي (Push Notification) عبر النظام الحديث FCM v1
   try {
     DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
     if (userDoc.exists && userDoc.data() != null) {
@@ -37,32 +38,59 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
         
-        // المفتاح الذي قمت أنت بإرساله:
-        String serverKey = 'BJlEdzq_pakppCo-uUMEpgg4a1f753ZtHbSo3vmHif3RRHd2j_9Af5V3L-Ch4lmG3pwn6iZL2ZoaKJWCbhfq3lY'; 
+        // مفتاح الخدمة الخاص بمشروعك الذي قمت بتوليده:
+        final serviceAccountJson = {
+          "type": "service_account",
+          "project_id": "law-platform-55632",
+          "private_key_id": "4612406d8276f74f5bb5821ab1dce282476021df",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC/ptuvFSaxEjpW\nLkrmvglfZwRk8NPM+fi8Mc4TXNzw5imzkqtmX/4JHMeWCbtYvlo+rL0nE21oNpEP\n/3gI8hgsLzie0Yivm3+0dhZ0xN/H93e+XGUmZgyMf1TZnz0kYkSw+FbPijojKTNz\nbodO6PovSpVUFOYbV5gnEcNyutUwS/kve2nUw2QEG8RsZmEaRuKhcwUT5oL8n32Q\noiVn6xcHwjr9LeqUL878i8XYXYW2HIRMs0WyPpwbATg6QJQlMf47R9A0DMGXwVw/\naNcvvuOQ/RN62+qTA+6nVcpNRQW4BrWR/pRGzeWz0z9kW0XoeDJyKC5eXcep0Ptx\nKdDgsA+tAgMBAAECggEAEJ80Jnc7J9hg3uCc9m48+d1BcE/CzuBPRmM7cEp5jxsn\nOr/ZxcNFkRzB4q1tZkD8KrtonF7++i7hXfXWP1Bf8FUYIA4kQLbH2Kr1P6NjlUBN\nTmFNFIt9QyI4Bbfd4a30LzUasl1WtX35TGWlrp5eNIPPd79oRa7PL3RG80ho/Qsz\nXYIoRBfoKWdoKbN+XxHMVl2dMccnP1dTOa9jR6hhvSRZSKrwAz5Ia5lyVAKrahIv\nxZDX6nCvn3N7aqcjTV7qQ2YFi0I0hkzPBrEJxTSkGWcIzN1fDCmsm7irlBHkeVAt\ntyWNTefROq47ApfzzfIjctrtdibkyIMC+ExFpPoyMQKBgQDj3Jlv4vyLiIwQ8jHE\nwSK14htAUkGNmTsAvW9eyeiaTGdc/ltndKt7SGvDaS38J6+LYqBcLrAsmdu592b9\ngH5EypL9+N3uT42SJMGR4M5cH5ZqyvdZ4NTCDMjSq3h77ROLJ2Oha6Q1na1XyXZe\ntMzZ19k0C4GxjcjJeGYX3NG9VwKBgQDXUY2VfzDD4s85pI6vVET9W/1ZxZeUtoIY\n+UYCSpz/RoVGQl7SeSFv5zR12RJgztlXr9stdusfVFQGLo68c/XbkMLUshitEQPO\n/aVEqrW9ZbrfR04j0DzUzjKPpjyR733tvBF4YBELrD3KBcXO+cCKpBwo72Xz6Cgb\nH4gvI/F0mwKBgFszdXpx+LEEk0NJHSBqSTFRcaTaB4DcXuBZ8hSXbfEsOYbgC8ep\ny+UJRJCvLYeqfrmkXRjoWv1PC8IwQtmeL2vrRNBAZtu2naxr58oyl4YJ4pOV71Db\nC20r3slrdkrrxhHBT0BRrCUFmlbzvNwFM6TRnw8Ut/FQFZiGBx7v9Eb7AoGAS+/G\nGChAQYVXAgRIEguNPTFZG3T1LYxkO3yGNT6tOdZcIFg96sqvgTCwLrO8qImq2yL5\nEIK1D1qFO5zl2A6pcaMPI0YgL8Elb7XCuIHgEIi1LBOQuk6xdXe3GzRMfkdRSSuf\nma1/tXcsX3hDt+gbAIo6KDGt6iRBKLepJr7tY+sCgYEAtz1LNY2nlE5R+LeunVL6\nXUhI8pXkxzpKeuspYTTrbR2Ca1V7XgRoY+V8rD7WbUFA7KiBLIff4TntAVqPZzVS\nU18LFSMJuju2yfXxmF0IbNMEzaUaeoM/88dfawxnOMfgpzOSDXRvPv7b6QoACfNG\nQPDdJPQJHaE6Bt+o8FTWrt4=\n-----END PRIVATE KEY-----\n",
+          "client_email": "firebase-adminsdk-fbsvc@law-platform-55632.iam.gserviceaccount.com",
+          "client_id": "111366556927016010526",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40law-platform-55632.iam.gserviceaccount.com",
+          "universe_domain": "googleapis.com"
+        };
 
-        await http.post(
-          Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        // طلب الصلاحية من جوجل لإرسال الإشعار
+        List<String> scopes = ["https://www.googleapis.com/auth/firebase.messaging"];
+        
+        // إنشاء عميل اتصال مشفر (Authenticated Client)
+        auth.AuthClient client = await auth.clientViaServiceAccount(
+          auth.ServiceAccountCredentials.fromJson(serviceAccountJson),
+          scopes,
+        );
+
+        // رابط الإرسال للإصدار الحديث V1
+        final String projectId = serviceAccountJson['project_id']!;
+        final String endpoint = 'https://fcm.googleapis.com/v1/projects/$projectId/messages:send';
+
+        // الإرسال
+        await client.post(
+          Uri.parse(endpoint),
           headers: <String, String>{
             'Content-Type': 'application/json',
-            'Authorization': 'key=$serverKey',
           },
           body: jsonEncode(
             <String, dynamic>{
-              'notification': <String, dynamic>{
-                'title': title,
-                'body': body,
-                'sound': 'default',
+              'message': <String, dynamic>{
+                'token': fcmToken,
+                'notification': <String, dynamic>{
+                  'title': title,
+                  'body': body,
+                },
+                'data': <String, dynamic>{
+                  'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+                  'type': type ?? '',
+                },
               },
-              'priority': 'high',
-              'data': <String, dynamic>{
-                'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-                'type': type ?? '',
-              },
-              'to': fcmToken,
             },
           ),
         );
-        debugPrint('تم إرسال الإشعار الخارجي بنجاح');
+        
+        client.close();
+        debugPrint('تم إرسال الإشعار الخارجي بنجاح (V1)');
       }
     }
   } catch (e) {
