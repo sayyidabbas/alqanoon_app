@@ -14,13 +14,15 @@ import '../constants/app_colors.dart';
 // دوال مساعدة عامة
 // ==========================================
 
-Future<void> sendInAppNotification(String userId, String title, String body) async {
+// تم إصلاح الدالة هنا بإضافة المعامل {String? type} لتقبل نوع الإشعار
+Future<void> sendInAppNotification(String userId, String title, String body, {String? type}) async {
   if (userId.isEmpty) return;
   
   await FirebaseFirestore.instance.collection('market_notifications').add({
     'userId': userId,
     'title': title,
     'body': body,
+    'type': type ?? '', // حفظ نوع الإشعار لتوجيه المستخدم لاحقاً
     'isRead': false,
     'createdAt': FieldValue.serverTimestamp(),
   });
@@ -95,7 +97,7 @@ Future<void> _launchContactUrl(BuildContext context, String type, String contact
 }
 
 // ==========================================
-// الشاشة الرئيسية للسوق القانوني (تم تغيير الاسم)
+// الشاشة الرئيسية للسوق القانوني
 // ==========================================
 
 class BookMarketScreen extends StatefulWidget {
@@ -1571,3 +1573,4 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
+ 
