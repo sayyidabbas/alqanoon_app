@@ -1,15 +1,52 @@
-import 'dart:io'; // تم إضافة هذه المكتبة لحل مشكلة الـ File
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 import 'admin_panel_screen.dart';
 import '../services_screens/electronic_exams_screen.dart';
-// تم إعطاء ألقاب للملفات لحل مشكلة تعارض الأسماء
 import '../services_screens/question_bank_screen.dart' as qb; 
 import '../services_screens/study_materials_screen.dart' as sm;
+
+// ==========================================
+// دالة إرسال الإيميل الحقيقي (SMTP)
+// ==========================================
+Future<bool> sendOtpEmail(String recipientEmail, String otpCode) async {
+  // ⚠️ تنبيه: ضع إيميلك الذي استخرجت منه الرمز السري هنا 
+  String username = 'hasnaqeel90@gmail.com'; 
+  String password = 'lbut yqdf erum jiok'; // كلمة المرور التي أرسلتها
+
+  final smtpServer = gmail(username, password);
+  final message = Message()
+    ..from = Address(username, 'إدارة منصة القانون')
+    ..recipients.add(recipientEmail)
+    ..subject = 'كود التحقق الأمني (OTP) 🔐'
+    ..html = """
+      <div dir="rtl" style="font-family: Arial, sans-serif; text-align: right;">
+        <h3>مرحباً بك في إدارة منصة القانون</h3>
+        <p>لقد تم طلب إجراء أمني على حساب الإدارة الخاص بك.</p>
+        <p>كود التحقق الخاص بك هو:</p>
+        <h2 style="color: #d32f2f; letter-spacing: 5px;">$otpCode</h2>
+        <p>يرجى عدم مشاركة هذا الكود مع أي شخص للحفاظ على أمان المنصة.</p>
+      </div>
+    """;
+
+  try {
+    await send(message, smtpServer);
+    return true;
+  } catch (e) {
+    debugPrint('خطأ في إرسال الإيميل: $e');
+    return false;
+  }
+}
+
+// ==========================================
+// شاشة غرفة العمليات الأساسية
+// ==========================================
 
 class SecureAdminDashboardScreen extends StatefulWidget {
   final List<PostModel> officialPosts;
@@ -75,10 +112,35 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
       return;
     }
 
+    // إظهار شاشة تحميل أثناء إرسال الإيميل
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.amber),
+            SizedBox(width: 20),
+            Text('جاري إرسال الكود...', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
     String otpCode = (Random().nextInt(900000) + 100000).toString();
+    bool isSent = await sendOtpEmail(recoveryEmail, otpCode);
     
+    if (!mounted) return;
+    Navigator.pop(context); // إخفاء شاشة التحميل
+
+    if (!isSent) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ أثناء إرسال الإيميل، تأكد من اتصالك بالإنترنت.')));
+      return;
+    }
+
+    // حفظ الكود للتحقق منه
     await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set({'current_otp': otpCode}, SetOptions(merge: true));
-    debugPrint('كود الاسترداد المرسل للإيميل: $otpCode'); 
 
     if (mounted) {
       final otpController = TextEditingController();
@@ -194,7 +256,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
         children: [
           _buildControlCard(
             title: 'تحكم الواجهة الرئيسية',
-            icon: Icons.build, // تم تعديل اسم الأيقونة هنا
+            icon: Icons.build,
             color: Colors.blue,
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen(
@@ -223,8 +285,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
             icon: Icons.quiz,
             color: Colors.green,
             onTap: () {
-              // تم تعديل الاستدعاء وحذف كلمة const المسببة للخطأ
-              Navigator.push(context, MaterialPageRoute(builder: (_) => qb.AdminQbStageSelectionScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const qb.AdminQbStageSelectionScreen()));
             },
           ),
           _buildControlCard(
@@ -232,8 +293,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
             icon: Icons.library_books,
             color: Colors.purple,
             onTap: () {
-              // تم التعديل لمنع تعارض الأسماء
-              Navigator.push(context, MaterialPageRoute(builder: (_) => sm.AdminStageSelectionScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const sm.AdminStageSelectionScreen()));
             },
           ),
         ],
@@ -261,6 +321,10 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
   }
 }
 
+// ==========================================
+// شاشة إعدادات الحماية وتغيير الرمز/الإيميل
+// ==========================================
+
 class SecureSettingsScreen extends StatefulWidget {
   const SecureSettingsScreen({super.key});
   @override
@@ -270,23 +334,119 @@ class SecureSettingsScreen extends StatefulWidget {
 class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
   final _emailController = TextEditingController();
   final _pinController = TextEditingController();
+  String currentEmail = '';
+  bool isLoading = true;
 
-  void _saveSettings() async {
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentSettings();
+  }
+
+  Future<void> _loadCurrentSettings() async {
+    final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
+    if (doc.exists && doc.data()!.containsKey('email')) {
+      currentEmail = doc.data()!['email'];
+    }
+    setState(() {
+      isLoading = false;
+    });
+  }
+
+  void _initiateSave() async {
     if (_pinController.text.isNotEmpty && _pinController.text.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرمز يجب أن يكون 4 أرقام على الأقل')));
       return;
     }
     
+    if (_emailController.text.isEmpty && _pinController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال تعديل واحد على الأقل')));
+      return;
+    }
+
+    if (currentEmail.isNotEmpty) {
+      // هناك إيميل مربوط مسبقاً، يجب إرسال كود OTP أولاً للموافقة
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const AlertDialog(
+          backgroundColor: AppColors.cardBg,
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.amber),
+              SizedBox(width: 20),
+              Text('جاري إرسال كود التأكيد...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+
+      String otpCode = (Random().nextInt(900000) + 100000).toString();
+      bool isSent = await sendOtpEmail(currentEmail, otpCode);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // إغلاق شاشة التحميل
+
+      if (!isSent) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ في إرسال الإيميل. تأكد من اتصالك بالإنترنت.')));
+        return;
+      }
+
+      // إظهار نافذة إدخال الكود
+      final otpController = TextEditingController();
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.cardBg,
+          title: const Text('التحقق الأمني مطلوب', style: TextStyle(color: Colors.amber)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('لإجراء التعديلات، تم إرسال كود إلى إيميلك الحالي:\n$currentEmail', style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
+              const SizedBox(height: 15),
+              TextField(
+                controller: otpController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(hintText: 'أدخل كود الـ OTP', hintStyle: TextStyle(color: Colors.white54)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+              onPressed: () {
+                if (otpController.text.trim() == otpCode) {
+                  Navigator.pop(ctx);
+                  _saveToFirestore();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الكود غير صحيح!')));
+                }
+              },
+              child: const Text('تأكيد وحفظ', style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        ),
+      );
+
+    } else {
+      // لا يوجد إيميل مسبق، حفظ مباشر
+      _saveToFirestore();
+    }
+  }
+
+  Future<void> _saveToFirestore() async {
     Map<String, dynamic> updates = {};
     if (_emailController.text.isNotEmpty) updates['email'] = _emailController.text.trim();
     if (_pinController.text.isNotEmpty) updates['pin'] = _pinController.text.trim();
 
-    if (updates.isNotEmpty) {
-      await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set(updates, SetOptions(merge: true));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ بنجاح!')));
-        Navigator.pop(context);
-      }
+    await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set(updates, SetOptions(merge: true));
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات بنجاح!')));
+      Navigator.pop(context);
     }
   }
 
@@ -295,36 +455,83 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(title: const Text('إعدادات الحماية'), backgroundColor: AppColors.primary),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'بريد الاسترداد الإلكتروني (مهم جداً)', labelStyle: TextStyle(color: Colors.amber)),
+      body: isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Colors.amber))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                if (currentEmail.isNotEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(15),
+                    margin: const EdgeInsets.bottom(20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('البريد المربوط حالياً:', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 5),
+                        Text(currentEmail, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(15),
+                    margin: const EdgeInsets.bottom(20),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.withOpacity(0.5)),
+                    ),
+                    child: const Text('تنبيه: لا يوجد إيميل مربوط! حسابك معرض للضياع في حال نسيان الرمز.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
+                  ),
+
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: currentEmail.isEmpty ? 'أدخل بريد إلكتروني للحماية' : 'تغيير البريد الإلكتروني', 
+                    labelStyle: const TextStyle(color: Colors.amber),
+                    filled: true, fillColor: AppColors.cardBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _pinController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'تعيين رمز سري جديد', 
+                    labelStyle: const TextStyle(color: Colors.amber),
+                    filled: true, fillColor: AppColors.cardBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.security, color: Colors.black),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
+                    onPressed: _initiateSave,
+                    label: const Text('حفظ التعديلات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                )
+              ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _pinController,
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'تعيين رمز سري جديد', labelStyle: TextStyle(color: Colors.amber)),
-            ),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
-                onPressed: _saveSettings,
-                child: const Text('حفظ التعديلات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
-              ),
-            )
-          ],
-        ),
-      ),
+          ),
     );
   }
-} 
+}
