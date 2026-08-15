@@ -11,7 +11,7 @@ import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
-import '../services_screens/electronic_exams_screen.dart'; // مسار الاستيراد الصحيح للوصول إلى NotificationsScreen
+import '../services_screens/electronic_exams_screen.dart'; // تأكد من أن NotificationsScreen موجودة هنا بالفعل
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -437,7 +437,6 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('منصة القانون'),
         backgroundColor: AppColors.primary,
         actions: [
-          // إضافة جرس الإشعارات الموحد الخاص بالمنصة وسوق الكتب
           StreamBuilder<QuerySnapshot>(
             stream: uid.isNotEmpty
                 ? FirebaseFirestore.instance
@@ -455,7 +454,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.notifications_rounded, color: AppColors.accent),
                     tooltip: 'الإشعارات والأحداث',
                     onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationsScreen()));
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
                     },
                   ),
                   if (hasUnread)
