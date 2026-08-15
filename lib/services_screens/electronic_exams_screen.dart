@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'package:http/http.dart' as http; 
-import 'package:googleapis_auth/auth_io.dart' as auth; // مكتبة المصادقة للنظام الحديث V1
+import 'package:googleapis_auth/auth_io.dart' as auth; 
 import '../constants/app_colors.dart';
 
 // ==========================================
@@ -38,7 +38,6 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
         
-        // مفتاح الخدمة الخاص بمشروعك الذي قمت بتوليده:
         final serviceAccountJson = {
           "type": "service_account",
           "project_id": "law-platform-55632",
@@ -53,21 +52,18 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
           "universe_domain": "googleapis.com"
         };
 
-        // طلب الصلاحية من جوجل لإرسال الإشعار
         List<String> scopes = ["https://www.googleapis.com/auth/firebase.messaging"];
         
-        // إنشاء عميل اتصال مشفر (Authenticated Client)
         auth.AuthClient client = await auth.clientViaServiceAccount(
           auth.ServiceAccountCredentials.fromJson(serviceAccountJson),
           scopes,
         );
 
-        // رابط الإرسال للإصدار الحديث V1
         final String projectId = serviceAccountJson['project_id']!;
         final String endpoint = 'https://fcm.googleapis.com/v1/projects/$projectId/messages:send';
 
-        // الإرسال
-        await client.post(
+        // الإرسال مع الأولوية العالية (التعديل الجديد هنا)
+        final response = await client.post(
           Uri.parse(endpoint),
           headers: <String, String>{
             'Content-Type': 'application/json',
@@ -80,6 +76,21 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
                   'title': title,
                   'body': body,
                 },
+                // إجبار هواتف أندرويد على إظهار الإشعار حتى لو كان التطبيق مغلقاً
+                'android': <String, dynamic>{
+                  'priority': 'high',
+                  'notification': <String, dynamic>{
+                    'sound': 'default',
+                  },
+                },
+                // توافقية إضافية للأجهزة الأخرى
+                'apns': <String, dynamic>{
+                  'payload': <String, dynamic>{
+                    'aps': <String, dynamic>{
+                      'sound': 'default',
+                    },
+                  },
+                },
                 'data': <String, dynamic>{
                   'click_action': 'FLUTTER_NOTIFICATION_CLICK',
                   'type': type ?? '',
@@ -89,12 +100,17 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
           ),
         );
         
+        if (response.statusCode == 200) {
+          debugPrint('تم إرسال الإشعار الخارجي بنجاح (V1)');
+        } else {
+          debugPrint('حدث خطأ أثناء إرسال الإشعار من سيرفر جوجل: ${response.body}');
+        }
+        
         client.close();
-        debugPrint('تم إرسال الإشعار الخارجي بنجاح (V1)');
       }
     }
   } catch (e) {
-    debugPrint('خطأ في إرسال الإشعار الخارجي: $e');
+    debugPrint('خطأ برمجي في إرسال الإشعار الخارجي: $e');
   }
 }
 
@@ -1618,3 +1634,4 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
+ 
