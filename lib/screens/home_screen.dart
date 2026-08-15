@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 1. تم إضافة مكتبة الإشعارات هنا
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 import '../routes/app_routes.dart';
@@ -61,6 +62,43 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
+    
+    // 2. تفعيل دالة جلب وحفظ التوكن بصمت عند فتح التطبيق
+    _setupFCMToken();
+  }
+
+  // 3. الدالة السحرية لجلب وحفظ التوكن في قاعدة البيانات
+  Future<void> _setupFCMToken() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+      // جلب التوكن الخاص بالهاتف
+      String? token = await messaging.getToken();
+      
+      if (token != null) {
+        // حفظ التوكن في مجموعة المستخدمين دون مسح البيانات الأخرى (merge: true)
+        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set(
+          {'fcmToken': token},
+          SetOptions(merge: true), 
+        );
+        debugPrint('تم حفظ الـ Token بنجاح: $token');
+      }
+
+      // الاستماع لأي تحديث يطرأ على التوكن مستقبلاً وتحديثه تلقائياً
+      messaging.onTokenRefresh.listen((newToken) async {
+        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set(
+          {'fcmToken': newToken},
+          SetOptions(merge: true),
+        );
+        debugPrint('تم تحديث الـ Token بنجاح: $newToken');
+      });
+      
+    } catch (e) {
+      debugPrint('خطأ أثناء إعداد الـ FCM Token: $e');
+    }
   }
 
   String _formatTimestamp(dynamic timestamp) {
