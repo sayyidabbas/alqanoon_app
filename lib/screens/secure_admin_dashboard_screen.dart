@@ -465,7 +465,7 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(15),
-                    margin: const EdgeInsets.bottom(20),
+                    margin: const EdgeInsets.only(bottom: 20),
                     decoration: BoxDecoration(
                       color: Colors.blue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
@@ -484,7 +484,7 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(15),
-                    margin: const EdgeInsets.bottom(20),
+                    margin: const EdgeInsets.only(bottom: 20),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
@@ -534,4 +534,4 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
           ),
     );
   }
-}
+} 
