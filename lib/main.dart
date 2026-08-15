@@ -2,8 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 1. إضافة مكتبة الإشعارات
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
+
+// 2. دالة الخلفية: هذه الدالة تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // يجب تهيئة فايربيس داخل دالة الخلفية لضمان عملها بشكل مستقل
+  try {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
+        appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
+        messagingSenderId: "521454530754",
+        projectId: "law-platform-55632",
+        storageBucket: "law-platform-55632.firebasestorage.app",
+      ),
+    );
+  } catch (e) {
+    debugPrint('Firebase Background Init Error: $e');
+  }
+  debugPrint("تم استقبال إشعار في الخلفية: ${message.messageId}");
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +60,24 @@ void main() async {
     if (!e.toString().contains('duplicate-app')) {
       await Firebase.initializeApp();
     }
+  }
+
+  // 3. إعدادات الإشعارات الخارجية (Push Notifications)
+  try {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    
+    // طلب الصلاحية من المستخدم (إجباري في أندرويد 13+)
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // تسجيل دالة الخلفية لتعمل عندما يكون التطبيق مغلقاً
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    
+  } catch (e) {
+    debugPrint('Firebase Messaging Error: $e');
   }
 
   // تهيئة Supabase بالرابط والمفتاح الخاصين بمشروعك
