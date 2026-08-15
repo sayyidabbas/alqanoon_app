@@ -8,24 +8,66 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:http/http.dart' as http; 
 import '../constants/app_colors.dart';
 
 // ==========================================
 // دوال مساعدة عامة
 // ==========================================
 
-// تم إصلاح الدالة هنا بإضافة المعامل {String? type} لتقبل نوع الإشعار
 Future<void> sendInAppNotification(String userId, String title, String body, {String? type}) async {
   if (userId.isEmpty) return;
   
+  // 1. الحفظ في قاعدة البيانات (الإشعار الداخلي)
   await FirebaseFirestore.instance.collection('market_notifications').add({
     'userId': userId,
     'title': title,
     'body': body,
-    'type': type ?? '', // حفظ نوع الإشعار لتوجيه المستخدم لاحقاً
+    'type': type ?? '',
     'isRead': false,
     'createdAt': FieldValue.serverTimestamp(),
   });
+
+  // 2. إرسال الإشعار الخارجي (Push Notification)
+  try {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    if (userDoc.exists && userDoc.data() != null) {
+      Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+      String? fcmToken = userData['fcmToken'];
+
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        
+        // المفتاح الذي قمت أنت بإرساله:
+        String serverKey = 'BJlEdzq_pakppCo-uUMEpgg4a1f753ZtHbSo3vmHif3RRHd2j_9Af5V3L-Ch4lmG3pwn6iZL2ZoaKJWCbhfq3lY'; 
+
+        await http.post(
+          Uri.parse('https://fcm.googleapis.com/fcm/send'),
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'Authorization': 'key=$serverKey',
+          },
+          body: jsonEncode(
+            <String, dynamic>{
+              'notification': <String, dynamic>{
+                'title': title,
+                'body': body,
+                'sound': 'default',
+              },
+              'priority': 'high',
+              'data': <String, dynamic>{
+                'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+                'type': type ?? '',
+              },
+              'to': fcmToken,
+            },
+          ),
+        );
+        debugPrint('تم إرسال الإشعار الخارجي بنجاح');
+      }
+    }
+  } catch (e) {
+    debugPrint('خطأ في إرسال الإشعار الخارجي: $e');
+  }
 }
 
 Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRadius? borderRadius}) {
@@ -68,12 +110,10 @@ Widget _buildBookCover(String imageUrl, {double? width, double? height, BorderRa
   );
 }
 
-// تم حل مشكلة تعذر الفتح هنا جذرياً
 Future<void> _launchContactUrl(BuildContext context, String type, String contactInfo) async {
   String url = '';
   if (type == 'whatsapp') {
     String cleanPhone = contactInfo.replaceAll(RegExp(r'[^\d+]'), '');
-    // إضافة مفتاح العراق تلقائياً إذا كان الرقم يبدأ بـ 0
     if (cleanPhone.startsWith('0')) {
       cleanPhone = '964${cleanPhone.substring(1)}';
     }
@@ -85,7 +125,6 @@ Future<void> _launchContactUrl(BuildContext context, String type, String contact
 
   final Uri uri = Uri.parse(url);
   try {
-    // تم إلغاء canLaunchUrl لأنه يسبب مشاكل في حماية أندرويد 11+
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
     if (context.mounted) {
@@ -267,10 +306,6 @@ class _BookMarketScreenState extends State<BookMarketScreen> {
   }
 }
 
-// ==========================================
-// اختيار المرحلة الدراسية 
-// ==========================================
-
 class SelectStageScreen extends StatelessWidget {
   final bool isAddingBook;
   const SelectStageScreen({super.key, required this.isAddingBook});
@@ -315,10 +350,6 @@ class SelectStageScreen extends StatelessWidget {
     );
   }
 }
-
-// ==========================================
-// 1. مسار البائع (إضافة كتاب)
-// ==========================================
 
 class AddBookFormScreen extends StatefulWidget {
   final int stageIndex;
@@ -582,10 +613,6 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
     );
   }
 }
-
-// ==========================================
-// 2. مسار المشتري (تصفح الكتب والتفاصيل)
-// ==========================================
 
 class BrowseSubjectsScreen extends StatelessWidget {
   final int stageIndex;
@@ -903,10 +930,6 @@ class BookDetailsScreen extends StatelessWidget {
   }
 }
 
-// ==========================================
-// 3. ملف الطالب (مشترياتي ومبيعاتي) مع نظام الإشعارات والأرقام
-// ==========================================
-
 class UserMarketProfileScreen extends StatefulWidget {
   const UserMarketProfileScreen({super.key});
 
@@ -939,7 +962,7 @@ class _UserMarketProfileScreenState extends State<UserMarketProfileScreen> {
     int current = prefs.getInt(key) ?? 0;
     if (current != count) {
       await prefs.setInt(key, count);
-      _loadStoredCounts(); // تحديث الواجهة لإخفاء الرقم
+      _loadStoredCounts(); 
     }
   }
 
@@ -1044,7 +1067,6 @@ class SellerBooksTab extends StatelessWidget {
         
         final books = snapshot.data!.docs.toList();
         
-        // إبلاغ الواجهة الأم بالعدد الفعلي للطلبات التي تحتاج إجراء
         int actionableCount = books.where((b) => (b.data() as Map<String, dynamic>)['status'] == 'reserved').length;
         WidgetsBinding.instance.addPostFrameCallback((_) => onViewed(actionableCount));
 
@@ -1137,7 +1159,6 @@ class BuyerRequestsTab extends StatelessWidget {
         
         final books = snapshot.data!.docs.toList();
         
-        // إبلاغ الواجهة الأم بالعدد الفعلي للطلبات التي تحتاج إجراء
         int actionableCount = books.where((b) => (b.data() as Map<String, dynamic>)['status'] == 'sold').length;
         WidgetsBinding.instance.addPostFrameCallback((_) => onViewed(actionableCount));
 
@@ -1230,10 +1251,6 @@ class BuyerRequestsTab extends StatelessWidget {
     );
   }
 }
-
-// ==========================================
-// 4. البوابة الأمنية (لوحة تحكم الإدارة الديناميكية الذكية)
-// ==========================================
 
 class AdminMarketDashboard extends StatefulWidget {
   const AdminMarketDashboard({super.key});
@@ -1573,4 +1590,3 @@ class AdminReviewBooksScreen extends StatelessWidget {
     );
   }
 }
- 
