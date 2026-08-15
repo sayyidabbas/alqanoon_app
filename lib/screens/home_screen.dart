@@ -651,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> {
       {'icon': Icons.menu_book, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
       {'icon': Icons.book, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
       {'icon': Icons.quiz, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
-      {'icon': Icons.assignment, 'title': 'الاختبارات الإلكترونية', 'route': AppRoutes.electronicExams},
+      {'icon': Icons.assignment, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
     ];
 
     return Padding(
