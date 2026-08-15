@@ -1,18 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 1. تم إضافة مكتبة الإشعارات هنا
+import 'package:firebase_messaging/firebase_messaging.dart'; 
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 import '../routes/app_routes.dart';
-import 'admin_panel_screen.dart';
 import 'profile_screen.dart';
 import 'user_profile_view_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/notification_bell.dart'; 
+import 'secure_admin_dashboard_screen.dart'; // استدعاء لوحة التحكم الجديدة
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,7 +24,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  String _adminPin = "1234";
 
   Duration? _targetDuration = const Duration(days: 20, hours: 19, minutes: 58, seconds: 33);
   Timer? _countdownTimer;
@@ -57,68 +57,38 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _tickerScrollController = ScrollController();
-    _loadPin();
     _startTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
-    
-    // 2. تفعيل دالة جلب وحفظ التوكن بصمت عند فتح التطبيق
     _setupFCMToken();
   }
 
-  // 3. الدالة السحرية لجلب وحفظ التوكن في قاعدة البيانات
   Future<void> _setupFCMToken() async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) return;
 
       FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-      // جلب التوكن الخاص بالهاتف
       String? token = await messaging.getToken();
       
       if (token != null) {
-        // حفظ التوكن في مجموعة المستخدمين دون مسح البيانات الأخرى (merge: true)
         await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set(
           {'fcmToken': token},
           SetOptions(merge: true), 
         );
-        debugPrint('تم حفظ الـ Token بنجاح: $token');
       }
 
-      // الاستماع لأي تحديث يطرأ على التوكن مستقبلاً وتحديثه تلقائياً
       messaging.onTokenRefresh.listen((newToken) async {
         await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set(
           {'fcmToken': newToken},
           SetOptions(merge: true),
         );
-        debugPrint('تم تحديث الـ Token بنجاح: $newToken');
       });
       
     } catch (e) {
       debugPrint('خطأ أثناء إعداد الـ FCM Token: $e');
     }
-  }
-
-  String _formatTimestamp(dynamic timestamp) {
-    if (timestamp == null) return 'الآن';
-    DateTime date;
-    if (timestamp is Timestamp) {
-      date = timestamp.toDate();
-    } else if (timestamp is DateTime) {
-      date = timestamp;
-    } else {
-      return '';
-    }
-
-    final diff = DateTime.now().difference(date);
-    if (diff.inSeconds < 60) return 'الآن';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
-    if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   ImageProvider? _getProfileImage(String? url) {
@@ -144,15 +114,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _loadPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _adminPin = prefs.getString('admin_pin') ?? "1234";
-      });
-    }
-  }
-
   void _startTimer() {
     _countdownTimer?.cancel();
     if (_targetDuration == null) return;
@@ -176,115 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _tickerScrollController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  void _openAdminGate() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isAlreadyLoggedIn = prefs.getBool('is_admin_logged_in') ?? false;
-
-    if (isAlreadyLoggedIn) {
-      _navigateToAdminPanel();
-    } else {
-      _showPinDialog();
-    }
-  }
-
-  void _showPinDialog() {
-    final pinController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: const Text('البوابة الآمنة 🔒', style: TextStyle(color: AppColors.accent)),
-        content: TextField(
-          controller: pinController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'أدخل رمز PIN',
-            hintStyle: TextStyle(color: Colors.white38),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () async {
-              if (pinController.text == _adminPin) {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setBool('is_admin_logged_in', true);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _navigateToAdminPanel();
-                }
-              }
-            },
-            child: const Text('دخول', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _navigateToAdminPanel() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AdminPanelScreen(
-          posts: _officialPosts,
-          announcements: _announcements,
-          onAddPost: (content, imageFile) {
-            setState(() {
-              _officialPosts.insert(
-                0,
-                PostModel(
-                  id: DateTime.now().toString(),
-                  userId: 'admin',
-                  author: 'إدارة منصة القانون',
-                  username: 'admin',
-                  content: content,
-                  imageFile: imageFile,
-                  timestamp: DateTime.now(),
-                ),
-              );
-            });
-          },
-          onDeletePost: (index) {
-            setState(() {
-              _officialPosts.removeAt(index);
-            });
-          },
-          onEditPost: (index, newContent) {
-            setState(() {
-              _officialPosts[index].content = newContent;
-            });
-          },
-          onAddBanner: (banner) {
-            setState(() {
-              _announcements.add(banner);
-            });
-          },
-          onDeleteBanner: (index) {
-            setState(() {
-              _announcements.removeAt(index);
-            });
-          },
-          onUpdateTimerDays: (days) {
-            setState(() {
-              _targetDuration = Duration(days: days);
-            });
-            _startTimer();
-          },
-          onDeleteTimer: () {
-            setState(() {
-              _targetDuration = null;
-            });
-            _countdownTimer?.cancel();
-          },
-        ),
-      ),
-    );
   }
 
   void _openMyProfile() {
@@ -479,20 +331,10 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppColors.primary,
         actions: [
           const NotificationBell(),
-          
           IconButton(
             icon: const Icon(Icons.search, color: AppColors.accent),
             onPressed: _showUserSearchDialog,
             tooltip: 'البحث عن مستخدم',
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: TextButton.icon(
-              style: TextButton.styleFrom(backgroundColor: AppColors.accent.withOpacity(0.2)),
-              onPressed: _openAdminGate,
-              icon: const Icon(Icons.admin_panel_settings, color: AppColors.accent, size: 20),
-              label: const Text('البوابة الآمنة', style: TextStyle(color: AppColors.accent, fontSize: 12)),
-            ),
           ),
         ],
       ),
@@ -799,6 +641,72 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+          // ----- الإضافة الجديدة هنا: زر غرفة العمليات (الإدارة الحصينة) -----
+          ListTile(
+            leading: const Icon(Icons.security, color: Colors.amber),
+            title: const Text('لوحة الإدارة الحصينة', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context); // إغلاق القائمة
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SecureAdminDashboardScreen(
+                    officialPosts: _officialPosts,
+                    announcements: _announcements,
+                    onAddPost: (content, imageFile) {
+                      setState(() {
+                        _officialPosts.insert(
+                          0,
+                          PostModel(
+                            id: DateTime.now().toString(),
+                            userId: 'admin',
+                            author: 'إدارة منصة القانون',
+                            username: 'admin',
+                            content: content,
+                            imageFile: imageFile,
+                            timestamp: DateTime.now(),
+                          ),
+                        );
+                      });
+                    },
+                    onDeletePost: (index) {
+                      setState(() {
+                        _officialPosts.removeAt(index);
+                      });
+                    },
+                    onEditPost: (index, newContent) {
+                      setState(() {
+                        _officialPosts[index].content = newContent;
+                      });
+                    },
+                    onAddBanner: (banner) {
+                      setState(() {
+                        _announcements.add(banner);
+                      });
+                    },
+                    onDeleteBanner: (index) {
+                      setState(() {
+                        _announcements.removeAt(index);
+                      });
+                    },
+                    onUpdateTimerDays: (days) {
+                      setState(() {
+                        _targetDuration = Duration(days: days);
+                      });
+                      _startTimer();
+                    },
+                    onDeleteTimer: () {
+                      setState(() {
+                        _targetDuration = null;
+                      });
+                      _countdownTimer?.cancel();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          // -----------------------------------------------------------------
           ListTile(
             leading: const Icon(Icons.info, color: AppColors.accent),
             title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
@@ -819,5 +727,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
- 
+} 
