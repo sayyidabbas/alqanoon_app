@@ -9,6 +9,7 @@ import 'routes/app_routes.dart';
 // دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // يجب عمل تهيئة للفايربيس هنا أيضاً لكي تعمل في الخلفية المستقلة
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -75,10 +76,9 @@ void main() async {
     // 1. تسجيل دالة الخلفية (التطبيق مغلق)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 2. الاستماع للإشعارات والتطبيق مفتوح (Foreground) - (هذا هو الإضافة الجديدة!)
+    // 2. الاستماع للإشعارات والتطبيق مفتوح (Foreground)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
-      // ملاحظة: يمكنك لاحقاً استخدام مكتبة flutter_local_notifications لإظهار نافذة منبثقة هنا إذا أردت
     });
     
   } catch (e) {
