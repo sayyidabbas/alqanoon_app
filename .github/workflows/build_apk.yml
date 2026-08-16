@@ -32,7 +32,7 @@ jobs:
       run: |
         GRADLE_PROP="android/gradle/wrapper/gradle-wrapper.properties"
         if [ -f "$GRADLE_PROP" ]; then
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-all.zip|g' "$GRADLE_PROP"
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|g' "$GRADLE_PROP"
         fi
 
     - name: Install Dependencies
@@ -81,4 +81,3 @@ jobs:
       with:
         name: law-platform-apk
         path: build/app/outputs/flutter-apk/app-release.apk
- 
