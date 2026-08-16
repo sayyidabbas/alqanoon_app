@@ -37,6 +37,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   final _postController = TextEditingController();
   final _bannerController = TextEditingController();
   final _daysController = TextEditingController();
+  final _eventTitleController = TextEditingController(); // حقل اسم الحدث الجديد
   final _newPinController = TextEditingController();
   
   File? _adminSelectedImage;
@@ -104,7 +105,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // قسم إدارة الإعلان المتحرك المميز
+            // قسم إدارة الإعلان المتحرك المميز والترتيب الأعلى
             _buildCard(
               title: 'إدارة شريط الإعلانات المتحرك 📢',
               child: Column(
@@ -113,7 +114,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     controller: _bannerController,
                     maxLines: 2,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(hintText: 'اكتب نص الإعلان المتحرك الجديد...'),
+                    decoration: const InputDecoration(
+                      hintText: 'اكتب نص الإعلان المتحرك الجديد...',
+                      hintStyle: TextStyle(color: Colors.white54),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   ElevatedButton.icon(
@@ -170,18 +174,30 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             const SizedBox(height: 16),
 
-            // إدارة العداد التنازلي
+            // إدارة العداد التنازلي مع إضافة اسم الحدث وأناقة العرض
             _buildCard(
-              title: 'إدارة العداد التنازلي (بالأيام) ⏳',
+              title: 'إدارة العداد التنازلي والحدث القادم ⏳',
               child: Column(
                 children: [
+                  TextField(
+                    controller: _eventTitleController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'اسم الحدث (مثلاً: امتحان الفاينال، موعد التسجيل)',
+                      hintStyle: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _daysController,
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(hintText: 'عدد الأيام للحدث القادم'),
+                    decoration: const InputDecoration(
+                      hintText: 'عدد الأيام المتبقية',
+                      hintStyle: TextStyle(color: Colors.white54),
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -192,13 +208,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             if (days != null) {
                               widget.onUpdateTimerDays(days);
                               _daysController.clear();
+                              _eventTitleController.clear();
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث العداد بنجاح')));
                             }
                           },
-                          child: const Text('تشغيل العداد', style: TextStyle(color: Colors.black)),
+                          child: const Text('تشغيل وتحديث العداد', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red), onPressed: widget.onDeleteTimer, child: const Text('حذف العداد')),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+                        onPressed: widget.onDeleteTimer,
+                        child: const Text('حذف العداد'),
+                      ),
                     ],
                   )
                 ],
@@ -206,16 +228,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             const SizedBox(height: 16),
 
-            // إضافة منشور مع رفعه حصراً من المعرض
+            // إضافة منشور رسمي
             _buildCard(
-              title: 'إضافة منشور رسمية (من المعرض) 📝',
+              title: 'إضافة منشور رسمي (من المعرض) 📝',
               child: Column(
                 children: [
                   TextField(
                     controller: _postController,
                     maxLines: 2,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(hintText: 'محتوى المنشور...'),
+                    decoration: const InputDecoration(
+                      hintText: 'محتوى المنشور...',
+                      hintStyle: TextStyle(color: Colors.white54),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   if (_adminSelectedImage != null) ...[
@@ -275,7 +300,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(hintText: 'الرمز السري الجديد'),
+                    decoration: const InputDecoration(
+                      hintText: 'الرمز السري الجديد',
+                      hintStyle: TextStyle(color: Colors.white54),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton(onPressed: _changePin, child: const Text('حفظ الرمز السري', style: TextStyle(color: AppColors.accent))),
@@ -305,3 +333,4 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 }
+ 
