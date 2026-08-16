@@ -45,6 +45,14 @@ jobs:
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
         sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
 
+    - name: Configure AndroidManifest for Notifications
+      run: |
+        MANIFEST="android/app/src/main/AndroidManifest.xml"
+        # حقن صلاحيات الإشعارات والرنين قبل وسم <application
+        sed -i '/<application/i \    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.VIBRATE" />' $MANIFEST
+        # حقن قناة فايربيس الافتراضية داخل وسم <application لكي يعمل والإشعار مغلق
+        sed -i '/<activity/i \        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="high_importance_channel" />' $MANIFEST
+
     - name: Copy Firebase Config
       run: cp google-services.json android/app/ || true
 
