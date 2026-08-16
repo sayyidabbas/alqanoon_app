@@ -1,55 +1,14 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
-import 'admin_panel_screen.dart';
-import '../services_screens/electronic_exams_screen.dart';
-import '../services_screens/question_bank_screen.dart' as qb; 
-import '../services_screens/study_materials_screen.dart' as sm;
 
-// ==========================================
-// دالة إرسال الإيميل الحقيقي (SMTP)
-// ==========================================
-Future<bool> sendOtpEmail(String recipientEmail, String otpCode) async {
-  // ⚠️ تنبيه: إيميل المُرسل وكلمة مرور التطبيق
-  String username = 'hasnaqeel90@gmail.com'; 
-  String password = 'lbut yqdf erum jiok'; 
-
-  final smtpServer = gmail(username, password);
-  final message = Message()
-    ..from = Address(username, 'إدارة منصة القانون')
-    ..recipients.add(recipientEmail)
-    ..subject = 'كود التحقق الأمني (OTP) 🔐'
-    ..html = """
-      <div dir="rtl" style="font-family: Arial, sans-serif; text-align: right;">
-        <h3>مرحباً بك في إدارة منصة القانون</h3>
-        <p>لقد تم طلب إجراء أمني على حساب الإدارة الخاص بك.</p>
-        <p>كود التحقق الخاص بك هو:</p>
-        <h2 style="color: #d32f2f; letter-spacing: 5px;">$otpCode</h2>
-        <p>يرجى عدم مشاركة هذا الكود مع أي شخص للحفاظ على أمان المنصة.</p>
-      </div>
-    """;
-
-  try {
-    await send(message, smtpServer);
-    return true;
-  } catch (e) {
-    debugPrint('خطأ في إرسال الإيميل: $e');
-    return false;
-  }
-}
-
-// ==========================================
-// شاشة غرفة العمليات الأساسية
-// ==========================================
-
-class SecureAdminDashboardScreen extends StatefulWidget {
-  final List<PostModel> officialPosts;
+class AdminPanelScreen extends StatefulWidget {
+  final List<PostModel> posts;
   final List<String> announcements;
   final Function(String, File?) onAddPost;
   final Function(int) onDeletePost;
@@ -59,9 +18,9 @@ class SecureAdminDashboardScreen extends StatefulWidget {
   final Function(int) onUpdateTimerDays;
   final Function() onDeleteTimer;
 
-  const SecureAdminDashboardScreen({
+  const AdminPanelScreen({
     super.key,
-    required this.officialPosts,
+    required this.posts,
     required this.announcements,
     required this.onAddPost,
     required this.onDeletePost,
@@ -73,465 +32,476 @@ class SecureAdminDashboardScreen extends StatefulWidget {
   });
 
   @override
-  State<SecureAdminDashboardScreen> createState() => _SecureAdminDashboardScreenState();
+  State<AdminPanelScreen> createState() => _AdminPanelScreenState();
 }
 
-class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen> {
-  bool _isUnlocked = false;
-  final TextEditingController _pinController = TextEditingController();
+class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  final TextEditingController _bannerController = TextEditingController();
+  final TextEditingController _timerController = TextEditingController();
+  
+  // متغيرات إضافة المنشور
+  final TextEditingController _postContentController = TextEditingController();
+  final List<File> _selectedImages = [];
+  File? _selectedPdfFile;
+  bool _isUploadingPost = false;
 
-  Future<void> _verifyPin() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-    String correctPin = '1234'; 
-    if (doc.exists && doc.data()!.containsKey('pin')) {
-      correctPin = doc.data()!['pin'].toString();
-    }
+  @override
+  void dispose() {
+    _bannerController.dispose();
+    _timerController.dispose();
+    _postContentController.dispose();
+    super.dispose();
+  }
 
-    if (_pinController.text.trim() == correctPin) {
+  // ==========================================
+  // دوال اختيار الملفات والصور
+  // ==========================================
+  Future<void> _pickImages() async {
+    final ImagePicker picker = ImagePicker();
+    final List<XFile> pickedFiles = await picker.pickMultiImage(imageQuality: 50);
+    
+    if (pickedFiles.isNotEmpty) {
       setState(() {
-        _isUnlocked = true;
+        _selectedImages.addAll(pickedFiles.map((xFile) => File(xFile.path)));
       });
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرمز السري غير صحيح!')));
-      }
     }
   }
 
-  void _showRecoveryDialog() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-    String recoveryEmail = '';
-    if (doc.exists && doc.data()!.containsKey('email')) {
-      recoveryEmail = doc.data()!['email'];
-    }
-
-    if (recoveryEmail.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم ربط بريد إلكتروني للاسترداد مسبقاً.')));
-      }
-      return;
-    }
-
-    // إظهار شاشة تحميل أثناء إرسال الإيميل
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        content: Row(
-          children: [
-            CircularProgressIndicator(color: Colors.amber),
-            SizedBox(width: 20),
-            Text('جاري إرسال الكود...', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-      ),
-    );
-
-    String otpCode = (Random().nextInt(900000) + 100000).toString();
-    bool isSent = await sendOtpEmail(recoveryEmail, otpCode);
-    
-    if (!mounted) return;
-    Navigator.pop(context); // إخفاء شاشة التحميل
-
-    if (!isSent) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ أثناء إرسال الإيميل، تأكد من اتصالك بالإنترنت.')));
-      return;
-    }
-
-    // حفظ الكود للتحقق منه
-    await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set({'current_otp': otpCode}, SetOptions(merge: true));
-
-    if (mounted) {
-      final otpController = TextEditingController();
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.cardBg,
-          title: const Text('استرداد الحساب', style: TextStyle(color: Colors.amber)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('تم إرسال كود التحقق إلى الإيميل:\n$recoveryEmail', style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
-              const SizedBox(height: 15),
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: 'أدخل كود الـ OTP', hintStyle: TextStyle(color: Colors.white54)),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
-              onPressed: () async {
-                final checkDoc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-                if (checkDoc.data()!['current_otp'] == otpController.text.trim()) {
-                  await FirebaseFirestore.instance.collection('settings').doc('secure_admin').update({'pin': '1234', 'current_otp': FieldValue.delete()});
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت استعادة الرمز إلى 1234 بنجاح')));
-                  }
-                } else {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الكود غير صحيح!')));
-                  }
-                }
-              },
-              child: const Text('تحقق', style: TextStyle(color: Colors.black)),
-            ),
-          ],
-        ),
+  Future<void> _pickPdfFile() async {
+    try {
+      const XTypeGroup typeGroup = XTypeGroup(
+        label: 'PDFs',
+        extensions: <String>['pdf'],
       );
+      final XFile? file = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+
+      if (file != null) {
+        setState(() {
+          _selectedPdfFile = File(file.path);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking PDF: $e');
+    }
+  }
+
+  // ==========================================
+  // دالة نشر المنشور (صورة/صور/ملف/نص) لفايربيس
+  // ==========================================
+  Future<void> _publishPost() async {
+    final content = _postContentController.text.trim();
+    if (content.isEmpty && _selectedImages.isEmpty && _selectedPdfFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء كتابة نص أو إرفاق ملف/صورة')));
+      return;
+    }
+
+    setState(() {
+      _isUploadingPost = true;
+    });
+
+    List<String> uploadedImageUrls = [];
+    String? fileUrl;
+    String? fileName;
+
+    try {
+      // 1. رفع الصور إن وجدت
+      for (var img in _selectedImages) {
+        final imgName = 'official_${DateTime.now().millisecondsSinceEpoch}_${_selectedImages.indexOf(img)}.jpg';
+        await Supabase.instance.client.storage.from('pdfs').upload(imgName, img); // استخدمنا مجلد pdfs مؤقتاً كونه متاحاً
+        final publicUrl = Supabase.instance.client.storage.from('pdfs').getPublicUrl(imgName);
+        uploadedImageUrls.add(publicUrl);
+      }
+
+      // 2. رفع الملف إن وجد
+      if (_selectedPdfFile != null) {
+        fileName = 'official_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        await Supabase.instance.client.storage.from('pdfs').upload(fileName, _selectedPdfFile!);
+        fileUrl = Supabase.instance.client.storage.from('pdfs').getPublicUrl(fileName);
+        
+        // محاولة استخراج اسم الملف الأصلي للعرض
+        String originalName = _selectedPdfFile!.path.split('/').last;
+        if (originalName.isNotEmpty) {
+          fileName = originalName;
+        }
+      }
+
+      // 3. الحفظ في فايربيس
+      Map<String, dynamic> postData = {
+        'content': content,
+        'timestamp': FieldValue.serverTimestamp(),
+        'likes': [],
+        'commentsCount': 0,
+      };
+
+      if (uploadedImageUrls.isNotEmpty) {
+        if (uploadedImageUrls.length == 1) {
+          postData['imageUrl'] = uploadedImageUrls.first; // لصورة واحدة
+        } else {
+          postData['imageUrls'] = uploadedImageUrls; // لعدة صور
+        }
+      }
+
+      if (fileUrl != null) {
+        postData['fileUrl'] = fileUrl;
+        postData['fileName'] = fileName;
+      }
+
+      await FirebaseFirestore.instance.collection('official_posts').add(postData);
+
+      // تنظيف الحقول بعد النشر
+      setState(() {
+        _postContentController.clear();
+        _selectedImages.clear();
+        _selectedPdfFile = null;
+        _isUploadingPost = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر التبليغ بنجاح!')));
+      }
+
+    } catch (e) {
+      setState(() {
+        _isUploadingPost = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء النشر: $e')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_isUnlocked) {
-      return Scaffold(
-        backgroundColor: AppColors.primary,
-        appBar: AppBar(title: const Text('التحقق الأمني'), backgroundColor: AppColors.primary),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(30.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.security, size: 80, color: Colors.amber),
-                const SizedBox(height: 20),
-                const Text('لوحة الإدارة الحصينة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 30),
-                TextField(
-                  controller: _pinController,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 10),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppColors.cardBg,
-                    hintText: '****',
-                    hintStyle: const TextStyle(color: Colors.white24, letterSpacing: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
-                    onPressed: _verifyPin,
-                    child: const Text('دخول', style: TextStyle(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _showRecoveryDialog,
-                  child: const Text('نسيت الرمز السري؟', style: TextStyle(color: Colors.white54)),
-                )
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('غرفة العمليات', style: TextStyle(color: Colors.amber)),
+        title: const Text('لوحة التحكم الخاصة'),
         backgroundColor: AppColors.primary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            tooltip: 'إعدادات الأمان',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecureSettingsScreen())),
-          )
-        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildControlCard(
-            title: 'تحكم الواجهة الرئيسية',
-            icon: Icons.build,
-            color: Colors.blue,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen(
-                posts: widget.officialPosts,
-                announcements: widget.announcements,
-                onAddPost: widget.onAddPost,
-                onDeletePost: widget.onDeletePost,
-                onEditPost: widget.onEditPost,
-                onAddBanner: widget.onAddBanner,
-                onDeleteBanner: widget.onDeleteBanner,
-                onUpdateTimerDays: widget.onUpdateTimerDays,
-                onDeleteTimer: widget.onDeleteTimer,
-              )));
-            },
-          ),
-          _buildControlCard(
-            title: 'تحكم سوق الكتب',
-            icon: Icons.storefront,
-            color: Colors.orange,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMarketDashboard()));
-            },
-          ),
-          _buildControlCard(
-            title: 'تحكم بنك الأسئلة',
-            icon: Icons.quiz,
-            color: Colors.green,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const qb.AdminQbStageSelectionScreen()));
-            },
-          ),
-          _buildControlCard(
-            title: 'تحكم المواد الدراسية',
-            icon: Icons.library_books,
-            color: Colors.purple,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const sm.AdminStageSelectionScreen()));
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlCard({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return Card(
-      color: AppColors.cardBg,
-      margin: const EdgeInsets.only(bottom: 15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withOpacity(0.2), shape: BoxShape.circle),
-          child: Icon(icon, color: color, size: 30),
-        ),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
-        trailing: const Icon(Icons.arrow_back_ios, color: Colors.white54, size: 16),
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
-// ==========================================
-// شاشة إعدادات الحماية وتغيير الرمز/الإيميل
-// ==========================================
-
-class SecureSettingsScreen extends StatefulWidget {
-  const SecureSettingsScreen({super.key});
-  @override
-  State<SecureSettingsScreen> createState() => _SecureSettingsScreenState();
-}
-
-class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
-  final _emailController = TextEditingController();
-  final _pinController = TextEditingController();
-  String currentEmail = '';
-  bool isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentSettings();
-  }
-
-  Future<void> _loadCurrentSettings() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-    if (doc.exists && doc.data()!.containsKey('email')) {
-      currentEmail = doc.data()!['email'];
-    }
-    setState(() {
-      isLoading = false;
-    });
-  }
-
-  void _initiateSave() async {
-    if (_pinController.text.isNotEmpty && _pinController.text.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرمز يجب أن يكون 4 أرقام على الأقل')));
-      return;
-    }
-    
-    if (_emailController.text.isEmpty && _pinController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء إدخال تعديل واحد على الأقل')));
-      return;
-    }
-
-    if (currentEmail.isNotEmpty) {
-      // هناك إيميل مربوط مسبقاً، يجب إرسال كود OTP أولاً للموافقة
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const AlertDialog(
-          backgroundColor: AppColors.cardBg,
-          content: Row(
-            children: [
-              CircularProgressIndicator(color: Colors.amber),
-              SizedBox(width: 20),
-              Text('جاري إرسال كود التأكيد...', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
-      );
-
-      String otpCode = (Random().nextInt(900000) + 100000).toString();
-      bool isSent = await sendOtpEmail(currentEmail, otpCode);
-      
-      if (!mounted) return;
-      Navigator.pop(context); // إغلاق شاشة التحميل
-
-      if (!isSent) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('حدث خطأ في إرسال الإيميل. تأكد من اتصالك بالإنترنت.')));
-        return;
-      }
-
-      // إظهار نافذة إدخال الكود
-      final otpController = TextEditingController();
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.cardBg,
-          title: const Text('التحقق الأمني مطلوب', style: TextStyle(color: Colors.amber)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('لإجراء التعديلات، تم إرسال كود إلى إيميلك الحالي:\n$currentEmail', style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
-              const SizedBox(height: 15),
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: 'أدخل كود الـ OTP', hintStyle: TextStyle(color: Colors.white54)),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // =====================================
+            // 1. قسم الإعلانات المتحركة
+            // =====================================
+            _buildSectionHeader('إدارة شريط الإعلانات المتحرك 📢'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _bannerController,
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(
+                hintText: 'اكتب نص الإعلان المتحرك الجديد...',
+                hintStyle: TextStyle(color: Colors.white38),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
               onPressed: () {
-                if (otpController.text.trim() == otpCode) {
-                  Navigator.pop(ctx);
-                  _saveToFirestore();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الكود غير صحيح!')));
+                if (_bannerController.text.isNotEmpty) {
+                  widget.onAddBanner(_bannerController.text.trim());
+                  _bannerController.clear();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إضافة الإعلان')));
                 }
               },
-              child: const Text('تأكيد وحفظ', style: TextStyle(color: Colors.black)),
+              icon: const Icon(Icons.campaign, color: Colors.black),
+              label: const Text('إضافة الإعلان لشريط الأخبار', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 10),
+            
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('settings').doc('announcements').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return const Center(child: Text('لا توجد إعلانات حالية', style: TextStyle(color: Colors.white54)));
+                }
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                final List texts = data['texts'] ?? [];
+                if (texts.isEmpty) return const Center(child: Text('لا توجد إعلانات حالية', style: TextStyle(color: Colors.white54)));
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: texts.length,
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      title: Text(texts[index], style: const TextStyle(color: Colors.white), textAlign: TextAlign.right),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.redAccent),
+                        onPressed: () => widget.onDeleteBanner(index),
+                      ),
+                    );
+                  },
+                );
+              }
+            ),
+            
+            const Divider(color: Colors.white24, height: 40),
+
+            // =====================================
+            // 2. قسم العداد التنازلي
+            // =====================================
+            _buildSectionHeader('إدارة العداد التنازلي (بالأيام) ⏳'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _timerController,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(
+                hintText: 'عدد الأيام للحدث القادم',
+                hintStyle: TextStyle(color: Colors.white38),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent)),
+                  onPressed: () {
+                    widget.onDeleteTimer();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إيقاف وحذف العداد')));
+                  },
+                  child: const Text('حذف العداد', style: TextStyle(color: Colors.redAccent)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                    onPressed: () {
+                      if (_timerController.text.isNotEmpty) {
+                        int? days = int.tryParse(_timerController.text);
+                        if (days != null) {
+                          widget.onUpdateTimerDays(days);
+                          _timerController.clear();
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تشغيل العداد بنجاح')));
+                        }
+                      }
+                    },
+                    child: const Text('تشغيل العداد', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            
+            const Divider(color: Colors.white24, height: 40),
+
+            // =====================================
+            // 3. قسم نشر التبليغات الرسمية
+            // =====================================
+            _buildSectionHeader('إضافة تبليغ أو منشور رسمي 📝'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _postContentController,
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.right,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'اكتب محتوى التبليغ أو المنشور...',
+                hintStyle: TextStyle(color: Colors.white38),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.accent)),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // عرض الصور المختارة
+            if (_selectedImages.isNotEmpty) ...[
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _selectedImages.length,
+                  itemBuilder: (context, index) {
+                    return Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(_selectedImages[index], width: 100, height: 100, fit: BoxFit.cover),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              _selectedImages.removeAt(index);
+                            });
+                          },
+                        )
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // عرض الملف المختار
+            if (_selectedPdfFile != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_selectedPdfFile!.path.split('/').last, style: const TextStyle(color: Colors.white), overflow: TextOverflow.ellipsis)),
+                    IconButton(
+                      icon: const Icon(Icons.cancel, color: Colors.redAccent),
+                      onPressed: () {
+                        setState(() {
+                          _selectedPdfFile = null;
+                        });
+                      },
+                    )
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // أزرار الاختيار والنشر
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.accent)),
+                  onPressed: _pickImages,
+                  icon: const Icon(Icons.image, color: AppColors.accent),
+                  label: const Text('صور', style: TextStyle(color: AppColors.accent)),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent)),
+                  onPressed: _pickPdfFile,
+                  icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
+                  label: const Text('ملف', style: TextStyle(color: Colors.redAccent)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, padding: const EdgeInsets.symmetric(vertical: 12)),
+                onPressed: _isUploadingPost ? null : _publishPost,
+                child: _isUploadingPost 
+                  ? const CircularProgressIndicator(color: Colors.black)
+                  : const Text('نشر التبليغ الرسمي', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ),
+
+            const Divider(color: Colors.white24, height: 40),
+
+            // =====================================
+            // 4. عرض التبليغات السابقة (للحذف/التعديل)
+            // =====================================
+            _buildSectionHeader('التبليغات المنشورة مسبقاً 📋'),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) return const Center(child: Text('لا توجد تبليغات رسمية', style: TextStyle(color: Colors.white54)));
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    return Card(
+                      color: Colors.white10,
+                      child: ListTile(
+                        title: Text(data['content'] ?? 'مرفقات', style: const TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () {
+                                _showEditPostDialog(docs[index].id, data['content'] ?? '');
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.redAccent),
+                              onPressed: () {
+                                widget.onDeletePost(index); // يحذف من فايربيس عبر home_screen
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
             ),
           ],
         ),
-      );
-
-    } else {
-      // لا يوجد إيميل مسبق، حفظ مباشر
-      _saveToFirestore();
-    }
+      ),
+    );
   }
 
-  Future<void> _saveToFirestore() async {
-    Map<String, dynamic> updates = {};
-    if (_emailController.text.isNotEmpty) updates['email'] = _emailController.text.trim();
-    if (_pinController.text.isNotEmpty) updates['pin'] = _pinController.text.trim();
-
-    await FirebaseFirestore.instance.collection('settings').doc('secure_admin').set(updates, SetOptions(merge: true));
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات بنجاح!')));
-      Navigator.pop(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: AppBar(title: const Text('إعدادات الحماية'), backgroundColor: AppColors.primary),
-      body: isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                if (currentEmail.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('البريد المربوط حالياً:', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 5),
-                        Text(currentEmail, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      ],
-                    ),
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.withOpacity(0.5)),
-                    ),
-                    child: const Text('تنبيه: لا يوجد إيميل مربوط! حسابك معرض للضياع في حال نسيان الرمز.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.right),
-                  ),
-
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: currentEmail.isEmpty ? 'أدخل بريد إلكتروني للحماية' : 'تغيير البريد الإلكتروني', 
-                    labelStyle: const TextStyle(color: Colors.amber),
-                    filled: true, fillColor: AppColors.cardBg,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: _pinController,
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'تعيين رمز سري جديد', 
-                    labelStyle: const TextStyle(color: Colors.amber),
-                    filled: true, fillColor: AppColors.cardBg,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.security, color: Colors.black),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
-                    onPressed: _initiateSave,
-                    label: const Text('حفظ التعديلات', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
-                  ),
-                )
-              ],
-            ),
+  void _showEditPostDialog(String docId, String currentContent) {
+    final editController = TextEditingController(text: currentContent);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        title: const Text('تعديل التبليغ ✏️', style: TextStyle(color: AppColors.accent)),
+        content: TextField(
+          controller: editController,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'أدخل النص الجديد...',
+            hintStyle: TextStyle(color: Colors.white38),
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () async {
+              final newContent = editController.text.trim();
+              if (newContent.isNotEmpty) {
+                await FirebaseFirestore.instance.collection('official_posts').doc(docId).update({
+                  'content': newContent,
+                });
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تعديل التبليغ بنجاح!')));
+                }
+              }
+            },
+            child: const Text('حفظ', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      textAlign: TextAlign.right,
+      style: const TextStyle(color: AppColors.accent, fontSize: 16, fontWeight: FontWeight.bold),
     );
   }
 }
+ 
