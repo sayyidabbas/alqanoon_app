@@ -70,22 +70,41 @@ class SecureAdminDashboardScreen extends StatefulWidget {
 
 class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen> {
   bool _isUnlocked = false;
+  bool _isCheckingPin = false;
   final TextEditingController _pinController = TextEditingController();
 
   Future<void> _verifyPin() async {
-    final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
-    String correctPin = '1234'; 
-    if (doc.exists && doc.data()!.containsKey('pin')) {
-      correctPin = doc.data()!['pin'].toString();
-    }
+    if (_pinController.text.trim().isEmpty) return;
 
-    if (_pinController.text.trim() == correctPin) {
-      setState(() {
-        _isUnlocked = true;
-      });
-    } else {
+    setState(() {
+      _isCheckingPin = true;
+    });
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('settings').doc('secure_admin').get();
+      String correctPin = '1234'; 
+      if (doc.exists && doc.data()!.containsKey('pin')) {
+        correctPin = doc.data()!['pin'].toString();
+      }
+
+      if (_pinController.text.trim() == correctPin) {
+        setState(() {
+          _isUnlocked = true;
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرمز السري غير صحيح!')));
+        }
+      }
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرمز السري غير صحيح!')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل الاتصال بالخادم')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingPin = false;
+        });
       }
     }
   }
@@ -213,8 +232,10 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15)),
-                    onPressed: _verifyPin,
-                    child: const Text('دخول', style: TextStyle(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
+                    onPressed: _isCheckingPin ? null : _verifyPin,
+                    child: _isCheckingPin 
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3))
+                      : const Text('دخول', style: TextStyle(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 TextButton(
@@ -252,7 +273,6 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
               Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen(
                 posts: widget.officialPosts,
                 announcements: widget.announcements,
-                // دوال الواجهة المربوطة بفايربيس مباشرة
                 onAddPost: widget.onAddPost,
                 onDeletePost: widget.onDeletePost,
                 onEditPost: widget.onEditPost,
@@ -519,3 +539,4 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
     );
   }
 }
+ 
