@@ -16,9 +16,9 @@ import '../services_screens/study_materials_screen.dart' as sm;
 // دالة إرسال الإيميل الحقيقي (SMTP)
 // ==========================================
 Future<bool> sendOtpEmail(String recipientEmail, String otpCode) async {
-  // ⚠️ تنبيه: ضع إيميلك الذي استخرجت منه الرمز السري هنا 
+  // ⚠️ تنبيه: إيميل المُرسل وكلمة مرور التطبيق
   String username = 'hasnaqeel90@gmail.com'; 
-  String password = 'lbut yqdf erum jiok'; // كلمة المرور التي أرسلتها
+  String password = 'lbut yqdf erum jiok'; 
 
   final smtpServer = gmail(username, password);
   final message = Message()
@@ -534,4 +534,4 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
           ),
     );
   }
-} 
+}
