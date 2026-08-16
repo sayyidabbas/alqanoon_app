@@ -252,6 +252,7 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
               Navigator.push(context, MaterialPageRoute(builder: (_) => AdminPanelScreen(
                 posts: widget.officialPosts,
                 announcements: widget.announcements,
+                // دوال الواجهة المربوطة بفايربيس مباشرة
                 onAddPost: widget.onAddPost,
                 onDeletePost: widget.onDeletePost,
                 onEditPost: widget.onEditPost,
@@ -518,4 +519,3 @@ class _SecureSettingsScreenState extends State<SecureSettingsScreen> {
     );
   }
 }
- 
