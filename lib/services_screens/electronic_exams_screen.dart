@@ -76,6 +76,7 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
                   'priority': 'high',
                   'notification': <String, dynamic>{
                     'sound': 'default',
+                    'channel_id': 'high_importance_channel', // التعديل الأهم هنا لإجبار الإشعار على العمل والتطبيق مغلق
                   },
                 },
                 'apns': <String, dynamic>{
@@ -365,7 +366,8 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       return;
     }
 
-    // إظهار الدوار
+    // إظهار الدوار وحفظ نافيجيتور هنا 
+    final loadingNavigator = Navigator.of(context, rootNavigator: true);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -411,8 +413,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
       
-      // إغلاق الدوار
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
 
       if (mounted) {
         Navigator.pop(context); 
@@ -428,8 +429,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         );
       }
     } catch (e) {
-      // إغلاق الدوار في حال الخطأ
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
@@ -798,7 +798,7 @@ class BookDetailsScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      // إظهار الدوار
+                      final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
                       showDialog(
                         context: ctx,
                         barrierDismissible: false,
@@ -824,8 +824,7 @@ class BookDetailsScreen extends StatelessWidget {
                           'buyerContact': contactController.text.trim(),
                         });
 
-                        // إغلاق النوافذ بالترتيب
-                        if (ctx.mounted) Navigator.of(ctx).pop(); // إغلاق الدوار
+                        loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
                         if (ctx.mounted) Navigator.of(ctx).pop(); // إغلاق النافذة السفلية
                         
                         if (context.mounted) {
@@ -833,8 +832,7 @@ class BookDetailsScreen extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                         }
                       } catch (e) {
-                        // إغلاق الدوار في حال الخطأ
-                        if (ctx.mounted) Navigator.of(ctx).pop(); 
+                        loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
                         }
@@ -1010,6 +1008,7 @@ class SellerBooksTab extends StatelessWidget {
   const SellerBooksTab({super.key, required this.onViewed});
 
   void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
+    final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(
       backgroundColor: Color(0xFF1E2235),
       content: Row(
@@ -1024,9 +1023,9 @@ class SellerBooksTab extends StatelessWidget {
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
       await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle', type: 'seller_approved');
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // إغلاق الدوار
+      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
     } catch (e) {
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // إغلاق الدوار في حال الخطأ
+      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
@@ -1428,6 +1427,7 @@ class AdminReviewBooksScreen extends StatelessWidget {
   const AdminReviewBooksScreen({super.key, required this.status});
 
   void _changeStatus(BuildContext context, Map<String, dynamic> data, String id, String newStatus) async {
+    final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1453,9 +1453,9 @@ class AdminReviewBooksScreen extends StatelessWidget {
       } else if (newStatus == 'rejected') {
         await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
       }
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // إغلاق الدوار
+      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
     } catch (e) {
-      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // إغلاق الدوار في حال الخطأ
+      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
