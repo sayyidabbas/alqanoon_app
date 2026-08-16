@@ -3,13 +3,25 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // المكتبة الجديدة للإشعارات
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
+
+// تعريف الـ Plugin الخاص بالإشعارات المحلية
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+// تعريف قناة الإشعارات ذات الأهمية القصوى للأندرويد لكي يرن ويهتز
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel', // هذا هو نفس المعرف (ID) الذي وضعناه في AndroidManifest.xml
+  'إشعارات هامة', // اسم القناة الذي يظهر للمستخدم في إعدادات الهاتف
+  description: 'هذه القناة مخصصة للإشعارات الهامة والعاجلة.',
+  importance: Importance.max,
+  playSound: true,
+);
 
 // دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // يجب عمل تهيئة للفايربيس هنا أيضاً لكي تعمل في الخلفية المستقلة
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -23,6 +35,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (e) {
     debugPrint('Firebase Background Init Error: $e');
   }
+
+  // التأكد من تهيئة الإشعارات في الخلفية
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
   debugPrint("تم استقبال إشعار في الخلفية: ${message.messageId}");
 }
 
@@ -73,13 +91,48 @@ void main() async {
       sound: true,
     );
 
+    // إنشاء وتفعيل قناة الإشعارات في الأندرويد
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    // إعدادات التهيئة للإشعارات المحلية
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
     // 1. تسجيل دالة الخلفية (التطبيق مغلق)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // 2. الاستماع للإشعارات والتطبيق مفتوح (Foreground)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
+      
+      // عرض الإشعار المنبثق (Heads-up) عندما يكون التطبيق مفتوحاً
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              channel.id,
+              channel.name,
+              channelDescription: channel.description,
+              importance: Importance.max,
+              priority: Priority.high,
+              icon: '@mipmap/ic_launcher',
+            ),
+          ),
+        );
+      }
     });
+
+    // الاشتراك في موضوع (Topic) مخصص للتبليغات الرسمية لكي يستلمها الجميع دفعة واحدة
+    await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
     
   } catch (e) {
     debugPrint('Firebase Messaging Error: $e');
