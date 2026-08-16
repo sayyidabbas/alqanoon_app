@@ -45,10 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Map<String, dynamic>> _blockedUsers = [];
   final List<PostModel> _userPosts = [];
 
-  bool _isDownloading = false;
-  double _downloadProgress = 0.0;
-  String _downloadingTitle = '';
-
   @override
   void initState() {
     super.initState();
@@ -130,25 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return NetworkImage(url);
   }
 
-  String _formatTimestamp(dynamic timestamp) {
-    if (timestamp == null) return 'الآن';
-    DateTime date;
-    if (timestamp is Timestamp) {
-      date = timestamp.toDate();
-    } else if (timestamp is DateTime) {
-      date = timestamp;
-    } else {
-      return '';
-    }
-    final diff = DateTime.now().difference(date);
-    if (diff.inSeconds < 60) return 'الآن';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
-    if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
   void _startTickerAnimation() {
     _tickerTimer?.cancel();
     _tickerTimer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
@@ -187,188 +164,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _tickerScrollController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _downloadAndOpenPdf(String rawUrl, String title) async {
-    if (rawUrl.isEmpty) return;
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '_');
-      final filePath = '${directory.path}/$safeTitle.pdf';
-      final fileExists = await File(filePath).exists();
-
-      if (fileExists) {
-        final result = await OpenFilex.open(filePath);
-        if (result.type != ResultType.done && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر فتح الملف: ${result.message}')));
-        }
-        return;
-      }
-
-      setState(() {
-        _isDownloading = true;
-        _downloadProgress = 0.0;
-        _downloadingTitle = title;
-      });
-
-      final dio = Dio();
-      await dio.download(
-        rawUrl.trim(),
-        filePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress = received / total;
-            });
-          }
-        },
-      );
-
-      setState(() {
-        _isDownloading = false;
-      });
-
-      final result = await OpenFilex.open(filePath);
-      if (result.type != ResultType.done && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر فتح الملف: ${result.message}')));
-      }
-    } catch (e) {
-      setState(() { _isDownloading = false; });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء التنزيل: $e')));
-    }
-  }
-
-  void _showOfficialCommentsModal(BuildContext context, String postId) {
-    final commentController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
-              const SizedBox(height: 15),
-              const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 15),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.4,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('official_posts').doc(postId).collection('comments').orderBy('timestamp', descending: true).snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-                    final comments = snapshot.data!.docs;
-                    if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد. كن أول من يعلق!', style: TextStyle(color: Colors.white54)));
-
-                    return ListView.builder(
-                      itemCount: comments.length,
-                      itemBuilder: (context, i) {
-                        final data = comments[i].data() as Map<String, dynamic>;
-                        final author = data['author'] ?? 'مستخدم';
-                        final photoUrl = data['photoUrl'];
-                        final commentUserId = data['userId'];
-                        final username = data['username'] ?? 'user';
-
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
-                          leading: GestureDetector(
-                            onTap: () {
-                              if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileViewScreen(peerUid: commentUserId, username: username, fullName: author, photoUrl: photoUrl)));
-                              }
-                            },
-                            child: CircleAvatar(
-                              radius: 20,
-                              backgroundColor: AppColors.accent,
-                              backgroundImage: _getProfileImage(photoUrl),
-                              child: (photoUrl == null || photoUrl.isEmpty) ? Text(author.isNotEmpty ? author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)) : null,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileViewScreen(peerUid: commentUserId, username: username, fullName: author, photoUrl: photoUrl)));
-                                  }
-                                },
-                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
-                              ),
-                              const SizedBox(width: 8),
-                              Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                              const Spacer(),
-                              Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                            ],
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6.0),
-                            child: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14)),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              const Divider(color: Colors.white10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: commentController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'اكتب تعليقاً...',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        filled: true,
-                        fillColor: AppColors.primary,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
-                    child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.black, size: 20),
-                      onPressed: () async {
-                        final text = commentController.text.trim();
-                        if (text.isEmpty) return;
-                        final user = FirebaseAuth.instance.currentUser;
-                        if (user != null) {
-                          final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-                          final uData = uDoc.data();
-
-                          await FirebaseFirestore.instance.collection('official_posts').doc(postId).collection('comments').add({
-                            'text': text,
-                            'author': uData?['fullName'] ?? user.displayName ?? 'مستخدم',
-                            'username': uData?['username'] ?? 'user',
-                            'photoUrl': uData?['photoUrl'],
-                            'userId': user.uid,
-                            'timestamp': FieldValue.serverTimestamp(),
-                          });
-                          await FirebaseFirestore.instance.collection('official_posts').doc(postId).update({
-                            'commentsCount': FieldValue.increment(1),
-                          });
-                          commentController.clear();
-                        }
-                      },
-                    ),
-                  )
-                ],
-              ),
-              const SizedBox(height: 15),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   void _openMyProfile() {
@@ -548,84 +343,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainHomeTab() {
-    return Stack(
-      children: [
-        SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
+          if (_announcements.isNotEmpty) const SizedBox(height: 20),
+          
+          if (_targetDuration != null && _targetDuration!.inSeconds > 0) _buildCountdownCard(),
+          if (_targetDuration != null && _targetDuration!.inSeconds > 0) const SizedBox(height: 25),
+
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
-              if (_announcements.isNotEmpty) const SizedBox(height: 20),
-              
-              if (_targetDuration != null && _targetDuration!.inSeconds > 0) _buildCountdownCard(),
-              if (_targetDuration != null && _targetDuration!.inSeconds > 0) const SizedBox(height: 25),
-
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Icon(Icons.gavel_rounded, color: AppColors.accent, size: 24),
-                  SizedBox(width: 8),
-                  Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                ],
-              ),
-              const SizedBox(height: 15),
-
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Padding(padding: EdgeInsets.only(top: 50), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(40.0),
-                      child: Center(child: Text('لا توجد تبليغات رسمية حالياً.', style: TextStyle(color: Colors.white54, fontSize: 16))),
-                    );
-                  }
-
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: snapshot.data!.docs.length,
-                    itemBuilder: (context, index) => _buildOfficialPostCard(snapshot.data!.docs[index]),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
+              Icon(Icons.gavel_rounded, color: AppColors.accent, size: 24),
+              SizedBox(width: 8),
+              Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
             ],
           ),
-        ),
-        
-        if (_isDownloading)
-          Container(
-            color: Colors.black87,
-            child: Center(
-              child: Card(
-                color: AppColors.cardBg,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                margin: const EdgeInsets.symmetric(horizontal: 40),
-                child: Padding(
-                  padding: const EdgeInsets.all(25.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(color: AppColors.accent),
-                      const SizedBox(height: 20),
-                      Text(
-                        'جاري تحميل:\n$_downloadingTitle',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, height: 1.5),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 15),
-                      Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 20)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+          const SizedBox(height: 15),
+
+          // تم استبدال الـ StreamBuilder المباشر بويدجت مستقل لمنع إعادة البناء
+          const OfficialPostsList(),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 
@@ -734,6 +477,199 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildServicesTab() {
+    List<Map<String, dynamic>> services = [
+      {'icon': Icons.menu_book_rounded, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
+      {'icon': Icons.book_rounded, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
+      {'icon': Icons.quiz_rounded, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
+      {'icon': Icons.assignment_rounded, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          childAspectRatio: 1.2,
+        ),
+        itemCount: services.length,
+        itemBuilder: (context, index) => InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            Navigator.pushNamed(context, services[index]['route']);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.accent.withOpacity(0.2)),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(services[index]['icon'], size: 45, color: AppColors.accent),
+                const SizedBox(height: 12),
+                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawer(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    return Drawer(
+      backgroundColor: AppColors.cardBg,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          StreamBuilder<DocumentSnapshot>(
+            stream: currentUser != null ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots() : null,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const UserAccountsDrawerHeader(decoration: BoxDecoration(color: AppColors.primary), accountName: Text("خطأ في التحميل", style: TextStyle(color: Colors.red)), accountEmail: Text(""));
+              }
+
+              String name = currentUser?.displayName ?? "طالب قانون";
+              String email = currentUser?.email ?? "";
+              String? photoUrl;
+
+              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                name = data['fullName'] ?? name;
+                email = data['email'] ?? email;
+                photoUrl = data['photoUrl'];
+              }
+
+              return UserAccountsDrawerHeader(
+                decoration: const BoxDecoration(color: AppColors.primary),
+                accountName: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                currentAccountPicture: CircleAvatar(
+                  backgroundColor: AppColors.accent,
+                  backgroundImage: _getProfileImage(photoUrl),
+                  child: photoUrl == null || photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0] : 'ع', style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold)) : null,
+                ),
+              );
+            },
+          ),
+          ListTile(leading: const Icon(Icons.person, color: AppColors.accent), title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); _openMyProfile(); }),
+          ListTile(leading: const Icon(Icons.settings, color: AppColors.accent), title: const Text('الإعدادات', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(blockedUsers: _blockedUsers, onUnblockUser: (index) { setState(() { _blockedUsers.removeAt(index); }); }))); }),
+          ListTile(
+            leading: const Icon(Icons.security, color: Colors.amber),
+            title: const Text('لوحة الإدارة الحصينة', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+            onTap: () {
+              Navigator.pop(context); 
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SecureAdminDashboardScreen(
+                    officialPosts: _officialPosts,
+                    announcements: _announcements,
+                    onAddPost: (String content, File? imageFile) async {
+                      String? imageUrl;
+                      if (imageFile != null) {
+                        final bytes = await imageFile.readAsBytes();
+                        imageUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                      }
+                      await FirebaseFirestore.instance.collection('official_posts').add({
+                        'content': content,
+                        'imageUrl': imageUrl,
+                        'timestamp': FieldValue.serverTimestamp(),
+                        'likes': [],
+                        'commentsCount': 0,
+                      });
+                    },
+                    onDeletePost: (index) async {
+                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
+                      if (index < snapshot.docs.length) {
+                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).delete();
+                      }
+                    },
+                    onEditPost: (index, newContent) async {
+                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
+                      if (index < snapshot.docs.length) {
+                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).update({'content': newContent});
+                      }
+                    },
+                    onAddBanner: (banner) async {
+                      List<String> updatedAnnouncements = List.from(_announcements)..add(banner);
+                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
+                    },
+                    onDeleteBanner: (index) async {
+                      List<String> updatedAnnouncements = List.from(_announcements)..removeAt(index);
+                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
+                    },
+                    onUpdateTimerDays: (days) async {
+                      DateTime target = DateTime.now().add(Duration(days: days));
+                      await FirebaseFirestore.instance.collection('settings').doc('timer').set({'targetDate': Timestamp.fromDate(target)}, SetOptions(merge: true));
+                    },
+                    onDeleteTimer: () async {
+                      await FirebaseFirestore.instance.collection('settings').doc('timer').delete();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          ListTile(leading: const Icon(Icons.info, color: AppColors.accent), title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)), onTap: () {}),
+          const Divider(color: Colors.white24),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.redAccent)),
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.pushReplacementNamed(context, AppRoutes.login);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =======================================================
+// ويدجت منفصل لعرض التبليغات لمنع إعادة البناء مع العداد
+// =======================================================
+class OfficialPostsList extends StatefulWidget {
+  const OfficialPostsList({super.key});
+
+  @override
+  State<OfficialPostsList> createState() => _OfficialPostsListState();
+}
+
+class _OfficialPostsListState extends State<OfficialPostsList> {
+  bool _isDownloading = false;
+  double _downloadProgress = 0.0;
+  String _downloadingTitle = '';
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'الآن';
+    DateTime date;
+    if (timestamp is Timestamp) {
+      date = timestamp.toDate();
+    } else if (timestamp is DateTime) {
+      date = timestamp;
+    } else {
+      return '';
+    }
+    final diff = DateTime.now().difference(date);
+    if (diff.inSeconds < 60) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inDays == 1) return 'أمس';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
   Widget _buildNetworkImage(String url, {double width = double.infinity}) {
     if (url.startsWith('data:image')) {
       return Image.memory(base64Decode(url.split(',').last), fit: BoxFit.cover, width: width);
@@ -744,6 +680,196 @@ class _HomeScreenState extends State<HomeScreen> {
       width: width,
       placeholder: (context, url) => Container(width: width, color: AppColors.primary, child: const Center(child: CircularProgressIndicator(color: AppColors.accent))),
       errorWidget: (context, url, error) => Container(width: width, color: AppColors.primary, child: const Icon(Icons.broken_image, color: Colors.white54, size: 40)),
+    );
+  }
+
+  Future<void> _downloadAndOpenPdf(String rawUrl, String title) async {
+    if (rawUrl.isEmpty) return;
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '_');
+      final filePath = '${directory.path}/$safeTitle.pdf';
+      final fileExists = await File(filePath).exists();
+
+      if (fileExists) {
+        final result = await OpenFilex.open(filePath);
+        if (result.type != ResultType.done && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر فتح الملف: ${result.message}')));
+        }
+        return;
+      }
+
+      setState(() {
+        _isDownloading = true;
+        _downloadProgress = 0.0;
+        _downloadingTitle = title;
+      });
+
+      final dio = Dio();
+      await dio.download(
+        rawUrl.trim(),
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      setState(() {
+        _isDownloading = false;
+      });
+
+      final result = await OpenFilex.open(filePath);
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تعذر فتح الملف: ${result.message}')));
+      }
+    } catch (e) {
+      setState(() { _isDownloading = false; });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء التنزيل: $e')));
+    }
+  }
+
+  ImageProvider? _getProfileImage(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      return MemoryImage(base64Decode(url.split(',').last));
+    }
+    return NetworkImage(url);
+  }
+
+  void _showOfficialCommentsModal(BuildContext context, String postId) {
+    final commentController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+              const SizedBox(height: 15),
+              const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 15),
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.4,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('official_posts').doc(postId).collection('comments').orderBy('timestamp', descending: true).snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                    final comments = snapshot.data!.docs;
+                    if (comments.isEmpty) return const Center(child: Text('لا توجد تعليقات بعد. كن أول من يعلق!', style: TextStyle(color: Colors.white54)));
+
+                    return ListView.builder(
+                      itemCount: comments.length,
+                      itemBuilder: (context, i) {
+                        final data = comments[i].data() as Map<String, dynamic>;
+                        final author = data['author'] ?? 'مستخدم';
+                        final photoUrl = data['photoUrl'];
+                        final commentUserId = data['userId'];
+                        final username = data['username'] ?? 'user';
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+                          leading: GestureDetector(
+                            onTap: () {
+                              if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileViewScreen(peerUid: commentUserId, username: username, fullName: author, photoUrl: photoUrl)));
+                              }
+                            },
+                            child: CircleAvatar(
+                              radius: 20,
+                              backgroundColor: AppColors.accent,
+                              backgroundImage: _getProfileImage(photoUrl),
+                              child: (photoUrl == null || photoUrl.isEmpty) ? Text(author.isNotEmpty ? author[0] : 'ع', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)) : null,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileViewScreen(peerUid: commentUserId, username: username, fullName: author, photoUrl: photoUrl)));
+                                  }
+                                },
+                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                              const Spacer(),
+                              Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 6.0),
+                            child: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14)),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              const Divider(color: Colors.white10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: commentController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'اكتب تعليقاً...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        filled: true,
+                        fillColor: AppColors.primary,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.black, size: 20),
+                      onPressed: () async {
+                        final text = commentController.text.trim();
+                        if (text.isEmpty) return;
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          final uDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                          final uData = uDoc.data();
+
+                          await FirebaseFirestore.instance.collection('official_posts').doc(postId).collection('comments').add({
+                            'text': text,
+                            'author': uData?['fullName'] ?? user.displayName ?? 'مستخدم',
+                            'username': uData?['username'] ?? 'user',
+                            'photoUrl': uData?['photoUrl'],
+                            'userId': user.uid,
+                            'timestamp': FieldValue.serverTimestamp(),
+                          });
+                          await FirebaseFirestore.instance.collection('official_posts').doc(postId).update({
+                            'commentsCount': FieldValue.increment(1),
+                          });
+                          commentController.clear();
+                        }
+                      },
+                    ),
+                  )
+                ],
+              ),
+              const SizedBox(height: 15),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -903,161 +1029,60 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildServicesTab() {
-    List<Map<String, dynamic>> services = [
-      {'icon': Icons.menu_book_rounded, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
-      {'icon': Icons.book_rounded, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
-      {'icon': Icons.quiz_rounded, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
-      {'icon': Icons.assignment_rounded, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 15,
-          mainAxisSpacing: 15,
-          childAspectRatio: 1.2,
-        ),
-        itemCount: services.length,
-        itemBuilder: (context, index) => InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            Navigator.pushNamed(context, services[index]['route']);
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accent.withOpacity(0.2)),
-              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(services[index]['icon'], size: 45, color: AppColors.accent),
-                const SizedBox(height: 12),
-                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    return Drawer(
-      backgroundColor: AppColors.cardBg,
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          StreamBuilder<DocumentSnapshot>(
-            stream: currentUser != null ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots() : null,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const UserAccountsDrawerHeader(decoration: BoxDecoration(color: AppColors.primary), accountName: Text("خطأ في التحميل", style: TextStyle(color: Colors.red)), accountEmail: Text(""));
-              }
-
-              String name = currentUser?.displayName ?? "طالب قانون";
-              String email = currentUser?.email ?? "";
-              String? photoUrl;
-
-              if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                name = data['fullName'] ?? name;
-                email = data['email'] ?? email;
-                photoUrl = data['photoUrl'];
-              }
-
-              return UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(color: AppColors.primary),
-                accountName: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                accountEmail: Text(email, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                currentAccountPicture: CircleAvatar(
-                  backgroundColor: AppColors.accent,
-                  backgroundImage: _getProfileImage(photoUrl),
-                  child: photoUrl == null || photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0] : 'ع', style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold)) : null,
-                ),
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(padding: EdgeInsets.only(top: 50), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(40.0),
+                child: Center(child: Text('لا توجد تبليغات رسمية حالياً.', style: TextStyle(color: Colors.white54, fontSize: 16))),
               );
-            },
-          ),
-          ListTile(leading: const Icon(Icons.person, color: AppColors.accent), title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); _openMyProfile(); }),
-          ListTile(leading: const Icon(Icons.settings, color: AppColors.accent), title: const Text('الإعدادات', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(blockedUsers: _blockedUsers, onUnblockUser: (index) { setState(() { _blockedUsers.removeAt(index); }); }))); }),
-          ListTile(
-            leading: const Icon(Icons.security, color: Colors.amber),
-            title: const Text('لوحة الإدارة الحصينة', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-            onTap: () {
-              Navigator.pop(context); 
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SecureAdminDashboardScreen(
-                    officialPosts: _officialPosts,
-                    announcements: _announcements,
-                    onAddPost: (String content, File? imageFile) async {
-                      String? imageUrl;
-                      if (imageFile != null) {
-                        final bytes = await imageFile.readAsBytes();
-                        imageUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-                      }
-                      await FirebaseFirestore.instance.collection('official_posts').add({
-                        'content': content,
-                        'imageUrl': imageUrl,
-                        'timestamp': FieldValue.serverTimestamp(),
-                        'likes': [],
-                        'commentsCount': 0,
-                      });
-                    },
-                    onDeletePost: (index) async {
-                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
-                      if (index < snapshot.docs.length) {
-                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).delete();
-                      }
-                    },
-                    onEditPost: (index, newContent) async {
-                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
-                      if (index < snapshot.docs.length) {
-                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).update({'content': newContent});
-                      }
-                    },
-                    onAddBanner: (banner) async {
-                      List<String> updatedAnnouncements = List.from(_announcements)..add(banner);
-                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
-                    },
-                    onDeleteBanner: (index) async {
-                      List<String> updatedAnnouncements = List.from(_announcements)..removeAt(index);
-                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
-                    },
-                    onUpdateTimerDays: (days) async {
-                      DateTime target = DateTime.now().add(Duration(days: days));
-                      await FirebaseFirestore.instance.collection('settings').doc('timer').set({'targetDate': Timestamp.fromDate(target)}, SetOptions(merge: true));
-                    },
-                    onDeleteTimer: () async {
-                      await FirebaseFirestore.instance.collection('settings').doc('timer').delete();
-                    },
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: snapshot.data!.docs.length,
+              itemBuilder: (context, index) => _buildOfficialPostCard(snapshot.data!.docs[index]),
+            );
+          },
+        ),
+        if (_isDownloading)
+          Container(
+            color: Colors.black87,
+            child: Center(
+              child: Card(
+                color: AppColors.cardBg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                child: Padding(
+                  padding: const EdgeInsets.all(25.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: AppColors.accent),
+                      const SizedBox(height: 20),
+                      Text(
+                        'جاري تحميل:\n$_downloadingTitle',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, height: 1.5),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 15),
+                      Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 20)),
+                    ],
                   ),
                 ),
-              );
-            },
+              ),
+            ),
           ),
-          ListTile(leading: const Icon(Icons.info, color: AppColors.accent), title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)), onTap: () {}),
-          const Divider(color: Colors.white24),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.redAccent)),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
-              }
-            },
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
