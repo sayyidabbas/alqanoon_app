@@ -31,10 +31,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  Duration? _targetDuration;
-  Timer? _countdownTimer;
-  String _eventTitle = 'الحدث القادم';
-
   late ScrollController _tickerScrollController;
   Timer? _tickerTimer;
 
@@ -57,7 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _listenToFirebaseData() {
-    // جلب الإعلانات
     FirebaseFirestore.instance.collection('settings').doc('announcements').snapshots().listen((doc) {
       if (mounted && doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -67,27 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
             _announcements.addAll(List<String>.from(data['texts']));
           });
         }
-      }
-    });
-
-    // جلب العداد واسم الحدث
-    FirebaseFirestore.instance.collection('settings').doc('timer').snapshots().listen((doc) {
-      if (mounted && doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (data.containsKey('targetDate')) {
-          Timestamp ts = data['targetDate'];
-          DateTime target = ts.toDate();
-          Duration diff = target.difference(DateTime.now());
-          setState(() {
-            _targetDuration = diff.isNegative ? Duration.zero : diff;
-            _eventTitle = data['title'] ?? 'الحدث القادم';
-          });
-          _startTimer();
-        }
-      } else {
-        setState(() {
-          _targetDuration = null;
-        });
       }
     });
   }
@@ -141,25 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _startTimer() {
-    _countdownTimer?.cancel();
-    if (_targetDuration == null) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_targetDuration != null && _targetDuration!.inSeconds > 0) {
-        if (mounted) {
-          setState(() {
-            _targetDuration = _targetDuration! - const Duration(seconds: 1);
-          });
-        }
-      } else {
-        _countdownTimer?.cancel();
-      }
-    });
-  }
-
   @override
   void dispose() {
-    _countdownTimer?.cancel();
     _tickerTimer?.cancel();
     _tickerScrollController.dispose();
     _searchController.dispose();
@@ -351,8 +308,10 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
           if (_announcements.isNotEmpty) const SizedBox(height: 20),
           
-          if (_targetDuration != null && _targetDuration!.inSeconds > 0) _buildCountdownCard(),
-          if (_targetDuration != null && _targetDuration!.inSeconds > 0) const SizedBox(height: 25),
+          // دمجنا العداد في ويدجت مستقل لمنع إعادة بناء الصفحة بأكملها
+          const CountdownTimerWidget(),
+          
+          const SizedBox(height: 25),
 
           const Row(
             mainAxisAlignment: MainAxisAlignment.start,
@@ -364,7 +323,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 15),
 
-          // تم استبدال الـ StreamBuilder المباشر بويدجت مستقل لمنع إعادة البناء
           const OfficialPostsList(),
           const SizedBox(height: 20),
         ],
@@ -408,72 +366,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCountdownCard() {
-    if (_targetDuration == null) return const SizedBox();
-    String days = _targetDuration!.inDays.toString().padLeft(2, '0');
-    String hours = (_targetDuration!.inHours % 24).toString().padLeft(2, '0');
-    String minutes = (_targetDuration!.inMinutes % 60).toString().padLeft(2, '0');
-    String seconds = (_targetDuration!.inSeconds % 60).toString().padLeft(2, '0');
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E2235), Color(0xFF101423)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15, offset: Offset(0, 8))],
-        border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1.5),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.hourglass_bottom_rounded, color: AppColors.accent, size: 26),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(_eventTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          const SizedBox(height: 25),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _timerUnit(days, 'يوم'),
-              _timerUnit(hours, 'ساعة'),
-              _timerUnit(minutes, 'دقيقة'),
-              _timerUnit(seconds, 'ثانية'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _timerUnit(String value, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 65,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: AppColors.accent.withOpacity(0.5), width: 1),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 3))],
-          ),
-          child: Center(child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.accent, letterSpacing: 1.5))),
-        ),
-        const SizedBox(height: 10),
-        Text(label, style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 
@@ -573,46 +465,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     officialPosts: _officialPosts,
                     announcements: _announcements,
                     onAddPost: (String content, File? imageFile) async {
-                      String? imageUrl;
-                      if (imageFile != null) {
-                        final bytes = await imageFile.readAsBytes();
-                        imageUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-                      }
-                      await FirebaseFirestore.instance.collection('official_posts').add({
-                        'content': content,
-                        'imageUrl': imageUrl,
-                        'timestamp': FieldValue.serverTimestamp(),
-                        'likes': [],
-                        'commentsCount': 0,
-                      });
+                      // دوال وهمية يتم استخدامها من الشاشة الأخرى لتفادي الأخطاء
                     },
-                    onDeletePost: (index) async {
-                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
-                      if (index < snapshot.docs.length) {
-                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).delete();
-                      }
-                    },
-                    onEditPost: (index, newContent) async {
-                      final snapshot = await FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).get();
-                      if (index < snapshot.docs.length) {
-                        await FirebaseFirestore.instance.collection('official_posts').doc(snapshot.docs[index].id).update({'content': newContent});
-                      }
-                    },
-                    onAddBanner: (banner) async {
-                      List<String> updatedAnnouncements = List.from(_announcements)..add(banner);
-                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
-                    },
-                    onDeleteBanner: (index) async {
-                      List<String> updatedAnnouncements = List.from(_announcements)..removeAt(index);
-                      await FirebaseFirestore.instance.collection('settings').doc('announcements').set({'texts': updatedAnnouncements}, SetOptions(merge: true));
-                    },
-                    onUpdateTimerDays: (days) async {
-                      DateTime target = DateTime.now().add(Duration(days: days));
-                      await FirebaseFirestore.instance.collection('settings').doc('timer').set({'targetDate': Timestamp.fromDate(target)}, SetOptions(merge: true));
-                    },
-                    onDeleteTimer: () async {
-                      await FirebaseFirestore.instance.collection('settings').doc('timer').delete();
-                    },
+                    onDeletePost: (index) {},
+                    onEditPost: (index, newContent) {},
+                    onAddBanner: (banner) {},
+                    onDeleteBanner: (index) {},
+                    onUpdateTimerDays: (days) {},
+                    onDeleteTimer: () {},
                   ),
                 ),
               );
@@ -637,7 +497,141 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // =======================================================
-// ويدجت منفصل لعرض التبليغات لمنع إعادة البناء مع العداد
+// ويدجت مستقل للعداد التنازلي لمنع إعادة البناء الكلي
+// =======================================================
+class CountdownTimerWidget extends StatefulWidget {
+  const CountdownTimerWidget({super.key});
+
+  @override
+  State<CountdownTimerWidget> createState() => _CountdownTimerWidgetState();
+}
+
+class _CountdownTimerWidgetState extends State<CountdownTimerWidget> {
+  Duration? _targetDuration;
+  Timer? _countdownTimer;
+  String _eventTitle = 'الحدث القادم';
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToTimer();
+  }
+
+  void _listenToTimer() {
+    FirebaseFirestore.instance.collection('settings').doc('timer').snapshots().listen((doc) {
+      if (mounted && doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data.containsKey('targetDate')) {
+          Timestamp ts = data['targetDate'];
+          DateTime target = ts.toDate();
+          Duration diff = target.difference(DateTime.now());
+          setState(() {
+            _targetDuration = diff.isNegative ? Duration.zero : diff;
+            _eventTitle = data['title'] ?? 'الحدث القادم';
+          });
+          _startTimer();
+        }
+      } else {
+        setState(() {
+          _targetDuration = null;
+        });
+      }
+    });
+  }
+
+  void _startTimer() {
+    _countdownTimer?.cancel();
+    if (_targetDuration == null) return;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_targetDuration != null && _targetDuration!.inSeconds > 0) {
+        if (mounted) {
+          setState(() {
+            _targetDuration = _targetDuration! - const Duration(seconds: 1);
+          });
+        }
+      } else {
+        _countdownTimer?.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  Widget _timerUnit(String value, String label) {
+    return Column(
+      children: [
+        Container(
+          width: 65,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: AppColors.accent.withOpacity(0.5), width: 1),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 3))],
+          ),
+          child: Center(child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.accent, letterSpacing: 1.5))),
+        ),
+        const SizedBox(height: 10),
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_targetDuration == null || _targetDuration!.inSeconds <= 0) return const SizedBox();
+
+    String days = _targetDuration!.inDays.toString().padLeft(2, '0');
+    String hours = (_targetDuration!.inHours % 24).toString().padLeft(2, '0');
+    String minutes = (_targetDuration!.inMinutes % 60).toString().padLeft(2, '0');
+    String seconds = (_targetDuration!.inSeconds % 60).toString().padLeft(2, '0');
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E2235), Color(0xFF101423)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15, offset: Offset(0, 8))],
+        border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1.5),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.hourglass_bottom_rounded, color: AppColors.accent, size: 26),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(_eventTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          const SizedBox(height: 25),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _timerUnit(days, 'يوم'),
+              _timerUnit(hours, 'ساعة'),
+              _timerUnit(minutes, 'دقيقة'),
+              _timerUnit(seconds, 'ثانية'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =======================================================
+// ويدجت منفصل لعرض التبليغات
 // =======================================================
 class OfficialPostsList extends StatefulWidget {
   const OfficialPostsList({super.key});
@@ -1086,4 +1080,3 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     );
   }
 }
- 
