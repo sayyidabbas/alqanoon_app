@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Duration? _targetDuration;
   Timer? _countdownTimer;
+  String _eventTitle = 'الحدث القادم';
 
   late ScrollController _tickerScrollController;
   Timer? _tickerTimer;
@@ -52,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _tickerScrollController = ScrollController();
-    _listenToFirebaseData();
+    _listenToFirebaseData(); 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
@@ -60,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _listenToFirebaseData() {
+    // جلب الإعلانات
     FirebaseFirestore.instance.collection('settings').doc('announcements').snapshots().listen((doc) {
       if (mounted && doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -72,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
+    // جلب العداد واسم الحدث
     FirebaseFirestore.instance.collection('settings').doc('timer').snapshots().listen((doc) {
       if (mounted && doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -81,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Duration diff = target.difference(DateTime.now());
           setState(() {
             _targetDuration = diff.isNegative ? Duration.zero : diff;
+            _eventTitle = data['title'] ?? 'الحدث القادم';
           });
           _startTimer();
         }
@@ -241,19 +245,19 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
               const SizedBox(height: 15),
               const Text('التعليقات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
               SizedBox(
-                height: 350,
+                height: MediaQuery.of(context).size.height * 0.4,
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('official_posts').doc(postId).collection('comments').orderBy('timestamp', descending: true).snapshots(),
                   builder: (context, snapshot) {
@@ -271,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         final username = data['username'] ?? 'user';
 
                         return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
                           leading: GestureDetector(
                             onTap: () {
                               if (commentUserId != null && commentUserId != FirebaseAuth.instance.currentUser?.uid) {
@@ -293,16 +297,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileViewScreen(peerUid: commentUserId, username: username, fullName: author, photoUrl: photoUrl)));
                                   }
                                 },
-                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                child: Text(author, style: const TextStyle(color: AppColors.accent, fontSize: 13, fontWeight: FontWeight.bold)),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 8),
                               Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                               const Spacer(),
                               Text(_formatTimestamp(data['timestamp']), style: const TextStyle(color: Colors.white38, fontSize: 10)),
                             ],
                           ),
                           subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
+                            padding: const EdgeInsets.only(top: 6.0),
                             child: Text(data['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 14)),
                           ),
                         );
@@ -323,12 +327,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: AppColors.primary,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Container(
                     decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
                     child: IconButton(
@@ -359,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
             ],
           ),
         );
@@ -508,8 +512,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        title: const Text('منصة القانون'),
+        title: const Text('منصة القانون', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
+        elevation: 0,
         actions: [
           const NotificationBell(),
           IconButton(
@@ -531,10 +536,11 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         selectedItemColor: AppColors.accent,
         unselectedItemColor: Colors.white54,
-        backgroundColor: AppColors.primary,
+        backgroundColor: AppColors.cardBg,
+        elevation: 10,
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'الرئيسية'),
           BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
         ],
       ),
@@ -545,20 +551,22 @@ class _HomeScreenState extends State<HomeScreen> {
     return Stack(
       children: [
         SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
-              if (_announcements.isNotEmpty) const SizedBox(height: 16),
+              if (_announcements.isNotEmpty) const SizedBox(height: 20),
               
               if (_targetDuration != null && _targetDuration!.inSeconds > 0) _buildCountdownCard(),
               if (_targetDuration != null && _targetDuration!.inSeconds > 0) const SizedBox(height: 25),
 
               const Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  Text('التبليغات الرسمية', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.accent)),
+                  Icon(Icons.gavel_rounded, color: AppColors.accent, size: 24),
+                  SizedBox(width: 8),
+                  Text('التبليغات الرسمية', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 ],
               ),
               const SizedBox(height: 15),
@@ -567,13 +575,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 stream: FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                    return const Padding(padding: EdgeInsets.only(top: 50), child: Center(child: CircularProgressIndicator(color: AppColors.accent)));
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Text('لا توجد تبليغات رسمية حالياً.', style: TextStyle(color: Colors.white54)),
-                    ));
+                    return const Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: Center(child: Text('لا توجد تبليغات رسمية حالياً.', style: TextStyle(color: Colors.white54, fontSize: 16))),
+                    );
                   }
 
                   return ListView.builder(
@@ -584,31 +592,33 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
         
         if (_isDownloading)
           Container(
-            color: Colors.black54,
+            color: Colors.black87,
             child: Center(
               child: Card(
                 color: AppColors.cardBg,
-                margin: const EdgeInsets.symmetric(horizontal: 32),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                margin: const EdgeInsets.symmetric(horizontal: 40),
                 child: Padding(
-                  padding: const EdgeInsets.all(20.0),
+                  padding: const EdgeInsets.all(25.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const CircularProgressIndicator(color: AppColors.accent),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 20),
                       Text(
-                        'جاري تحميل: $_downloadingTitle',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                        'جاري تحميل:\n$_downloadingTitle',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, height: 1.5),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 10),
-                      Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 15),
+                      Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 20)),
                     ],
                   ),
                 ),
@@ -620,28 +630,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAnnouncementsTicker() {
-    String combinedText = "${_announcements.join("   •   ")}   •   ";
+    String combinedText = "${_announcements.join("   ✦   ")}   ✦   ";
     return Container(
       height: 55,
-      padding: const EdgeInsets.symmetric(horizontal: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.accent.withOpacity(0.15), AppColors.cardBg],
+          colors: [AppColors.accent.withOpacity(0.1), AppColors.cardBg],
           begin: Alignment.centerRight,
           end: Alignment.centerLeft,
         ),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: AppColors.accent.withOpacity(0.6), width: 1),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3))],
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppColors.accent.withOpacity(0.4), width: 1),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
-            child: const Icon(Icons.campaign, color: Colors.black, size: 20),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.2), shape: BoxShape.circle),
+            child: const Icon(Icons.campaign_rounded, color: AppColors.accent, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 15),
           Expanded(
             child: SingleChildScrollView(
               controller: _tickerScrollController,
@@ -649,7 +659,7 @@ class _HomeScreenState extends State<HomeScreen> {
               physics: const NeverScrollableScrollPhysics(),
               child: Text(
                 combinedText,
-                style: const TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w600, letterSpacing: 0.5),
               ),
             ),
           ),
@@ -673,23 +683,23 @@ class _HomeScreenState extends State<HomeScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8)),
-        ],
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 15, offset: Offset(0, 8))],
         border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1.5),
       ),
       child: Column(
         children: [
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.hourglass_bottom, color: AppColors.accent, size: 24),
-              SizedBox(width: 10),
-              Text('الوقت المتبقي للحدث القادم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              const Icon(Icons.hourglass_bottom_rounded, color: AppColors.accent, size: 26),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(_eventTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 25),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -708,16 +718,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          width: 65,
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.6),
-            borderRadius: BorderRadius.circular(12),
+            color: AppColors.primary.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(color: AppColors.accent.withOpacity(0.5), width: 1),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 3))],
           ),
-          child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.accent, letterSpacing: 2)),
+          child: Center(child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.accent, letterSpacing: 1.5))),
         ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 10),
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -755,89 +767,98 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Card(
       color: AppColors.cardBg,
-      margin: const EdgeInsets.only(bottom: 15),
+      margin: const EdgeInsets.only(bottom: 20),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.accent.withOpacity(0.2), width: 1),
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: AppColors.accent.withOpacity(0.15), width: 1.5),
       ),
-      elevation: 5,
-      shadowColor: Colors.black45,
+      elevation: 6,
+      shadowColor: Colors.black54,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(18.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.accent.withOpacity(0.2),
-                  child: const Icon(Icons.gavel, color: AppColors.accent, size: 24),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.15), shape: BoxShape.circle),
+                  child: const Icon(Icons.gavel_rounded, color: AppColors.accent, size: 26),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 15),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('إدارة منصة القانون', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
-                    Text(postTime, style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                    const Text('إدارة منصة القانون', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16)),
+                    const SizedBox(height: 2),
+                    Text(postTime, style: const TextStyle(fontSize: 12, color: Colors.white54)),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 15),
+            const SizedBox(height: 18),
             
-            if (content.isNotEmpty) Text(content, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4)),
+            if (content.isNotEmpty) Text(content, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.6)),
 
             if (imageUrls.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 15),
               SizedBox(
-                height: 200,
+                height: 220,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: imageUrls.length,
                   itemBuilder: (context, i) {
                     return Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
+                      padding: const EdgeInsets.only(left: 10.0),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _buildNetworkImage(imageUrls[i], width: 250),
+                        borderRadius: BorderRadius.circular(15),
+                        child: _buildNetworkImage(imageUrls[i], width: MediaQuery.of(context).size.width * 0.75),
                       ),
                     );
                   }
                 ),
               ),
             ] else if (singleImage != null && singleImage.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 15),
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(15),
                 child: _buildNetworkImage(singleImage),
               ),
             ],
 
             if (fileUrl != null && fileUrl.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 15),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  gradient: LinearGradient(colors: [Colors.redAccent.withOpacity(0.1), AppColors.primary]),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                 ),
                 child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 30),
-                  title: Text(fileName ?? 'ملف مرفق', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: const Text('اضغط لتحميل وفتح الملف', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                  trailing: const Icon(Icons.download_rounded, color: Colors.blue),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                  leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent, size: 36),
+                  title: Text(fileName ?? 'ملف مرفق', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  subtitle: const Padding(
+                    padding: EdgeInsets.only(top: 4.0),
+                    child: Text('اضغط هنا لتحميل وفتح الملف', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.2), shape: BoxShape.circle),
+                    child: const Icon(Icons.download_rounded, color: Colors.blueAccent),
+                  ),
                   onTap: () => _downloadAndOpenPdf(fileUrl, fileName ?? 'مرفق'),
                 ),
               ),
             ],
 
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Divider(color: Colors.white10, height: 1),
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(color: Colors.white10, height: 1, thickness: 1),
             ),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 InkWell(
                   onTap: () async {
@@ -848,28 +869,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       await postRef.update({'likes': FieldValue.arrayUnion([currentUid])});
                     }
                   },
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     child: Row(
                       children: [
-                        Icon(isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, color: isLiked ? AppColors.accent : Colors.white60, size: 20),
+                        Icon(isLiked ? Icons.thumb_up_rounded : Icons.thumb_up_outlined, color: isLiked ? AppColors.accent : Colors.white60, size: 22),
                         const SizedBox(width: 8),
-                        Text('${likes.length} إعجاب', style: TextStyle(color: isLiked ? AppColors.accent : Colors.white60, fontWeight: FontWeight.w600)),
+                        Text('${likes.length} إعجاب', style: TextStyle(color: isLiked ? AppColors.accent : Colors.white60, fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                   ),
                 ),
                 InkWell(
                   onTap: () => _showOfficialCommentsModal(context, doc.id),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     child: Row(
                       children: [
-                        const Icon(Icons.chat_bubble_outline, color: Colors.white60, size: 20),
+                        const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white60, size: 22),
                         const SizedBox(width: 8),
-                        Text('$commentsCount تعليق', style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
+                        Text('$commentsCount تعليق', style: const TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
                   ),
@@ -884,10 +905,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildServicesTab() {
     List<Map<String, dynamic>> services = [
-      {'icon': Icons.menu_book, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
-      {'icon': Icons.book, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
-      {'icon': Icons.quiz, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
-      {'icon': Icons.assignment, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
+      {'icon': Icons.menu_book_rounded, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
+      {'icon': Icons.book_rounded, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
+      {'icon': Icons.quiz_rounded, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
+      {'icon': Icons.assignment_rounded, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
     ];
 
     return Padding(
@@ -895,23 +916,29 @@ class _HomeScreenState extends State<HomeScreen> {
       child: GridView.builder(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.3,
+          crossAxisSpacing: 15,
+          mainAxisSpacing: 15,
+          childAspectRatio: 1.2,
         ),
         itemCount: services.length,
         itemBuilder: (context, index) => InkWell(
+          borderRadius: BorderRadius.circular(20),
           onTap: () {
             Navigator.pushNamed(context, services[index]['route']);
           },
-          child: Card(
-            color: AppColors.cardBg,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.accent.withOpacity(0.2)),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))],
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(services[index]['icon'], size: 40, color: AppColors.accent),
-                const SizedBox(height: 8),
-                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                Icon(services[index]['icon'], size: 45, color: AppColors.accent),
+                const SizedBox(height: 12),
+                Text(services[index]['title'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
               ],
             ),
           ),
@@ -929,16 +956,10 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: EdgeInsets.zero,
         children: [
           StreamBuilder<DocumentSnapshot>(
-            stream: currentUser != null
-                ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
-                : null,
+            stream: currentUser != null ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots() : null,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const UserAccountsDrawerHeader(
-                   decoration: BoxDecoration(color: AppColors.primary),
-                   accountName: Text("خطأ في التحميل", style: TextStyle(color: Colors.red)),
-                   accountEmail: Text(""),
-                );
+                return const UserAccountsDrawerHeader(decoration: BoxDecoration(color: AppColors.primary), accountName: Text("خطأ في التحميل", style: TextStyle(color: Colors.red)), accountEmail: Text(""));
               }
 
               String name = currentUser?.displayName ?? "طالب قانون";
@@ -959,44 +980,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: AppColors.accent,
                   backgroundImage: _getProfileImage(photoUrl),
-                  child: photoUrl == null || photoUrl.isEmpty
-                      ? Text(
-                          name.isNotEmpty ? name[0] : 'ع',
-                          style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold),
-                        )
-                      : null,
+                  child: photoUrl == null || photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0] : 'ع', style: const TextStyle(fontSize: 26, color: Colors.black, fontWeight: FontWeight.bold)) : null,
                 ),
               );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.person, color: AppColors.accent),
-            title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              _openMyProfile();
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: AppColors.accent),
-            title: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    blockedUsers: _blockedUsers,
-                    onUnblockUser: (index) {
-                      setState(() {
-                        _blockedUsers.removeAt(index);
-                      });
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
+          ListTile(leading: const Icon(Icons.person, color: AppColors.accent), title: const Text('الملف الشخصي', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); _openMyProfile(); }),
+          ListTile(leading: const Icon(Icons.settings, color: AppColors.accent), title: const Text('الإعدادات', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(blockedUsers: _blockedUsers, onUnblockUser: (index) { setState(() { _blockedUsers.removeAt(index); }); }))); }),
           ListTile(
             leading: const Icon(Icons.security, color: Colors.amber),
             title: const Text('لوحة الإدارة الحصينة', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
@@ -1054,11 +1044,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.info, color: AppColors.accent),
-            title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)),
-            onTap: () {},
-          ),
+          ListTile(leading: const Icon(Icons.info, color: AppColors.accent), title: const Text('حول التطبيق', style: TextStyle(color: Colors.white)), onTap: () {}),
           const Divider(color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
