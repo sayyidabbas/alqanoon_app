@@ -40,11 +40,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   final List<String> _announcements = [];
-  final List<PostModel> _officialPosts = []; // نحتفظ بها لتمريرها للوحة الإدارة
+  final List<PostModel> _officialPosts = [];
   final List<Map<String, dynamic>> _blockedUsers = [];
   final List<PostModel> _userPosts = [];
 
-  // متغيرات لتحميل الملفات
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
   String _downloadingTitle = '';
@@ -53,18 +52,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _tickerScrollController = ScrollController();
-    _listenToFirebaseData(); // دالة ربط التطبيق بفايربيس
+    _listenToFirebaseData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTickerAnimation();
     });
     _setupFCMToken();
   }
 
-  // ==========================================
-  // الربط اللحظي بقاعدة بيانات فايربيس
-  // ==========================================
   void _listenToFirebaseData() {
-    // 1. جلب الإعلانات (Ticker)
     FirebaseFirestore.instance.collection('settings').doc('announcements').snapshots().listen((doc) {
       if (mounted && doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -77,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    // 2. جلب وقت الحدث (Timer)
     FirebaseFirestore.instance.collection('settings').doc('timer').snapshots().listen((doc) {
       if (mounted && doc.exists && doc.data() != null) {
         final data = doc.data()!;
@@ -119,7 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
           SetOptions(merge: true),
         );
       });
-      
     } catch (e) {
       debugPrint('خطأ أثناء إعداد الـ FCM Token: $e');
     }
@@ -192,9 +185,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ==========================================
-  // تحميل وفتح الملفات المرفقة
-  // ==========================================
   Future<void> _downloadAndOpenPdf(String rawUrl, String title) async {
     if (rawUrl.isEmpty) return;
     try {
@@ -244,9 +234,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ==========================================
-  // نافذة التعليقات للتبليغات الرسمية
-  // ==========================================
   void _showOfficialCommentsModal(BuildContext context, String postId) {
     final commentController = TextEditingController();
 
@@ -387,9 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (context) => ProfileScreen(
           posts: _userPosts,
-          onAddUserPost: (content, imageUrl) {
-            // منطق المنشورات الشخصية المسبق
-          },
+          onAddUserPost: (content, imageUrl) {},
         ),
       ),
     );
@@ -564,11 +549,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // تصميم الإعلانات الجديد
               if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
               if (_announcements.isNotEmpty) const SizedBox(height: 16),
               
-              // تصميم العداد الجديد
               if (_targetDuration != null && _targetDuration!.inSeconds > 0) _buildCountdownCard(),
               if (_targetDuration != null && _targetDuration!.inSeconds > 0) const SizedBox(height: 25),
 
@@ -580,7 +563,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 15),
 
-              // جلب المنشورات الرسمية من فايربيس (يدعم الصور، الملفات، اللايكات والتعليقات)
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('official_posts').orderBy('timestamp', descending: true).snapshots(),
                 builder: (context, snapshot) {
@@ -606,7 +588,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         
-        // شاشة التحميل المنبثقة عند تنزيل الملفات
         if (_isDownloading)
           Container(
             color: Colors.black54,
@@ -638,9 +619,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // تصميم الإعلانات بشكل أرقى وأعلى
-  // ==========================================
   Widget _buildAnnouncementsTicker() {
     String combinedText = "${_announcements.join("   •   ")}   •   ";
     return Container(
@@ -680,9 +658,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // تصميم العداد التنازلي بشكل أنيق ومختلف
-  // ==========================================
   Widget _buildCountdownCard() {
     if (_targetDuration == null) return const SizedBox();
     String days = _targetDuration!.inDays.toString().padLeft(2, '0');
@@ -747,7 +722,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // دعم عرض الصور من الرابط أو Base64
   Widget _buildNetworkImage(String url, {double width = double.infinity}) {
     if (url.startsWith('data:image')) {
       return Image.memory(base64Decode(url.split(',').last), fit: BoxFit.cover, width: width);
@@ -761,9 +735,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // تصميم بطاقة التبليغ الرسمي المتكاملة
-  // ==========================================
   Widget _buildOfficialPostCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final String content = data['content'] ?? '';
@@ -796,7 +767,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ترويسة المنشور (إزالة اليوزر ووضع مطرقة العدالة)
             Row(
               children: [
                 CircleAvatar(
@@ -816,10 +786,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 15),
             
-            // نص المنشور
             if (content.isNotEmpty) Text(content, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4)),
 
-            // التعامل مع الصور المتعددة أو المفردة
             if (imageUrls.isNotEmpty) ...[
               const SizedBox(height: 12),
               SizedBox(
@@ -846,7 +814,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
 
-            // التعامل مع الملفات المرفقة
             if (fileUrl != null && fileUrl.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -865,7 +832,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
 
-            // التعليقات واللايكات
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 10),
               child: Divider(color: Colors.white10, height: 1),
@@ -1042,7 +1008,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context) => SecureAdminDashboardScreen(
                     officialPosts: _officialPosts,
                     announcements: _announcements,
-                    // تم ربط دوال الإدارة هنا بفايربيس مباشرة
                     onAddPost: (String content, File? imageFile) async {
                       String? imageUrl;
                       if (imageFile != null) {
@@ -1110,3 +1075,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+ 
