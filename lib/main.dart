@@ -6,7 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-// دالة الخلفية: تعمل والتطبيق مغلق بالكامل
+// دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -44,7 +44,7 @@ void main() async {
     );
   };
 
-  // تهيئة الفايربيس
+  // تهيئة الفايربيس المباشرة بالبيانات الخاصة بمشروعك
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -61,10 +61,10 @@ void main() async {
     }
   }
 
-  // تسجيل دالة الخلفية مبكراً (لا تسبب شاشة سوداء)
+  // 1. تسجيل دالة الخلفية مبكراً
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // تهيئة Supabase
+  // تهيئة Supabase بالرابط والمفتاح الخاصين بمشروعك
   try {
     await Supabase.initialize(
       url: 'https://hxtliwxlhwwrhvvgtptl.supabase.co', 
@@ -74,35 +74,51 @@ void main() async {
     debugPrint('Supabase Init Error: $e');
   }
 
-  // 1. تشغيل واجهة التطبيق أولاً (هذا يمنع الشاشة السوداء نهائياً)
+  // تشغيل التطبيق فقط (بدون أي استدعاءات تعيق الشاشة)
   runApp(const LawPlatformApp());
-
-  // 2. طلب صلاحيات الإشعارات بعد أن يتم رسم التطبيق
-  _requestNotificationPermission();
 }
 
-// دالة منفصلة لطلب الصلاحيات والاشتراك في الإشعارات
-Future<void> _requestNotificationPermission() async {
-  try {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
-    });
-
-    await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
-  } catch (e) {
-    debugPrint('Firebase Messaging Error: $e');
-  }
-}
-
-class LawPlatformApp extends StatelessWidget {
+// تم تحويل LawPlatformApp إلى StatefulWidget لنتمكن من استخدام initState
+class LawPlatformApp extends StatefulWidget {
   const LawPlatformApp({super.key});
+
+  @override
+  State<LawPlatformApp> createState() => _LawPlatformAppState();
+}
+
+class _LawPlatformAppState extends State<LawPlatformApp> {
+  
+  @override
+  void initState() {
+    super.initState();
+    // 2. طلب صلاحيات الإشعارات هنا يضمن أن التطبيق قد فتح فعلياً ولن تظهر شاشة سوداء
+    _requestNotificationPermission();
+  }
+
+  // دالة طلب الإشعارات
+  Future<void> _requestNotificationPermission() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      
+      // طلب الصلاحية من المستخدم (تظهر كرسالة منبثقة في أندرويد 13+)
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // الاستماع للإشعارات والتطبيق مفتوح (Foreground)
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
+      });
+
+      // الاشتراك في موضوع (Topic) مخصص للتبليغات الرسمية
+      await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
+      
+    } catch (e) {
+      debugPrint('Firebase Messaging Error: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
