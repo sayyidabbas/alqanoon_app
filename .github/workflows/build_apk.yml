@@ -40,13 +40,13 @@ jobs:
 
     - name: Set Android SDK Versions (Supports Android 7.0+)
       run: |
-        # تحديث النسخة القديمة (Groovy) إلى الإصدار 36
-        sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' android/app/build.gradle || true
-        sed -i 's/compileSdk .*/compileSdk 36/g' android/app/build.gradle || true
+        # العودة إلى النسخة المستقرة (34)
+        sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
+        sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
         sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
-        # تحديث النسخة الجديدة (Kotlin DSL) إلى الإصدار 36
-        sed -i 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts || true
+        
+        sed -i 's/compileSdk = .*/compileSdk = 34/g' android/app/build.gradle.kts || true
         sed -i 's/minSdk = .*/minSdk = 24/g' android/app/build.gradle.kts || true
 
     - name: Enable Core Library Desugaring
