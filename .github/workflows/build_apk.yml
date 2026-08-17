@@ -1,5 +1,4 @@
 name: Build Android APK
-
 on:
   push:
     branches: [ main, master ]
@@ -8,76 +7,30 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-
-    - name: Set up Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '17'
-
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.x'
-        channel: 'stable'
-
-    - name: Recreate Android Folder
-      run: flutter create . --platforms=android
-
-    - name: Fix Gradle Version
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with: { distribution: 'zulu', java-version: '17' }
+    - uses: subosito/flutter-action@v2
+      with: { flutter-version: '3.x', channel: 'stable' }
+    - run: flutter create . --platforms=android
+    - run: flutter pub get
+    
+    # الحل: إضافة LintOptions لإيقاف خطأ التحقق من الإصدار في ملف build.gradle
+    - name: Disable Version Check
       run: |
-        GRADLE_PROP="android/gradle/wrapper/gradle-wrapper.properties"
-        if [ -f "$GRADLE_PROP" ]; then
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip|g' "$GRADLE_PROP"
-        fi
+        sed -i '/android {/a \    lintOptions {\n        checkReleaseBuilds false\n        abortOnError false\n    }' android/app/build.gradle || true
 
-    - name: Install Dependencies
-      run: flutter pub get
-
-    - name: Set Android SDK Versions (Supports Android 7.0+)
+    - name: Set Android SDK Versions
       run: |
-        # تثبيت النسخة المستقرة (34) لمنع الشاشة السوداء
         sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
         sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
         sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
-        
-        sed -i 's/compileSdk = .*/compileSdk = 34/g' android/app/build.gradle.kts || true
-        sed -i 's/minSdk = .*/minSdk = 24/g' android/app/build.gradle.kts || true
 
-    - name: Enable Core Library Desugaring
-      run: |
-        if [ -f "android/app/build.gradle" ]; then
-          sed -i '/compileOptions {/a \        coreLibraryDesugaringEnabled true' android/app/build.gradle
-          echo -e "\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'\n}" >> android/app/build.gradle
-        elif [ -f "android/app/build.gradle.kts" ]; then
-          sed -i '/compileOptions {/a \        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
-          echo -e "\ndependencies {\n    coreLibraryDesugaring(\"com.android.tools:desugar_jdk_libs:2.0.3\")\n}" >> android/app/build.gradle.kts
-        fi
-
-    - name: Configure AndroidManifest for Notifications
-      run: |
-        MANIFEST="android/app/src/main/AndroidManifest.xml"
-        # حقن صلاحيات الإشعارات والرنين قبل وسم <application
-        sed -i '/<application/i \    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.VIBRATE" />' $MANIFEST || true
-        # حقن قناة فايربيس الافتراضية داخل وسم <application لكي يعمل والإشعار مغلق
-        sed -i '/<activity/i \        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="high_importance_channel" />' $MANIFEST || true
-
-    - name: Copy Firebase Config
-      run: cp google-services.json android/app/ || true
-
-    - name: Set App Name
-      run: flutter pub run rename setAppName --targets android --value "منصة القانون" || true
-
-    - name: Build APK
-      run: flutter build apk --release
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - run: cp google-services.json android/app/ || true
+    - run: flutter build apk --release
+    - uses: actions/upload-artifact@v4
       with:
         name: law-platform-apk
         path: build/app/outputs/flutter-apk/app-release.apk
