@@ -40,6 +40,7 @@ jobs:
 
     - name: Set Android SDK Versions (Supports Android 7.0+)
       run: |
+        # تثبيت النسخة المستقرة (34) لمنع الشاشة السوداء
         sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
         sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
@@ -47,40 +48,6 @@ jobs:
         
         sed -i 's/compileSdk = .*/compileSdk = 34/g' android/app/build.gradle.kts || true
         sed -i 's/minSdk = .*/minSdk = 24/g' android/app/build.gradle.kts || true
-
-    - name: Force Stable AndroidX Versions
-      run: |
-        if [ -f "android/build.gradle" ]; then
-          echo "" >> android/build.gradle
-          echo "allprojects {" >> android/build.gradle
-          echo "    configurations.all {" >> android/build.gradle
-          echo "        resolutionStrategy {" >> android/build.gradle
-          echo "            force 'androidx.core:core-ktx:1.13.1'" >> android/build.gradle
-          echo "            force 'androidx.core:core:1.13.1'" >> android/build.gradle
-          echo "            force 'androidx.activity:activity:1.9.3'" >> android/build.gradle
-          echo "            force 'androidx.activity:activity-ktx:1.9.3'" >> android/build.gradle
-          echo "            force 'androidx.fragment:fragment:1.8.5'" >> android/build.gradle
-          echo "            force 'androidx.navigationevent:navigationevent-android:1.0.0'" >> android/build.gradle
-          echo "            force 'androidx.browser:browser:1.8.0'" >> android/build.gradle
-          echo "        }" >> android/build.gradle
-          echo "    }" >> android/build.gradle
-          echo "}" >> android/build.gradle
-        elif [ -f "android/build.gradle.kts" ]; then
-          echo "" >> android/build.gradle.kts
-          echo "allprojects {" >> android/build.gradle.kts
-          echo "    configurations.all {" >> android/build.gradle.kts
-          echo "        resolutionStrategy {" >> android/build.gradle.kts
-          echo "            force(\"androidx.core:core-ktx:1.13.1\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.core:core:1.13.1\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.activity:activity:1.9.3\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.activity:activity-ktx:1.9.3\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.fragment:fragment:1.8.5\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.navigationevent:navigationevent-android:1.0.0\")" >> android/build.gradle.kts
-          echo "            force(\"androidx.browser:browser:1.8.0\")" >> android/build.gradle.kts
-          echo "        }" >> android/build.gradle.kts
-          echo "    }" >> android/build.gradle.kts
-          echo "}" >> android/build.gradle.kts
-        fi
 
     - name: Enable Core Library Desugaring
       run: |
