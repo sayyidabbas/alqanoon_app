@@ -40,7 +40,6 @@ jobs:
 
     - name: Set Android SDK Versions (Supports Android 7.0+)
       run: |
-        # العودة إلى النسخة المستقرة (34)
         sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' android/app/build.gradle || true
         sed -i 's/compileSdk .*/compileSdk 34/g' android/app/build.gradle || true
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
@@ -62,6 +61,7 @@ jobs:
           echo "            force 'androidx.activity:activity-ktx:1.9.3'" >> android/build.gradle
           echo "            force 'androidx.fragment:fragment:1.8.5'" >> android/build.gradle
           echo "            force 'androidx.navigationevent:navigationevent-android:1.0.0'" >> android/build.gradle
+          echo "            force 'androidx.browser:browser:1.8.0'" >> android/build.gradle
           echo "        }" >> android/build.gradle
           echo "    }" >> android/build.gradle
           echo "}" >> android/build.gradle
@@ -76,6 +76,7 @@ jobs:
           echo "            force(\"androidx.activity:activity-ktx:1.9.3\")" >> android/build.gradle.kts
           echo "            force(\"androidx.fragment:fragment:1.8.5\")" >> android/build.gradle.kts
           echo "            force(\"androidx.navigationevent:navigationevent-android:1.0.0\")" >> android/build.gradle.kts
+          echo "            force(\"androidx.browser:browser:1.8.0\")" >> android/build.gradle.kts
           echo "        }" >> android/build.gradle.kts
           echo "    }" >> android/build.gradle.kts
           echo "}" >> android/build.gradle.kts
