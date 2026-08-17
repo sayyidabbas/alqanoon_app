@@ -49,6 +49,30 @@ jobs:
         sed -i 's/compileSdk = .*/compileSdk = 34/g' android/app/build.gradle.kts || true
         sed -i 's/minSdk = .*/minSdk = 24/g' android/app/build.gradle.kts || true
 
+    - name: Force Stable AndroidX Core Version
+      run: |
+        if [ -f "android/build.gradle" ]; then
+          echo "" >> android/build.gradle
+          echo "allprojects {" >> android/build.gradle
+          echo "    configurations.all {" >> android/build.gradle
+          echo "        resolutionStrategy {" >> android/build.gradle
+          echo "            force 'androidx.core:core-ktx:1.13.1'" >> android/build.gradle
+          echo "            force 'androidx.core:core:1.13.1'" >> android/build.gradle
+          echo "        }" >> android/build.gradle
+          echo "    }" >> android/build.gradle
+          echo "}" >> android/build.gradle
+        elif [ -f "android/build.gradle.kts" ]; then
+          echo "" >> android/build.gradle.kts
+          echo "allprojects {" >> android/build.gradle.kts
+          echo "    configurations.all {" >> android/build.gradle.kts
+          echo "        resolutionStrategy {" >> android/build.gradle.kts
+          echo "            force(\"androidx.core:core-ktx:1.13.1\")" >> android/build.gradle.kts
+          echo "            force(\"androidx.core:core:1.13.1\")" >> android/build.gradle.kts
+          echo "        }" >> android/build.gradle.kts
+          echo "    }" >> android/build.gradle.kts
+          echo "}" >> android/build.gradle.kts
+        fi
+
     - name: Enable Core Library Desugaring
       run: |
         if [ -f "android/app/build.gradle" ]; then
