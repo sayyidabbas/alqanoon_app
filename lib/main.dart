@@ -6,7 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-// دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات عبر فايربيس
+// دالة الخلفية: تعمل والتطبيق مغلق بالكامل
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -44,7 +44,7 @@ void main() async {
     );
   };
 
-  // تهيئة الفايربيس المباشرة بالبيانات الخاصة بمشروعك
+  // تهيئة الفايربيس
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -61,33 +61,10 @@ void main() async {
     }
   }
 
-  // إعدادات الإشعارات الخارجية (Push Notifications)
-  try {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-    
-    // طلب الصلاحية من المستخدم (إجباري في أندرويد 13+)
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+  // تسجيل دالة الخلفية مبكراً (لا تسبب شاشة سوداء)
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 1. تسجيل دالة الخلفية (التطبيق مغلق)
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // 2. الاستماع للإشعارات والتطبيق مفتوح (Foreground)
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
-    });
-
-    // الاشتراك في موضوع (Topic) مخصص للتبليغات الرسمية لكي يستلمها الجميع دفعة واحدة
-    await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
-    
-  } catch (e) {
-    debugPrint('Firebase Messaging Error: $e');
-  }
-
-  // تهيئة Supabase بالرابط والمفتاح الخاصين بمشروعك
+  // تهيئة Supabase
   try {
     await Supabase.initialize(
       url: 'https://hxtliwxlhwwrhvvgtptl.supabase.co', 
@@ -97,7 +74,31 @@ void main() async {
     debugPrint('Supabase Init Error: $e');
   }
 
+  // 1. تشغيل واجهة التطبيق أولاً (هذا يمنع الشاشة السوداء نهائياً)
   runApp(const LawPlatformApp());
+
+  // 2. طلب صلاحيات الإشعارات بعد أن يتم رسم التطبيق
+  _requestNotificationPermission();
+}
+
+// دالة منفصلة لطلب الصلاحيات والاشتراك في الإشعارات
+Future<void> _requestNotificationPermission() async {
+  try {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
+    });
+
+    await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
+  } catch (e) {
+    debugPrint('Firebase Messaging Error: $e');
+  }
 }
 
 class LawPlatformApp extends StatelessWidget {
