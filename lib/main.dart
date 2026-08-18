@@ -1,12 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // المكتبة المُعادة
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-// دالة الخلفية: تعمل والتطبيق مغلق بالكامل لاستقبال الإشعارات
+// تعريف القناة عالية الأهمية لكي يرن الهاتف ويهتز
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel', 
+  'إشعارات هامة', 
+  description: 'هذه القناة مخصصة للإشعارات الهامة والعاجلة.',
+  importance: Importance.max,
+  playSound: true,
+);
+
+// دالة الخلفية
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -19,32 +33,25 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         storageBucket: "law-platform-55632.firebasestorage.app",
       ),
     );
-  } catch (e) {
-    debugPrint('Firebase Background Init Error: $e');
-  }
+  } catch (e) {}
   debugPrint("تم استقبال إشعار في الخلفية: ${message.messageId}");
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // معالجة أخطاء الواجهات لمنع الشاشة السوداء
+  // معالجة أخطاء الواجهات
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Scaffold(
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Text(
-            'حدث خطأ في الواجهة:\n${details.exception}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red, fontSize: 16),
-          ),
+          child: Text('حدث خطأ:\n${details.exception}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
         ),
       ),
     );
   };
 
-  // تهيئة الفايربيس المباشرة بالبيانات الخاصة بمشروعك
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -56,29 +63,21 @@ void main() async {
       ),
     );
   } catch (e) {
-    if (!e.toString().contains('duplicate-app')) {
-      await Firebase.initializeApp();
-    }
+    if (!e.toString().contains('duplicate-app')) await Firebase.initializeApp();
   }
 
-  // 1. تسجيل دالة الخلفية مبكراً
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // تهيئة Supabase بالرابط والمفتاح الخاصين بمشروعك
   try {
     await Supabase.initialize(
       url: 'https://hxtliwxlhwwrhvvgtptl.supabase.co', 
       anonKey: 'sb_publishable_GQbawy5O49Ws8JOGLJbonQ_hMjMAfJs', 
     );
-  } catch (e) {
-    debugPrint('Supabase Init Error: $e');
-  }
+  } catch (e) {}
 
-  // تشغيل التطبيق فقط (بدون أي استدعاءات تعيق الشاشة)
   runApp(const LawPlatformApp());
 }
 
-// تم تحويل LawPlatformApp إلى StatefulWidget لنتمكن من استخدام initState
 class LawPlatformApp extends StatefulWidget {
   const LawPlatformApp({super.key});
 
@@ -91,32 +90,62 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
   @override
   void initState() {
     super.initState();
-    // 2. طلب صلاحيات الإشعارات هنا يضمن أن التطبيق قد فتح فعلياً ولن تظهر شاشة سوداء
-    _requestNotificationPermission();
+    _setupNotifications(); // تشغيل الإشعارات بعد رسم الواجهة
   }
 
-  // دالة طلب الإشعارات
-  Future<void> _requestNotificationPermission() async {
+  Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       
-      // طلب الصلاحية من المستخدم (تظهر كرسالة منبثقة في أندرويد 13+)
-      await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      // 1. طلب الصلاحية (لن يسبب شاشة سوداء هنا)
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      // الاستماع للإشعارات والتطبيق مفتوح (Foreground)
+      // 2. إنشاء القناة في الأندرويد
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+
+      const AndroidInitializationSettings initSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const InitializationSettings initSettings = InitializationSettings(android: initSettingsAndroid);
+      await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+      // 3. عرض الإشعار المنبثق والتطبيق مفتوح
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('تم استقبال إشعار والتطبيق مفتوح: ${message.notification?.title}');
+        RemoteNotification? notification = message.notification;
+        AndroidNotification? android = message.notification?.android;
+
+        if (notification != null && android != null) {
+          flutterLocalNotificationsPlugin.show(
+            notification.hashCode,
+            notification.title,
+            notification.body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                channel.id, channel.name,
+                channelDescription: channel.description,
+                importance: Importance.max,
+                priority: Priority.high,
+                icon: '@mipmap/ic_launcher',
+              ),
+            ),
+          );
+        }
       });
 
-      // الاشتراك في موضوع (Topic) مخصص للتبليغات الرسمية
-      await FirebaseMessaging.instance.subscribeToTopic('official_announcements');
+      // 4. الاشتراك في الإشعارات العامة
+      await messaging.subscribeToTopic('official_announcements');
+
+      // 5. تحديث توكن المستخدم في قاعدة البيانات (مهم جداً جداً لرسائل السوق)
+      String? token = await messaging.getToken();
+      if (token != null) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await FirebaseFirestore.instance.collection('users').doc(uid).set({'fcmToken': token}, SetOptions(merge: true));
+        }
+      }
       
     } catch (e) {
-      debugPrint('Firebase Messaging Error: $e');
+      debugPrint('Notification Setup Error: $e');
     }
   }
 
@@ -127,7 +156,6 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       
-      // إعدادات اللغة العربية ودعم RTL
       locale: const Locale('ar', 'IQ'),
       supportedLocales: const [Locale('ar', 'IQ')],
       localizationsDelegates: const [
