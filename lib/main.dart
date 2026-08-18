@@ -5,11 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'; 
-import 'package:flutter_local_notifications/flutter_local_notifications.dart'; // المكتبة المُعادة
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
 import 'themes/app_theme.dart';
 import 'routes/app_routes.dart';
 
-// تعريف القناة عالية الأهمية لكي يرن الهاتف ويهتز
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -20,7 +19,6 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
   playSound: true,
 );
 
-// دالة الخلفية
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -40,7 +38,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // معالجة أخطاء الواجهات
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Scaffold(
       body: Center(
@@ -90,17 +87,15 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
   @override
   void initState() {
     super.initState();
-    _setupNotifications(); // تشغيل الإشعارات بعد رسم الواجهة
+    _setupNotifications(); 
   }
 
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       
-      // 1. طلب الصلاحية (لن يسبب شاشة سوداء هنا)
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      // 2. إنشاء القناة في الأندرويد
       await flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
@@ -109,7 +104,6 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
       const InitializationSettings initSettings = InitializationSettings(android: initSettingsAndroid);
       await flutterLocalNotificationsPlugin.initialize(initSettings);
 
-      // 3. عرض الإشعار المنبثق والتطبيق مفتوح
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         RemoteNotification? notification = message.notification;
         AndroidNotification? android = message.notification?.android;
@@ -132,17 +126,26 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
         }
       });
 
-      // 4. الاشتراك في الإشعارات العامة
       await messaging.subscribeToTopic('official_announcements');
 
-      // 5. تحديث توكن المستخدم في قاعدة البيانات (مهم جداً جداً لرسائل السوق)
-      String? token = await messaging.getToken();
-      if (token != null) {
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid != null) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).set({'fcmToken': token}, SetOptions(merge: true));
+      // 🔥 التعديل الجذري هنا: حفظ التوكن فور تسجيل الدخول لضمان وجود عنوان للهاتف
+      FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+        if (user != null) {
+          String? token = await messaging.getToken();
+          if (token != null) {
+            await FirebaseFirestore.instance.collection('users').doc(user.uid).set({'fcmToken': token}, SetOptions(merge: true));
+            debugPrint('تم حفظ التوكن بنجاح للمستخدم: ${user.uid}');
+          }
         }
-      }
+      });
+
+      // تحديث التوكن إذا تغير في النظام
+      messaging.onTokenRefresh.listen((String token) async {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({'fcmToken': token}, SetOptions(merge: true));
+        }
+      });
       
     } catch (e) {
       debugPrint('Notification Setup Error: $e');
