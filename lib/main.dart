@@ -3,7 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User; // 🎯 الحل هنا: إخفاء User الخاص بسوبابيس
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
 import 'themes/app_theme.dart';
@@ -128,7 +128,7 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
 
       await messaging.subscribeToTopic('official_announcements');
 
-      // 🔥 التعديل الجذري هنا: حفظ التوكن فور تسجيل الدخول لضمان وجود عنوان للهاتف
+      // حفظ التوكن فور تسجيل الدخول لضمان وجود عنوان للهاتف
       FirebaseAuth.instance.authStateChanges().listen((User? user) async {
         if (user != null) {
           String? token = await messaging.getToken();
