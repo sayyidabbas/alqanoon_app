@@ -49,6 +49,17 @@ jobs:
         sed -i 's/minSdkVersion .*/minSdkVersion 24/g' android/app/build.gradle || true
         sed -i 's/minSdk .*/minSdk 24/g' android/app/build.gradle || true
 
+    # هذه هي الخطوة التي نسيتها وتسببت في الخطأ الأخير
+    - name: Enable Core Library Desugaring
+      run: |
+        if [ -f "android/app/build.gradle" ]; then
+          sed -i '/compileOptions {/a \        coreLibraryDesugaringEnabled true' android/app/build.gradle
+          echo -e "\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'\n}" >> android/app/build.gradle
+        elif [ -f "android/app/build.gradle.kts" ]; then
+          sed -i '/compileOptions {/a \        isCoreLibraryDesugaringEnabled = true' android/app/build.gradle.kts
+          echo -e "\ndependencies {\n    coreLibraryDesugaring(\"com.android.tools:desugar_jdk_libs:2.0.3\")\n}" >> android/app/build.gradle.kts
+        fi
+
     - name: Configure AndroidManifest for Notifications
       run: |
         MANIFEST="android/app/src/main/AndroidManifest.xml"
