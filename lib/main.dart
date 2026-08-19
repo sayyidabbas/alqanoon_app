@@ -19,7 +19,6 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
   playSound: true,
 );
 
-// المفاتيح الثابتة لمشروعك (هذه الطريقة تمنع أي تجميد أو تعارض في فلاتر)
 const FirebaseOptions platformOptions = FirebaseOptions(
   apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
   appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
@@ -31,7 +30,9 @@ const FirebaseOptions platformOptions = FirebaseOptions(
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
-    await Firebase.initializeApp(options: platformOptions);
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(options: platformOptions);
+    }
   } catch (e) {
     debugPrint('Background Init Error: $e');
   }
@@ -52,12 +53,11 @@ void main() async {
     );
   };
 
-  // التهيئة المباشرة والآمنة باستخدام الخيارات الثابتة (يمنع تجمد الشاشة الافتتاحية)
+  // 🔥 التهيئة الصحيحة للتطبيق الافتراضي (هنا كان سبب التجمد وتم حله)
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
-        name: 'LawPlatformApp', // إعطاء اسم للتطبيق يمنع تعارض الـ Default App
-        options: platformOptions,
+        options: platformOptions, // بدون استخدام parameter الـ name
       );
     }
   } catch (e) {
@@ -90,7 +90,6 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
   @override
   void initState() {
     super.initState();
-    // تأخير تشغيل الإشعارات قليلاً لضمان أن الواجهة رُسمت بالكامل (يمنع الشاشة السوداء ويضمن ظهور طلب الإذن)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupNotifications(); 
     });
@@ -100,7 +99,6 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       
-      // طلب الإذن (سيظهر الآن بشكل طبيعي لأننا أخرناه لبعد رسم الواجهة)
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
       await flutterLocalNotificationsPlugin
@@ -135,7 +133,6 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
 
       await messaging.subscribeToTopic('official_announcements');
 
-      // حفظ التوكن لضمان وصول الإشعارات
       FirebaseAuth.instance.authStateChanges().listen((User? user) async {
         if (user != null) {
           String? token = await messaging.getToken();
