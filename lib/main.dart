@@ -19,12 +19,22 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
   playSound: true,
 );
 
+// المفاتيح الثابتة لمشروعك (هذه الطريقة تمنع أي تجميد أو تعارض في فلاتر)
+const FirebaseOptions platformOptions = FirebaseOptions(
+  apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
+  appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
+  messagingSenderId: "521454530754",
+  projectId: "law-platform-55632",
+  storageBucket: "law-platform-55632.firebasestorage.app",
+);
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // 🔥 تنظيف: الاعتماد على الإعدادات الافتراضية للنظام
   try {
-    await Firebase.initializeApp();
-  } catch (e) {}
+    await Firebase.initializeApp(options: platformOptions);
+  } catch (e) {
+    debugPrint('Background Init Error: $e');
+  }
   debugPrint("تم استقبال إشعار في الخلفية: ${message.messageId}");
 }
 
@@ -42,9 +52,14 @@ void main() async {
     );
   };
 
-  // 🔥 تنظيف: إزالة المفاتيح اليدوية لمنع تعارض قاعدة البيانات وتوقفها
+  // التهيئة المباشرة والآمنة باستخدام الخيارات الثابتة (يمنع تجمد الشاشة الافتتاحية)
   try {
-    await Firebase.initializeApp();
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        name: 'LawPlatformApp', // إعطاء اسم للتطبيق يمنع تعارض الـ Default App
+        options: platformOptions,
+      );
+    }
   } catch (e) {
     debugPrint('Firebase Init Error: $e');
   }
@@ -75,13 +90,17 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
   @override
   void initState() {
     super.initState();
-    _setupNotifications(); 
+    // تأخير تشغيل الإشعارات قليلاً لضمان أن الواجهة رُسمت بالكامل (يمنع الشاشة السوداء ويضمن ظهور طلب الإذن)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupNotifications(); 
+    });
   }
 
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       
+      // طلب الإذن (سيظهر الآن بشكل طبيعي لأننا أخرناه لبعد رسم الواجهة)
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
       await flutterLocalNotificationsPlugin
