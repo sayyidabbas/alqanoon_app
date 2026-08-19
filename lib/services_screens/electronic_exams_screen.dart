@@ -73,10 +73,10 @@ Future<void> sendInAppNotification(String userId, String title, String body, {St
                   'body': body,
                 },
                 'android': <String, dynamic>{
-                  'priority': 'high',
+                  'priority': 'HIGH', // 🔥 الحل هنا: الكلمة يجب أن تكون Capital Letter في نظام جوجل!
                   'notification': <String, dynamic>{
                     'sound': 'default',
-                    'channel_id': 'high_importance_channel', // التعديل الأهم هنا لإجبار الإشعار على العمل والتطبيق مغلق
+                    'channel_id': 'high_importance_channel', 
                   },
                 },
                 'apns': <String, dynamic>{
@@ -200,7 +200,6 @@ class _BookMarketScreenState extends State<BookMarketScreen> {
             tooltip: 'مشترياتي ومبيعاتي',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserMarketProfileScreen())),
           ),
-          // تمت إزالة زر البوابة الآمنة من هنا
         ],
       ),
       body: Container(
@@ -366,22 +365,24 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
       return;
     }
 
-    // إظهار الدوار وحفظ نافيجيتور هنا 
-    final loadingNavigator = Navigator.of(context, rootNavigator: true);
+    BuildContext? dialogContext;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        backgroundColor: Color(0xFF1E2235),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Colors.amber),
-            SizedBox(height: 20),
-            Text('جاري معالجة ورفع كتابك...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
-          ],
-        ),
-      ),
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E2235),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.amber),
+              SizedBox(height: 20),
+              Text('جاري معالجة ورفع كتابك...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      },
     );
 
     try {
@@ -413,7 +414,9 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
       
-      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
 
       if (mounted) {
         Navigator.pop(context); 
@@ -429,7 +432,7 @@ class _AddBookFormScreenState extends State<AddBookFormScreen> {
         );
       }
     } catch (e) {
-      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
+      if (dialogContext != null && dialogContext!.mounted) Navigator.pop(dialogContext!);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
     }
   }
@@ -798,24 +801,28 @@ class BookDetailsScreen extends StatelessWidget {
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
+                      BuildContext? dialogContext;
                       showDialog(
                         context: ctx,
                         barrierDismissible: false,
-                        builder: (_) => const AlertDialog(
-                          backgroundColor: Color(0xFF1E2235),
-                          content: Row(
-                            children: [
-                              CircularProgressIndicator(color: Colors.amber),
-                              SizedBox(width: 20),
-                              Text('جاري إرسال طلبك للبائع...', style: TextStyle(color: Colors.white)),
-                            ],
-                          ),
-                        ),
+                        builder: (dialogCtx) {
+                          dialogContext = dialogCtx;
+                          return const AlertDialog(
+                            backgroundColor: Color(0xFF1E2235),
+                            content: Row(
+                              children: [
+                                CircularProgressIndicator(color: Colors.amber),
+                                SizedBox(width: 20),
+                                Text('جاري إرسال طلبك للبائع...', style: TextStyle(color: Colors.white)),
+                              ],
+                            ),
+                          );
+                        }
                       );
 
                       try {
-                        await sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}', type: 'new_purchase_request');
+                        // حذفنا ال await من هنا لكي لا يتجمد التطبيق
+                        sendInAppNotification(bookData['sellerUid'], 'طلب شراء جديد! 🎉', 'يرغب ${nameController.text.trim()} بشراء كتابك: ${bookData['title']}', type: 'new_purchase_request');
 
                         await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({
                           'status': 'reserved',
@@ -823,16 +830,16 @@ class BookDetailsScreen extends StatelessWidget {
                           'buyerName': nameController.text.trim(),
                           'buyerContact': contactController.text.trim(),
                         });
-
-                        loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
-                        if (ctx.mounted) Navigator.of(ctx).pop(); // إغلاق النافذة السفلية
+                        
+                        if (dialogContext != null && dialogContext!.mounted) Navigator.pop(dialogContext!);
+                        if (ctx.mounted) Navigator.of(ctx).pop(); 
                         
                         if (context.mounted) {
-                          Navigator.of(context).pop(); // إغلاق شاشة تفاصيل الكتاب
+                          Navigator.of(context).pop(); 
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال! سيصل للبائع إشعار وسيتم التواصل معك قريباً.')));
                         }
                       } catch (e) {
-                        loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
+                        if (dialogContext != null && dialogContext!.mounted) Navigator.pop(dialogContext!);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
                         }
@@ -1008,25 +1015,35 @@ class SellerBooksTab extends StatelessWidget {
   const SellerBooksTab({super.key, required this.onViewed});
 
   void _acceptRequest(BuildContext context, String bookId, String buyerUid, String bookTitle) async {
-    final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => const AlertDialog(
-      backgroundColor: Color(0xFF1E2235),
-      content: Row(
-        children: [
-          CircularProgressIndicator(color: Colors.amber),
-          SizedBox(width: 20),
-          Text('جاري التأكيد...', style: TextStyle(color: Colors.white)),
-        ],
-      ),
-    ));
+    BuildContext? dialogContext;
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E2235),
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.amber),
+              SizedBox(width: 20),
+              Text('جاري التأكيد...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      }
+    );
     
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(bookId).update({'status': 'sold'});
-      await sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle', type: 'seller_approved');
-      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
+      // حذفنا ال await لكي تتم العملية بسرعة البرق للمستخدم
+      sendInAppNotification(buyerUid, 'تم تأكيد البيع 🤝', 'وافق البائع على تسليمك كتاب: $bookTitle', type: 'seller_approved');
     } catch (e) {
-      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+    } finally {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
     }
   }
 
@@ -1225,7 +1242,6 @@ class BuyerRequestsTab extends StatelessWidget {
   }
 }
 
-// لوحة التحكم (سيتم فتحها من المركزية)
 class AdminMarketDashboard extends StatefulWidget {
   const AdminMarketDashboard({super.key});
 
@@ -1427,36 +1443,44 @@ class AdminReviewBooksScreen extends StatelessWidget {
   const AdminReviewBooksScreen({super.key, required this.status});
 
   void _changeStatus(BuildContext context, Map<String, dynamic> data, String id, String newStatus) async {
-    final loadingNavigator = Navigator.of(context, rootNavigator: true); // حفظ النافيجيتور لتفادي الخطأ
+    BuildContext? dialogContext; // متغير لحفظ نافذة التحميل ليتم إغلاقها بأمان
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        backgroundColor: Color(0xFF1E2235),
-        content: Row(
-          children: [
-            CircularProgressIndicator(color: Colors.amber),
-            SizedBox(width: 20),
-            Text('جاري التنفيذ...', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-      ),
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const AlertDialog(
+          backgroundColor: Color(0xFF1E2235),
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.amber),
+              SizedBox(width: 20),
+              Text('جاري التنفيذ...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        );
+      },
     );
     
     try {
       await FirebaseFirestore.instance.collection('book_market').doc(id).update({'status': newStatus});
       
-      String sellerUid = data['sellerUid'];
-      String bookTitle = data['title'];
+      String sellerUid = data['sellerUid'] ?? '';
+      String bookTitle = data['title'] ?? '';
+      
       if (newStatus == 'approved') {
-        await sendInAppNotification(sellerUid, 'تمت الموافقة! 🎉', 'وافقت الإدارة على عرض كتابك: $bookTitle', type: 'admin_approved_book');
+        // تم مسح كلمة await ليختفي الدوار فوراً ويُرسل الإشعار في الخلفية
+        sendInAppNotification(sellerUid, 'تمت الموافقة! 🎉', 'وافقت الإدارة على عرض كتابك: $bookTitle', type: 'admin_approved_book');
       } else if (newStatus == 'rejected') {
-        await sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
+        sendInAppNotification(sellerUid, 'نعتذر، تم الرفض ❌', 'لم تتم الموافقة على عرض كتابك: $bookTitle');
       }
-      loadingNavigator.pop(); // إغلاق الدوار باستخدام نافيجيتور المحفوظ
     } catch (e) {
-      loadingNavigator.pop(); // إغلاق الدوار في حال الخطأ
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+    } finally {
+      // إغلاق الدوار بأمان تام مهما حدث!
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
     }
   }
 
