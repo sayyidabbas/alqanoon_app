@@ -3,7 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User; // 🎯 الحل هنا: إخفاء User الخاص بسوبابيس
+import 'package:supabase_flutter/supabase_flutter.dart' hide User; 
 import 'package:firebase_messaging/firebase_messaging.dart'; 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
 import 'themes/app_theme.dart';
@@ -21,16 +21,9 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // 🔥 تنظيف: الاعتماد على الإعدادات الافتراضية للنظام
   try {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
-        appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
-        messagingSenderId: "521454530754",
-        projectId: "law-platform-55632",
-        storageBucket: "law-platform-55632.firebasestorage.app",
-      ),
-    );
+    await Firebase.initializeApp();
   } catch (e) {}
   debugPrint("تم استقبال إشعار في الخلفية: ${message.messageId}");
 }
@@ -49,18 +42,11 @@ void main() async {
     );
   };
 
+  // 🔥 تنظيف: إزالة المفاتيح اليدوية لمنع تعارض قاعدة البيانات وتوقفها
   try {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
-        appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
-        messagingSenderId: "521454530754",
-        projectId: "law-platform-55632",
-        storageBucket: "law-platform-55632.firebasestorage.app",
-      ),
-    );
+    await Firebase.initializeApp();
   } catch (e) {
-    if (!e.toString().contains('duplicate-app')) await Firebase.initializeApp();
+    debugPrint('Firebase Init Error: $e');
   }
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -70,7 +56,9 @@ void main() async {
       url: 'https://hxtliwxlhwwrhvvgtptl.supabase.co', 
       anonKey: 'sb_publishable_GQbawy5O49Ws8JOGLJbonQ_hMjMAfJs', 
     );
-  } catch (e) {}
+  } catch (e) {
+    debugPrint('Supabase Init Error: $e');
+  }
 
   runApp(const LawPlatformApp());
 }
@@ -128,18 +116,16 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
 
       await messaging.subscribeToTopic('official_announcements');
 
-      // حفظ التوكن فور تسجيل الدخول لضمان وجود عنوان للهاتف
+      // حفظ التوكن لضمان وصول الإشعارات
       FirebaseAuth.instance.authStateChanges().listen((User? user) async {
         if (user != null) {
           String? token = await messaging.getToken();
           if (token != null) {
             await FirebaseFirestore.instance.collection('users').doc(user.uid).set({'fcmToken': token}, SetOptions(merge: true));
-            debugPrint('تم حفظ التوكن بنجاح للمستخدم: ${user.uid}');
           }
         }
       });
 
-      // تحديث التوكن إذا تغير في النظام
       messaging.onTokenRefresh.listen((String token) async {
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
