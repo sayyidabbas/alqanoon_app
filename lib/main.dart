@@ -19,20 +19,11 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
   playSound: true,
 );
 
-const FirebaseOptions platformOptions = FirebaseOptions(
-  apiKey: "AIzaSyAGhu0qYt7SJqgvEOEfkh0eKnnotMnv1d0",
-  appId: "1:521454530754:android:9ede6222cad2fcabb08b5b",
-  messagingSenderId: "521454530754",
-  projectId: "law-platform-55632",
-  storageBucket: "law-platform-55632.firebasestorage.app",
-);
-
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // الاعتماد الكامل على ملف google-services.json الرسمي لضمان استقرار قاعدة البيانات
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(options: platformOptions);
-    }
+    await Firebase.initializeApp();
   } catch (e) {
     debugPrint('Background Init Error: $e');
   }
@@ -53,12 +44,10 @@ void main() async {
     );
   };
 
-  // 🔥 التهيئة الصحيحة للتطبيق الافتراضي (هنا كان سبب التجمد وتم حله)
+  // 🔥 التهيئة الرسمية والآمنة (قمنا بإزالة المفاتيح اليدوية لمنع تعارض قاعدة البيانات وتوقف الأقسام)
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: platformOptions, // بدون استخدام parameter الـ name
-      );
+      await Firebase.initializeApp(); 
     }
   } catch (e) {
     debugPrint('Firebase Init Error: $e');
