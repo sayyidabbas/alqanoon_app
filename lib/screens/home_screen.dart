@@ -655,16 +655,18 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  Widget _buildNetworkImage(String url, {double width = double.infinity}) {
+  // تعديل: إضافة خاصية height لدعم التقطيع الشبكي للصور
+  Widget _buildNetworkImage(String url, {double width = double.infinity, double? height}) {
     if (url.startsWith('data:image')) {
-      return Image.memory(base64Decode(url.split(',').last), fit: BoxFit.cover, width: width);
+      return Image.memory(base64Decode(url.split(',').last), fit: BoxFit.cover, width: width, height: height);
     }
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.cover,
       width: width,
-      placeholder: (context, url) => Container(width: width, color: AppColors.primary, child: const Center(child: CircularProgressIndicator(color: AppColors.accent))),
-      errorWidget: (context, url, error) => Container(width: width, color: AppColors.primary, child: const Icon(Icons.broken_image, color: Colors.white54, size: 40)),
+      height: height,
+      placeholder: (context, url) => Container(width: width, height: height, color: AppColors.primary, child: const Center(child: CircularProgressIndicator(color: AppColors.accent))),
+      errorWidget: (context, url, error) => Container(width: width, height: height, color: AppColors.primary, child: const Icon(Icons.broken_image, color: Colors.white54, size: 40)),
     );
   }
 
@@ -858,11 +860,122 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     );
   }
 
+  // إضافة: دالة جديدة لرسم الشبكة مثل فيسبوك
+  Widget _buildFacebookStyleGrid(BuildContext context, List<String> imageUrls) {
+    if (imageUrls.isEmpty) return const SizedBox();
+
+    void openGallery(int index) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FullScreenImageViewer(imageUrls: imageUrls, initialIndex: index),
+        ),
+      );
+    }
+
+    if (imageUrls.length == 1) {
+      return GestureDetector(
+        onTap: () => openGallery(0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: _buildNetworkImage(imageUrls[0], height: 250),
+        ),
+      );
+    } else if (imageUrls.length == 2) {
+      return SizedBox(
+        height: 250,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Row(
+            children: [
+              Expanded(child: GestureDetector(onTap: () => openGallery(0), child: _buildNetworkImage(imageUrls[0], height: double.infinity))),
+              const SizedBox(width: 4),
+              Expanded(child: GestureDetector(onTap: () => openGallery(1), child: _buildNetworkImage(imageUrls[1], height: double.infinity))),
+            ],
+          ),
+        ),
+      );
+    } else if (imageUrls.length == 3) {
+      return SizedBox(
+        height: 350,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Column(
+            children: [
+              Expanded(flex: 2, child: GestureDetector(onTap: () => openGallery(0), child: _buildNetworkImage(imageUrls[0], width: double.infinity))),
+              const SizedBox(height: 4),
+              Expanded(
+                flex: 1,
+                child: Row(
+                  children: [
+                    Expanded(child: GestureDetector(onTap: () => openGallery(1), child: _buildNetworkImage(imageUrls[1], height: double.infinity))),
+                    const SizedBox(width: 4),
+                    Expanded(child: GestureDetector(onTap: () => openGallery(2), child: _buildNetworkImage(imageUrls[2], height: double.infinity))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else { // 4 صور أو أكثر
+      return SizedBox(
+        height: 350,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Column(
+            children: [
+              Expanded(flex: 2, child: GestureDetector(onTap: () => openGallery(0), child: _buildNetworkImage(imageUrls[0], width: double.infinity))),
+              const SizedBox(height: 4),
+              Expanded(
+                flex: 1,
+                child: Row(
+                  children: [
+                    Expanded(child: GestureDetector(onTap: () => openGallery(1), child: _buildNetworkImage(imageUrls[1], height: double.infinity))),
+                    const SizedBox(width: 4),
+                    Expanded(child: GestureDetector(onTap: () => openGallery(2), child: _buildNetworkImage(imageUrls[2], height: double.infinity))),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => openGallery(3),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _buildNetworkImage(imageUrls[3], height: double.infinity),
+                            if (imageUrls.length > 4)
+                              Container(
+                                color: Colors.black54,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '+${imageUrls.length - 4}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
   Widget _buildOfficialPostCard(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final String content = data['content'] ?? '';
-    final List<dynamic> imageUrls = data['imageUrls'] ?? [];
+    final List<dynamic> rawImageUrls = data['imageUrls'] ?? [];
+    List<String> imageUrls = rawImageUrls.map((e) => e.toString()).toList();
+    
     final String? singleImage = data['imageUrl'];
+    if (imageUrls.isEmpty && singleImage != null && singleImage.isNotEmpty) {
+      imageUrls.add(singleImage);
+    }
+
     final String? fileUrl = data['fileUrl'];
     final String? fileName = data['fileName'];
     final int commentsCount = data['commentsCount'] ?? 0;
@@ -914,28 +1027,8 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
 
             if (imageUrls.isNotEmpty) ...[
               const SizedBox(height: 15),
-              SizedBox(
-                height: 220,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: imageUrls.length,
-                  itemBuilder: (context, i) {
-                    return Padding(
-                      padding: const EdgeInsets.only(left: 10.0),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: _buildNetworkImage(imageUrls[i], width: MediaQuery.of(context).size.width * 0.75),
-                      ),
-                    );
-                  }
-                ),
-              ),
-            ] else if (singleImage != null && singleImage.isNotEmpty) ...[
-              const SizedBox(height: 15),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: _buildNetworkImage(singleImage),
-              ),
+              // تعديل: استخدام الدالة الجديدة لعرض الصور بشبكة فيسبوك
+              _buildFacebookStyleGrid(context, imageUrls),
             ],
 
             if (fileUrl != null && fileUrl.isNotEmpty) ...[
@@ -1071,4 +1164,46 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     );
   }
 }
- 
+
+// إضافة: فئة جديدة مستقلة لفتح الصور بملء الشاشة والتمرير بينها
+class FullScreenImageViewer extends StatelessWidget {
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  const FullScreenImageViewer({super.key, required this.imageUrls, required this.initialIndex});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      extendBodyBehindAppBar: true,
+      body: PageView.builder(
+        itemCount: imageUrls.length,
+        controller: PageController(initialPage: initialIndex),
+        itemBuilder: (context, index) {
+          final url = imageUrls[index];
+          return InteractiveViewer( // يسمح للمستخدم بتكبير وتصغير الصورة بإصبعين
+            panEnabled: true,
+            minScale: 0.5,
+            maxScale: 4,
+            child: Center(
+              child: url.startsWith('data:image')
+                  ? Image.memory(base64Decode(url.split(',').last), fit: BoxFit.contain)
+                  : CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.white54, size: 50),
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
