@@ -8,7 +8,6 @@ import 'package:mailer/smtp_server.dart';
 import '../constants/app_colors.dart';
 import '../models/post_model.dart';
 import 'admin_panel_screen.dart';
-import '../services_screens/electronic_exams_screen.dart';
 import '../services_screens/question_bank_screen.dart' as qb; 
 import '../services_screens/study_materials_screen.dart' as sm;
 
@@ -281,14 +280,6 @@ class _SecureAdminDashboardScreenState extends State<SecureAdminDashboardScreen>
                 onUpdateTimerDays: widget.onUpdateTimerDays,
                 onDeleteTimer: widget.onDeleteTimer,
               )));
-            },
-          ),
-          _buildControlCard(
-            title: 'تحكم سوق الكتب',
-            icon: Icons.storefront,
-            color: Colors.orange,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMarketDashboard()));
             },
           ),
           _buildControlCard(
