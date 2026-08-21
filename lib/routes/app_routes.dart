@@ -26,7 +26,6 @@ class AppRoutes {
     legalLibrary: (context) => const LegalLibraryScreen(),
     studyMaterials: (context) => const StudyMaterialsScreen(),
     questionBank: (context) => const QuestionBankScreen(),
-    // تم التعديل هنا ليتعرف على الاسم الجديد لسوق الكتب
-    electronicExams: (context) => const BookMarketScreen(),
+    electronicExams: (context) => const ElectronicExamsScreen(),
   };
 }
