@@ -308,7 +308,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_announcements.isNotEmpty) _buildAnnouncementsTicker(),
           if (_announcements.isNotEmpty) const SizedBox(height: 20),
           
-          // دمجنا العداد في ويدجت مستقل لمنع إعادة بناء الصفحة بأكملها
           const CountdownTimerWidget(),
           
           const SizedBox(height: 25),
@@ -374,7 +373,6 @@ class _HomeScreenState extends State<HomeScreen> {
       {'icon': Icons.menu_book_rounded, 'title': 'المكتبة القانونية', 'route': AppRoutes.legalLibrary},
       {'icon': Icons.book_rounded, 'title': 'المواد الدراسية', 'route': AppRoutes.studyMaterials},
       {'icon': Icons.quiz_rounded, 'title': 'بنك الأسئلة', 'route': AppRoutes.questionBank},
-      {'icon': Icons.assignment_rounded, 'title': 'سوق الكتب', 'route': AppRoutes.electronicExams},
     ];
 
     return Padding(
@@ -465,7 +463,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     officialPosts: _officialPosts,
                     announcements: _announcements,
                     onAddPost: (String content, File? imageFile) async {
-                      // دوال وهمية يتم استخدامها من الشاشة الأخرى لتفادي الأخطاء
                     },
                     onDeletePost: (index) {},
                     onEditPost: (index, newContent) {},
@@ -496,9 +493,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// =======================================================
-// ويدجت مستقل للعداد التنازلي لمنع إعادة البناء الكلي
-// =======================================================
 class CountdownTimerWidget extends StatefulWidget {
   const CountdownTimerWidget({super.key});
 
@@ -630,9 +624,6 @@ class _CountdownTimerWidgetState extends State<CountdownTimerWidget> {
   }
 }
 
-// =======================================================
-// ويدجت منفصل لعرض التبليغات
-// =======================================================
 class OfficialPostsList extends StatefulWidget {
   const OfficialPostsList({super.key});
 
@@ -1080,3 +1071,4 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     );
   }
 }
+ 
