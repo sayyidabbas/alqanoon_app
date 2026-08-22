@@ -5,13 +5,13 @@ import '../constants/app_colors.dart';
 import '../routes/app_routes.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final List<Map<String, dynamic>> blockedUsers;
-  final Function(int index) onUnblockUser;
+  final List<Map<String, dynamic>>? blockedUsers;
+  final Function(int index)? onUnblockUser;
 
   const SettingsScreen({
     super.key,
-    required this.blockedUsers,
-    required this.onUnblockUser,
+    this.blockedUsers,
+    this.onUnblockUser,
   });
 
   @override
@@ -20,6 +20,33 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDeleting = false;
+
+  // دالة إلغاء الحظر المباشر من Firestore
+  Future<void> _unblockUserFromFirestore(String blockedUid, String userName) async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .collection('blockedUsers')
+          .doc(blockedUid)
+          .delete();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم إلغاء حظر $userName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء إلغاء الحظر: $e')),
+        );
+      }
+    }
+  }
 
   // دالة حذف الحساب نهائياً مع التأكيد
   Future<void> _confirmAndDeleteAccount() async {
@@ -94,50 +121,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // شاشة عرض المحظورين
+  // شاشة عرض المحظورين المباشرة من Firestore
   void _openBlockedListModal() {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.cardBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              const Text('قائمة المحظورين 🚫', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.accent)),
-              const Divider(color: Colors.white10, height: 24),
-              Expanded(
-                child: widget.blockedUsers.isEmpty
-                    ? const Center(child: Text('لا يوجد مستخدمون محظورون', style: TextStyle(color: Colors.white54)))
-                    : ListView.builder(
-                        itemCount: widget.blockedUsers.length,
-                        itemBuilder: (context, index) {
-                          final user = widget.blockedUsers[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.accent,
-                              child: Text(user['fullName'][0], style: const TextStyle(color: Colors.black)),
-                            ),
-                            title: Text(user['fullName'], style: const TextStyle(color: Colors.white)),
-                            subtitle: Text('@${user['username']}', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
-                            trailing: TextButton(
-                              onPressed: () {
-                                widget.onUnblockUser(index);
-                                setModalState(() {});
-                                setState(() {});
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('تم إلغاء حظر ${user['fullName']}')),
-                                );
-                              },
-                              child: const Text('إلغاء الحظر', style: TextStyle(color: AppColors.accent)),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            const Text('قائمة المحظورين 🚫', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.accent)),
+            const Divider(color: Colors.white10, height: 24),
+            Expanded(
+              child: currentUid == null
+                  ? const Center(child: Text('يرجى تسجيل الدخول أولاً', style: TextStyle(color: Colors.white54)))
+                  : StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(currentUid)
+                          .collection('blockedUsers')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+                        }
+                        if (snapshot.hasError) {
+                          return const Center(child: Text('حدث خطأ أثناء جلب القائمة', style: TextStyle(color: Colors.redAccent)));
+                        }
+
+                        final docs = snapshot.data?.docs ?? [];
+                        if (docs.isEmpty) {
+                          return const Center(child: Text('لا يوجد مستخدمون محظورون', style: TextStyle(color: Colors.white54)));
+                        }
+
+                        return ListView.builder(
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final data = docs[index].data() as Map<String, dynamic>;
+                            final String blockedUid = docs[index].id;
+                            final String fullName = data['fullName'] ?? 'مستخدم';
+                            final String username = data['username'] ?? 'user';
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.accent,
+                                child: Text(
+                                  fullName.isNotEmpty ? fullName[0] : 'ع',
+                                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text(fullName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              subtitle: Text('@$username', style: const TextStyle(color: AppColors.accent, fontSize: 12)),
+                              trailing: TextButton(
+                                onPressed: () => _unblockUserFromFirestore(blockedUid, fullName),
+                                child: const Text('إلغاء الحظر', style: TextStyle(color: AppColors.accent)),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -145,6 +193,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
@@ -179,7 +229,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('${widget.blockedUsers.length}', style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                            if (currentUid != null)
+                              StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(currentUid)
+                                    .collection('blockedUsers')
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  final count = snapshot.data?.docs.length ?? 0;
+                                  return Text('$count', style: const TextStyle(color: Colors.white54, fontSize: 13));
+                                },
+                              )
+                            else
+                              const Text('0', style: TextStyle(color: Colors.white54, fontSize: 13)),
                             const SizedBox(width: 6),
                             const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
                           ],
