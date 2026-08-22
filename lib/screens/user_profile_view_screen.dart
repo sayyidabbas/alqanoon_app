@@ -46,14 +46,18 @@ class UserProfileViewScreen extends StatelessWidget {
     final myUid = FirebaseAuth.instance.currentUser?.uid;
     if (myUid == null || peerUid == null) return;
 
+    // إضافة كافة البيانات اللازمة ليظهر المستخدم بشكل صحيح في قائمة المحظورين
     await FirebaseFirestore.instance
         .collection('users')
         .doc(myUid)
         .collection('blockedUsers')
         .doc(peerUid)
         .set({
-      'blockedAt': FieldValue.serverTimestamp(),
+      'uid': peerUid,
       'username': username,
+      'fullName': fullName,
+      'photoUrl': photoUrl ?? '',
+      'blockedAt': FieldValue.serverTimestamp(),
     });
 
     if (context.mounted) {
