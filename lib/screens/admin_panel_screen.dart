@@ -107,6 +107,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           'title': title,
           'body': body,
         },
+        // 🔔 السر هنا! هذا الجزء يجبر نظام الأندرويد على إظهار الإشعار حتى لو كان التطبيق مغلقاً
+        'android': {
+          'priority': 'high',
+          'notification': {
+            'channel_id': 'high_importance_channel',
+            'sound': 'default',
+            'notification_priority': 'PRIORITY_MAX',
+            'default_vibrate_timings': true
+          }
+        },
         'data': {
           'type': 'official_post',
           'click_action': 'FLUTTER_NOTIFICATION_CLICK'
@@ -590,4 +600,3 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 }
- 
