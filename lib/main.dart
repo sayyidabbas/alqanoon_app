@@ -127,7 +127,8 @@ class _LawPlatformAppState extends State<LawPlatformApp> {
         }
       });
 
-      await messaging.subscribeToTopic('official_announcements');
+      // التعديل هنا: تم تغيير الموضوع إلى all_users ليتطابق مع لوحة التحكم
+      await messaging.subscribeToTopic('all_users');
 
       FirebaseAuth.instance.authStateChanges().listen((User? user) async {
         if (user != null) {
