@@ -72,6 +72,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (currentUser == null) return;
 
       FirebaseMessaging messaging = FirebaseMessaging.instance;
+      
+      // 🔔 إضافة الاشتراك في موضوع "all_users" لتلقي الإشعارات العامة
+      await messaging.subscribeToTopic('all_users');
+
       String? token = await messaging.getToken();
       
       if (token != null) {
@@ -1207,5 +1211,3 @@ class FullScreenImageViewer extends StatelessWidget {
     );
   }
 }
-
- 
