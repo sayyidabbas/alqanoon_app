@@ -90,13 +90,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       return accessToken;
     } catch (e) {
       debugPrint("خطأ في الحصول على التوكن: $e");
-      return '';
+      return ''; // سيرجع نص فارغ إذا فشل
     }
   }
 
   Future<void> _sendNotificationToAll(String title, String body) async {
     final String serverToken = await _getAccessToken();
-    if (serverToken.isEmpty) return;
+    
+    // 🔴 اختبار التوكن وإظهار الخطأ على الشاشة
+    if (serverToken.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ خطأ: التوكن فارغ، فشل الاتصال بخدمات جوجل! تأكد من المفتاح السري.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          )
+        );
+      }
+      return;
+    }
 
     final String endpointFCM = 'https://fcm.googleapis.com/v1/projects/law-platform-55632/messages:send';
 
@@ -133,9 +146,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       if (response.statusCode == 200) {
         debugPrint('✅ تم إرسال الإشعار للجميع بنجاح: ${response.body}');
       } else {
+        // 🔴 إظهار الخطأ القادم من سيرفر فايربيس مباشرة على الشاشة
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ رفضت جوجل الإشعار (الكود ${response.statusCode}):\n${response.body}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 10),
+            )
+          );
+        }
         debugPrint('❌ فشل إرسال الإشعار (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
+      // 🔴 إظهار خطأ الانترنت أو الاستثناءات على الشاشة
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ خطأ في الاتصال أثناء الإرسال:\n$e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 10),
+          )
+        );
+      }
       debugPrint('❌ خطأ في الاتصال أثناء إرسال الإشعار: $e');
     }
   }
