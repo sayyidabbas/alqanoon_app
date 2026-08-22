@@ -157,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
           fullName: fullName,
           bio: bio,
           photoUrl: photoUrl,
-          onStartChat: () {},
         ),
       ),
     );
@@ -648,10 +647,11 @@ class _OfficialPostsListState extends State<OfficialPostsList> {
     }
     final diff = DateTime.now().difference(date);
     if (diff.inSeconds < 60) return 'الآن';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} دقيقة';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} ساعة';
     if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أيام';
+    if (diff.inDays < 30) return 'منذ ${(diff.inDays / 7).floor()} أسبوع';
     return '${date.day}/${date.month}/${date.year}';
   }
 
@@ -1207,3 +1207,5 @@ class FullScreenImageViewer extends StatelessWidget {
     );
   }
 }
+
+ 
