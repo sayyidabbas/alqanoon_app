@@ -102,24 +102,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     final Map<String, dynamic> message = {
       'message': {
-        'topic': 'all_users', 
+        'topic': 'all_users',
         'notification': {
           'title': title,
           'body': body,
         },
-        // 🔔 التعديل السحري هنا! حروف كبيرة وضبط قناة الأندرويد للإيقاظ الإجباري
         'android': {
           'priority': 'HIGH',
           'notification': {
             'channel_id': 'high_importance_channel',
             'sound': 'default',
             'default_sound': true,
-            'default_vibrate_timings': true
+            'default_vibrate_timings': true,
+            'click_action': 'FLUTTER_NOTIFICATION_CLICK'
           }
-        },
-        'data': {
-          'type': 'official_post',
-          'click_action': 'FLUTTER_NOTIFICATION_CLICK'
         }
       }
     };
@@ -133,10 +129,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         },
         body: jsonEncode(message),
       );
+      
       if (response.statusCode == 200) {
-        debugPrint('✅ تم إرسال الإشعار للجميع بنجاح');
+        debugPrint('✅ تم إرسال الإشعار للجميع بنجاح: ${response.body}');
       } else {
-        debugPrint('❌ فشل إرسال الإشعار: ${response.body}');
+        debugPrint('❌ فشل إرسال الإشعار (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
       debugPrint('❌ خطأ في الاتصال أثناء إرسال الإشعار: $e');
@@ -600,3 +597,4 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 }
+ 
