@@ -68,14 +68,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       "type": "service_account",
       "project_id": "law-platform-55632",
       "private_key_id": "ac701a7ebca252fc64d36be54d023db5d0a161e4",
-      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDIJDxydIHAr26t\nNFeY0u2DiioV9Bi88CnjK4SOPbGrUvziA3jEq/sYBleFoIOs1Tl1un2EXTRk5t1t\nTWIrTIfJenBQ3tchi1YTg6MXn45rBMA0iaOCcN3XWC1b5Fdda1Eb1Ls+BwCbyU57\nUC4xMT9t+50xDCz1JKlo7z2e+Xk0fiDWAtVICsqmlOeBY+h+vK2s6gQ7iO28ssEC\nSERP2hujorDNIqH99ZfO5f/vJ3uDTruV5myy6PYMQOoQjahXdtl1QFQIh0J4M4zC\nEUbixpAKylGgs2bqCVJ4GvSAidrkIDucBtFkp1RFEsCU2cvyjVch6ECkn50nvuBr\nke71McfpAgMBAAECggEADiiUFyO7VyKCAaJJjR/k2hCg5A8x3dHeoLnAJaDjLAPR\nrHqC5WTmPT+bmvItRoGKEFRKU14VmgrEANq/1mDSXVQ6VFpDXVXiV7yRAdeRh2wd\nXcob5VsvMnAEO3M2o/72zLF6sotjxWGTGgGk1umNO25YozLhjlES4//Cu/eZlbcz\ndZiXptIyPtIKwfA82ThczLaA7zU+GU7yqiPTvF+1gU4ffOi3l8E05rv2JaVn9aZn\nYgyUIkoXM48XMkOpl8NEF0o/G2WEc8/m0F88tlkofG3krE3WOAiiYPx7YCNz6CVE\nGDUAYHazAAxXvdrGklC8sTMMM/1XpdtGI6YTafGSIQKBgQDrqsIG2swb2rZgJmxv\n7VSN+SmxLBe6qPlT5qiV+Pq5/i3sSZG7z787eXt2M3U7VaxG7XkaYHfB9Z7tReS8\nUCVv/7BJ1kzjWKZaLTm1yrl1bMLLj9MCvIuWzYgoGSWNFyotY11YjETUBl0wque5\naKSVYBU3ZTMjXMbGHkD8abiA8QKBgQDZaNE6BZxh59y62KecfS+GeIAc2mV9iM85\ngLLx31u8pKmGbzULpZa/SS3qkGrAqktrAub7cgAJYjHpDz9JLxF6i7o7OJW8i8x/\nOKsOo5P3iS2Fa4dPqG0akF3ofSgkdxpY9YbOD5V0WIgoYoLT9X8SLysgYbJ7vfhI\nTVT5jmo2eQKBgQCjRR4/WX5nHdOUMYqW0Lnv0luMH5wg+cgi1H6fyGsMSIjQVvfc\nQkWekr9yWJwzi1tbmFJ6b7MIcX61q+KYhH4rZd1gilOiflxhxUtiIxzxuXQLS41J\nLA8ZXzOhdCqL4SybXWfiXOuiaPZPLVh1H4ZG5tZMFpSjPzeHMpabSTNGQQKBgQDO\nrzc5Udw5t5PAjffKbbigvi4NQBL8JPPcVt3H0/AChwgjJdXoHKQTdh6QwHq8bykD\nst6kbNxcD14jkrs3d+fF+NAzPLgdZ0oiKF12rUweJ+t+y5r3v8b5WgXs4A8pm5EQ\nwVpGy8npscC/o+d8WgdT4kO9pSNpQFCpa9s85IdVAQKBgGKI/sfzF4trlxki4hJg\nH6+fZ8+4cXqvhVa5q5KA9coJCCTUVtf0QOvK7x+1XhzG8nYLDNWm7TI8KOB+Odzy\nrOZzRLzIov4aT0krufMQPPffCJqKO2KPk4+tAV4m3y2m9JI5sK5C+yVNLBXmiUA7\n0MRxpw7K4WevhGEoRGHxYIIs\n-----END PRIVATE KEY-----\n",
-      "client_email": "firebase-adminsdk-fbsvc@law-platform-55632.iam.gserviceaccount.com",
-      "client_id": "111366556927016010526",
-      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-      "token_uri": "https://oauth2.googleapis.com/token",
-      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40law-platform-55632.iam.gserviceaccount.com",
-      "universe_domain": "googleapis.com"
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDIJDxydIHAr26t\nNFeY0u2DiioV9Bi88CnjK4SOPbGrUvziA3jEq/sYBleFoIOs1Tl1un2EXTRk5t1t\nTWIrTIfJenBQ3tchi1YTg6MXn45rBMA0iaOCcN3XWC1b5Fdda1Eb1Ls+BwCbyU57\nUC4xMT9t+50xDCz1JKlo7z2e+Xk0fiDWAtVICsqmlOeBY+h+vK2s6gQ7iO28ssEC\nSERP2hujorDNIqH99ZfO5f/vJ3uDTruV5myy6PYMQOoQjahXdtl1QFQIh0J4M4zC\nEUbixpAKylGgs2bqCVJ4GvSAidrkIDucBtFkp1RFEsCU2cvyjVch6ECkn50nvuBr\nke71McfpAgMBAAECggEADiiUFyO7VyKCAaJJjR/k2hCg5A8x3dHeoLnAJaDjLAPR\nrHqC5WTmPT+bmvItRoGKEFRKU14VmgrEANq/1mDSXVQ6VFpDXVXiV7yRAdeRh2wd\nXcob5VsvMnAEO3M2o/72zLF6sotjxWGTGgGk1umNO25YozLhjlES4//Cu/eZlbcz\ndZiXptIyPtIKwfA82ThczLaA7zU+GU7yqiPTvF+1gU4ffOi3l8E05rv2JaVn9aZn\nYgyUIkoXM48XMkOpl8NEF0o/G2WEc8/m0F88tlkofG3krE3WOAiiYPx7YCNz6CVE\nGDUAYHazAAxXvdrGklC8sTMMM/1XpdtGI6YTafGSIQKBgQDrqsIG2swb2rZgJmxv\n7VSN+SmxLBe6qPlT5qiV+Pq5/i3sSZG7z787eXt2M3U7VaxG7XkaYHfB9Z7tReS8\nUCVv/7BJ1kzjWKZaLTm1yrl1bMLLj9MCvIuWzYgoGSWNFyotY11YjETUBl0wque5\naKSVYBU3ZTMjXMbGHkD8abiA8QKBgQDZaNE6BZxh59y62KecfS+GeIAc2mV9iM85\ngLLx31u8pKmGbzULpZa/SS3qkGrAqktrAub7cgAJYjHpDz9JLxF6i7o7OJW8i8x/\nOKsOo5P3iS2Fa4dPqG0akF3ofSgkdxpY9YbOD5V0WIgoYoLT9X8SLysgYbJ7vfhI\nTVT5jmo2eQKBgQCjRR4/WX5nHdOUMYqW0Lnv0luMH5wg+cgi1H6fyGsMSIjQVvfc\nQkWekr9yWJwzi1tbmFJ6b7MIcX61q+KYhH4rZd1gilOiflxhxUtiIxzxuXQLS41J\LA8ZXzOhdCqL4SybXWfiXOuiaPZPLVh1H4ZG5tZMFpSjPzeHMpabSTNGQQKBgQDO\nzrzc5Udw5t5PAjffKbbigvi4NQBL8JPPcVt3H0/AChwgjJdXoHKQTdh6QwHq8bykD\nst6kbNxcD14jkrs3d+fF+NAzPLgdZ0oiKF12rUweJ+t+y5r3v8b5WgXs4A8pm5EQ\nwVpGy8npscC/o+d8WgdT4kO9pSNpQFCpa9s85IdVAQKBgGKI/sfzF4trlxki4hJg\nH6+fZ8+4cXqvhVa5q5KA9coJCCTUVtf0QOvK7x+1XhzG8nYLDNWm7TI8KOB+Odzy\nrOZzRLzIov4aT0krufMQPPffCJqKO2KPk4+tAV4m3y2m9JI5sK5C+yVNLBXmiUA7\n0MRxpw7K4WevhGEoRGHxYIIs\n-----END PRIVATE KEY-----\n"
     };
 
     List<String> scopes = [
@@ -83,6 +76,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     ];
 
     try {
+      // تصحيح أي مشاكل محتملة في قراءة المفتاح
+      String privateKey = serviceAccountJson["private_key"]! as String;
+      privateKey = privateKey.replaceAll(r'\n', '\n');
+      serviceAccountJson["private_key"] = privateKey;
+
       final auth.ServiceAccountCredentials credentials = auth.ServiceAccountCredentials.fromJson(serviceAccountJson);
       final auth.AutoRefreshingAuthClient client = await auth.clientViaServiceAccount(credentials, scopes);
       final accessToken = client.credentials.accessToken.data;
@@ -90,26 +88,22 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       return accessToken;
     } catch (e) {
       debugPrint("خطأ في الحصول على التوكن: $e");
-      return ''; // سيرجع نص فارغ إذا فشل
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ خطأ تفصيلي في التوكن:\n$e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+      return '';
     }
   }
 
   Future<void> _sendNotificationToAll(String title, String body) async {
     final String serverToken = await _getAccessToken();
-    
-    // 🔴 اختبار التوكن وإظهار الخطأ على الشاشة
-    if (serverToken.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ خطأ: التوكن فارغ، فشل الاتصال بخدمات جوجل! تأكد من المفتاح السري.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          )
-        );
-      }
-      return;
-    }
+    if (serverToken.isEmpty) return; // سيظهر الخطأ التفصيلي من الدالة أعلاه
 
     final String endpointFCM = 'https://fcm.googleapis.com/v1/projects/law-platform-55632/messages:send';
 
@@ -146,30 +140,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       if (response.statusCode == 200) {
         debugPrint('✅ تم إرسال الإشعار للجميع بنجاح: ${response.body}');
       } else {
-        // 🔴 إظهار الخطأ القادم من سيرفر فايربيس مباشرة على الشاشة
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⚠️ رفضت جوجل الإشعار (الكود ${response.statusCode}):\n${response.body}'),
+              content: Text('⚠️ فشل من سيرفر جوجل (${response.statusCode}):\n${response.body}'),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 10),
-            )
+            ),
           );
         }
-        debugPrint('❌ فشل إرسال الإشعار (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
-      // 🔴 إظهار خطأ الانترنت أو الاستثناءات على الشاشة
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ خطأ في الاتصال أثناء الإرسال:\n$e'),
+            content: Text('❌ خطأ في الاتصال:\n$e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 10),
-          )
+          ),
         );
       }
-      debugPrint('❌ خطأ في الاتصال أثناء إرسال الإشعار: $e');
     }
   }
 
