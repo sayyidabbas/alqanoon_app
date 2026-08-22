@@ -10,7 +10,6 @@ class UserProfileViewScreen extends StatelessWidget {
   final String bio;
   final String? photoUrl;
   final String? peerUid; 
-  final VoidCallback? onStartChat;
 
   const UserProfileViewScreen({
     super.key,
@@ -19,7 +18,6 @@ class UserProfileViewScreen extends StatelessWidget {
     this.bio = 'طالب في كلية القانون | مهتم بالتشريعات والدراسات القانونية',
     this.photoUrl,
     this.peerUid,
-    this.onStartChat,
   });
 
   String _formatTimestamp(dynamic timestamp) {
@@ -35,10 +33,12 @@ class UserProfileViewScreen extends StatelessWidget {
 
     final diff = DateTime.now().difference(date);
     if (diff.inSeconds < 60) return 'الآن';
-    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
-    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} دقيقة';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} ساعة';
     if (diff.inDays == 1) return 'أمس';
-    if (diff.inDays < 7) return 'منذ ${diff.inDays} أسابيع';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays} أيام';
+    if (diff.inDays < 30) return 'منذ ${(diff.inDays / 7).floor()} أسبوع';
+    
     return '${date.day}/${date.month}/${date.year}';
   }
 
@@ -321,26 +321,6 @@ class UserProfileViewScreen extends StatelessWidget {
                   Text('@$username', style: const TextStyle(fontSize: 14, color: AppColors.accent, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 10),
                   Text(bio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
-                  const SizedBox(height: 18),
-                  
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      minimumSize: const Size(double.infinity, 48),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      if (onStartChat != null) {
-                        onStartChat!();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('ميزة الدردشة غير متاحة حالياً')),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.chat_bubble_rounded, color: Colors.black, size: 20),
-                    label: const Text('مراسلة', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
                 ],
               ),
             ),
