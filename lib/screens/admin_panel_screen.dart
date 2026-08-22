@@ -107,13 +107,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           'title': title,
           'body': body,
         },
-        // 🔔 السر هنا! هذا الجزء يجبر نظام الأندرويد على إظهار الإشعار حتى لو كان التطبيق مغلقاً
+        // 🔔 التعديل السحري هنا! حروف كبيرة وضبط قناة الأندرويد للإيقاظ الإجباري
         'android': {
-          'priority': 'high',
+          'priority': 'HIGH',
           'notification': {
             'channel_id': 'high_importance_channel',
             'sound': 'default',
-            'notification_priority': 'PRIORITY_MAX',
+            'default_sound': true,
             'default_vibrate_timings': true
           }
         },
